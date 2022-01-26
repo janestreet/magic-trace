@@ -1,0 +1,213 @@
+* magic_trace_bin.exe
+
+: Magical tracing based on Intel Processor Trace
+: 
+:   magic_trace_bin.exe SUBCOMMAND
+: 
+: === subcommands ===
+: 
+:   attach                     . Attach to a process and record it until Ctrl-C,
+:                                then convert the results to a viewable Fuchsia
+:                                trace.
+:   decode                     . Decode processor trace data and convert the
+:                                results to a viewable Fuchsia trace.
+:   direct                     . Direct C backend
+:   trace                      . Generate a trace for a command, and convert the
+:                                results to a viewable Fuchsia trace.
+:   version                    . print version information
+:   help                       . explain a given subcommand (perhaps recursively)
+
+** version
+
+: print version information
+: 
+:   magic_trace_bin.exe version 
+: 
+: === flags ===
+: 
+:   [-build-info]              . print build info for this build
+:   [-version]                 . print the version of this build
+:   [-help], -?                . print this help text and exit
+
+** attach
+
+: Attach to a process and record it until Ctrl-C, then convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe attach 
+: 
+: === flags ===
+: 
+:   [-delay-thresh SPAN]       . only snapshot when delay between symbol calls is
+:                                longer than this
+:   [-duration-thresh SPAN]    . only snapshot intervals between mark_start and
+:                                take_snapshot over this
+:   [-executable-override FILE]
+:                              . executable to extract information from, default
+:                                is to use the first part of COMMAND
+:   [-http-port PORT]          . http server port
+:   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
+:                                EL8
+:   [-multi-snapshot]          . allow taking multiple snapshots if possible
+:   [-multi-thread]            . record multiple threads
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-pid PID]                 . Process to attach to, presents an fzf if omitted
+:   [-record-dir DIR]          . create this directory if necessary and put raw
+:                                trace data in it
+:   [-serve-always]            . serve trace even when output path provided
+:   [-symbol SYMBOL]           . take a snapshot when a symbol matching this regex
+:                                is called, lets you pick a symbol with fzf if
+:                                many match, use the empty string to show all
+:                                symbols, defaults to Magic_trace.take_snapshot
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit
+
+** decode
+
+: Decode processor trace data and convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe decode 
+: 
+: === flags ===
+: 
+:   -executable FILE           . executable to extract information from
+:   -record-dir DIR            . create this directory if necessary and put raw
+:                                trace data in it
+:   [-http-port PORT]          . http server port
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-serve-always]            . serve trace even when output path provided
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit
+
+** direct
+
+: Direct C backend
+: 
+:   magic_trace_bin.exe direct SUBCOMMAND
+: 
+: === subcommands ===
+: 
+:   attach                     . Attach to a process and record it until Ctrl-C,
+:                                then convert the results to a viewable Fuchsia
+:                                trace.
+:   decode                     . Decode processor trace data and convert the
+:                                results to a viewable Fuchsia trace.
+:   trace                      . Generate a trace for a command, and convert the
+:                                results to a viewable Fuchsia trace.
+:   help                       . explain a given subcommand (perhaps recursively)
+
+*** attach
+
+: Attach to a process and record it until Ctrl-C, then convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe direct attach 
+: 
+: === flags ===
+: 
+:   [-delay-thresh SPAN]       . only snapshot when delay between symbol calls is
+:                                longer than this
+:   [-duration-thresh SPAN]    . only snapshot intervals between mark_start and
+:                                take_snapshot over this
+:   [-executable-override FILE]
+:                              . executable to extract information from, default
+:                                is to use the first part of COMMAND
+:   [-http-port PORT]          . http server port
+:   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
+:                                EL8
+:   [-multi-snapshot]          . allow taking multiple snapshots if possible
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-pid PID]                 . Process to attach to, presents an fzf if omitted
+:   [-record-dir DIR]          . create this directory if necessary and put raw
+:                                trace data in it
+:   [-serve-always]            . serve trace even when output path provided
+:   [-symbol SYMBOL]           . take a snapshot when a symbol matching this regex
+:                                is called, lets you pick a symbol with fzf if
+:                                many match, use the empty string to show all
+:                                symbols, defaults to Magic_trace.take_snapshot
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit
+
+*** decode
+
+: Decode processor trace data and convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe direct decode 
+: 
+: === flags ===
+: 
+:   -executable FILE           . executable to extract information from
+:   -record-dir DIR            . create this directory if necessary and put raw
+:                                trace data in it
+:   [-http-port PORT]          . http server port
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-serve-always]            . serve trace even when output path provided
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit
+
+*** trace
+
+: Generate a trace for a command, and convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe direct trace COMMAND [COMMAND ...]
+: 
+: === flags ===
+: 
+:   [-- ARGS]                  . additional arguments
+:   [-delay-thresh SPAN]       . only snapshot when delay between symbol calls is
+:                                longer than this
+:   [-duration-thresh SPAN]    . only snapshot intervals between mark_start and
+:                                take_snapshot over this
+:   [-executable-override FILE]
+:                              . executable to extract information from, default
+:                                is to use the first part of COMMAND
+:   [-http-port PORT]          . http server port
+:   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
+:                                EL8
+:   [-multi-snapshot]          . allow taking multiple snapshots if possible
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-record-dir DIR]          . create this directory if necessary and put raw
+:                                trace data in it
+:   [-serve-always]            . serve trace even when output path provided
+:   [-symbol SYMBOL]           . take a snapshot when a symbol matching this regex
+:                                is called, lets you pick a symbol with fzf if
+:                                many match, use the empty string to show all
+:                                symbols, defaults to Magic_trace.take_snapshot
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit
+
+** trace
+
+: Generate a trace for a command, and convert the results to a viewable Fuchsia trace.
+: 
+:   magic_trace_bin.exe trace COMMAND [COMMAND ...]
+: 
+: === flags ===
+: 
+:   [-- ARGS]                  . additional arguments
+:   [-delay-thresh SPAN]       . only snapshot when delay between symbol calls is
+:                                longer than this
+:   [-duration-thresh SPAN]    . only snapshot intervals between mark_start and
+:                                take_snapshot over this
+:   [-executable-override FILE]
+:                              . executable to extract information from, default
+:                                is to use the first part of COMMAND
+:   [-http-port PORT]          . http server port
+:   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
+:                                EL8
+:   [-multi-snapshot]          . allow taking multiple snapshots if possible
+:   [-multi-thread]            . record multiple threads
+:   [-output FILE]             . output file name, serves temporary trace if
+:                                missing
+:   [-record-dir DIR]          . create this directory if necessary and put raw
+:                                trace data in it
+:   [-serve-always]            . serve trace even when output path provided
+:   [-symbol SYMBOL]           . take a snapshot when a symbol matching this regex
+:                                is called, lets you pick a symbol with fzf if
+:                                many match, use the empty string to show all
+:                                symbols, defaults to Magic_trace.take_snapshot
+:   [-verbose]                 . print decoded events
+:   [-help], -?                . print this help text and exit

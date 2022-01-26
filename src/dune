@@ -1,0 +1,6 @@
+(library (name magic_trace_lib) (public_name magic-trace.magic_trace_lib)
+ (c_names breakpoint_stubs)
+ (libraries core async core_unix.filename_unix fzf re shell
+  core_unix.sys_unix core_unix.signal_unix tracing ocaml-probes.probes_lib
+  magic_trace magic_trace_core)
+ (preprocess (pps ppx_jane)))

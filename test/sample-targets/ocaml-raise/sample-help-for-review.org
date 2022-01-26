@@ -1,0 +1,11 @@
+* sample.exe
+
+: sample executable for tracing that unwinds 20 stack frames in an ocaml exception
+: 
+:   sample.exe 
+: 
+: === flags ===
+: 
+:   [-build-info]              . print info about this build and exit
+:   [-version]                 . print the version of this build and exit
+:   [-help], -?                . print this help text and exit

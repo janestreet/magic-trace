@@ -1,0 +1,2 @@
+(library (name magic_trace_lib_cinaps_helpers) (libraries core)
+ (preprocess (pps ppx_jane)))

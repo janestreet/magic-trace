@@ -1,0 +1,3 @@
+(executables (names magic_trace_bin) (public_names magic-trace)
+ (libraries core magic_trace_lib core_unix.command_unix)
+ (preprocess (pps ppx_jane)))

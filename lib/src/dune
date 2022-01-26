@@ -1,0 +1,3 @@
+(library (name magic_trace) (public_name magic-trace.magic_trace)
+ (c_names stop_stubs) (libraries core core_unix.time_stamp_counter)
+ (preprocess (pps ppx_jane)))

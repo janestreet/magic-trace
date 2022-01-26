@@ -1,0 +1,15 @@
+* long_running.exe
+
+: sample executable for tracing that continually uses CPU
+: 
+:   long_running.exe 
+: 
+: === flags ===
+: 
+:   [-limit snapshot]          . limit
+:   [-multi-thread]            . Spawn a second thread
+:   [-sleeps]                  . Periodically sleep
+:   [-snap-every Call]         . Magic_trace.take_snapshot at this interval
+:   [-build-info]              . print info about this build and exit
+:   [-version]                 . print the version of this build and exit
+:   [-help], -?                . print this help text and exit
