@@ -1,4 +1,5 @@
 opam-version: "2.0"
+version: "v0.15.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
 homepage: "https://github.com/janestreet/magic-trace"
@@ -10,15 +11,15 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml" {>= "4.08.0"}
-  "async"
-  "core"
-  "core_unix"
-  "fzf"
-  "ocaml-probes"
-  "ppx_jane"
-  "shell"
-  "tracing"
+  "ocaml"        {>= "4.08.0"}
+  "async"        {>= "v0.15" & < "v0.16"}
+  "core"         {>= "v0.15" & < "v0.16"}
+  "core_unix"    {>= "v0.15" & < "v0.16"}
+  "fzf"          {>= "v0.15" & < "v0.16"}
+  "ocaml-probes" {>= "v0.15" & < "v0.16"}
+  "ppx_jane"     {>= "v0.15" & < "v0.16"}
+  "shell"        {>= "v0.15" & < "v0.16"}
+  "tracing"      {>= "v0.15" & < "v0.16"}
   "dune"         {>= "2.0.0"}
   "owee"
   "re"           {>= "1.8.0"}
