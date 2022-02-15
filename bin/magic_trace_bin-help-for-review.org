@@ -44,6 +44,7 @@
 :   [-executable-override FILE]
 :                              . executable to extract information from, default
 :                                is to use the first part of COMMAND
+:   [-full-execution]          . record full program execution
 :   [-http-port PORT]          . http server port
 :   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
 :                                EL8
@@ -195,6 +196,7 @@
 :   [-executable-override FILE]
 :                              . executable to extract information from, default
 :                                is to use the first part of COMMAND
+:   [-full-execution]          . record full program execution
 :   [-http-port PORT]          . http server port
 :   [-immediate-stop]          . stop immediately on snapshot, may crash kernel on
 :                                EL8

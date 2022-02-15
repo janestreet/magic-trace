@@ -2,16 +2,24 @@ open! Core
 open! Async
 open! Import
 
-type record_opts = { multi_thread : bool }
+type record_opts =
+  { multi_thread : bool
+  ; full_execution : bool
+  }
 
 let record_param =
   let%map_open.Command multi_thread =
     flag "-multi-thread" no_arg ~doc:"record multiple threads"
+  and full_execution =
+    flag "-full-execution" no_arg ~doc:"record full program execution"
   in
-  { multi_thread }
+  { multi_thread; full_execution }
 ;;
 
-type recording = Pid.t
+type recording =
+  { can_snapshot : bool
+  ; pid : Pid.t
+  }
 
 let debug_perf_commands = false
 
@@ -34,7 +42,7 @@ let supports_cyc () =
   supports_cyc
 ;;
 
-let attach_and_record { multi_thread } ~record_dir ?filter pid =
+let attach_and_record { multi_thread; full_execution } ~record_dir ?filter pid =
   let opts =
     match filter with
     | None -> []
@@ -55,7 +63,8 @@ let attach_and_record { multi_thread } ~record_dir ?filter pid =
   let argv =
     [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
     @ thread_opts
-    @ [ Pid.to_int pid |> Int.to_string; "--snapshot" ]
+    @ [ Pid.to_int pid |> Int.to_string ]
+    @ (if full_execution then [] else [ "--snapshot" ])
     @ opts
   in
   if debug_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
@@ -75,15 +84,17 @@ let attach_and_record { multi_thread } ~record_dir ?filter pid =
     | Some (_, exit) -> perf_exit_to_or_error exit
     | _ -> Ok ()
   in
-  perf_pid
+  { can_snapshot = not full_execution; pid = perf_pid }
 ;;
 
-let take_snapshot pid =
-  Signal_unix.send_i Signal.usr2 (`Pid pid);
+let take_snapshot { pid; can_snapshot } =
+  if can_snapshot
+  then Signal_unix.send_i Signal.usr2 (`Pid pid)
+  else Core.eprintf "[Warning: Snapshotting during a full-execution tracing]\n%!";
   Or_error.return ()
 ;;
 
-let finish_recording pid =
+let finish_recording { pid; _ } =
   Signal_unix.send_i Signal.term (`Pid pid);
   (* This should usually be a signal exit, but we don't really care, if it didn't produce
      a good perf.data file the next step will fail. *)
