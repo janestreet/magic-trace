@@ -54,7 +54,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   type hits_file = (string * Breakpoint.Hit.t) list [@@deriving sexp]
 
-  let decode_to_trace { output_config; decode_opts; verbose } ~record_dir elf =
+  let decode_to_trace ?elf ~record_dir { output_config; decode_opts; verbose } =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_view
       output_config
@@ -66,10 +66,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
           |> Sexp.of_string
           |> [%of_sexp: hits_file]
         in
-        let debug_info = Elf.addr_table elf in
+        let debug_info = Option.map elf ~f:Elf.addr_table in
         let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
         let%bind () =
-          write_trace_from_events ~verbose ~debug_info trace_writer hits event_pipe
+          write_trace_from_events ?debug_info ~verbose trace_writer hits event_pipe
           |> Deferred.ok
         in
         Tracing.Trace.close trace_writer;
@@ -94,22 +94,28 @@ module Make_commands (Backend : Backend_intf.S) = struct
     ; finalize_recording : unit -> unit
     }
 
-  let attach opts elf pid =
+  let attach ?elf opts pid =
     let%bind.Deferred.Or_error () =
       check_for_processor_trace_support () |> Deferred.return
     in
-    let snap_syms = Elf.matching_functions elf opts.snap_symbol in
-    let%bind.Deferred.Or_error snap_sym =
-      match Map.length snap_syms, Map.min_elt snap_syms with
-      | 0, _ -> Deferred.Or_error.return None
-      | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
-      | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
-    in
-    let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym) in
-    let filter =
-      match opts.use_filter, snap_loc with
-      | true, Some { Elf.Stop_info.filter; _ } -> Some filter
-      | _, _ -> None
+    let%bind.Deferred.Or_error filter, snap_loc =
+      match elf with
+      | None -> Deferred.Or_error.return (None, None)
+      | Some elf ->
+        let snap_syms = Elf.matching_functions elf opts.snap_symbol in
+        let%bind.Deferred.Or_error snap_sym =
+          match Map.length snap_syms, Map.min_elt snap_syms with
+          | 0, _ -> Deferred.Or_error.return None
+          | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
+          | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
+        in
+        let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym) in
+        let filter =
+          match opts.use_filter, snap_loc with
+          | true, Some { Elf.Stop_info.filter; _ } -> Some filter
+          | _, _ -> None
+        in
+        Deferred.Or_error.return (filter, snap_loc)
     in
     let%map.Deferred.Or_error recording =
       Backend.attach_and_record opts.backend_opts ~record_dir:opts.record_dir ?filter pid
@@ -229,11 +235,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Backend.finish_recording recording
   ;;
 
-  let run_and_record record_opts elf ~command =
+  let run_and_record ?elf ~command record_opts =
     let open Deferred.Or_error.Let_syntax in
     let argv = Array.of_list command in
     let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
-    let%bind attachment = attach record_opts elf pid in
+    let%bind attachment = attach ?elf record_opts pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
       UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
@@ -241,8 +247,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     detach attachment
   ;;
 
-  let attach_and_record record_opts elf pid =
-    let%bind.Deferred.Or_error attachment = attach record_opts elf pid in
+  let attach_and_record ?elf record_opts pid =
+    let%bind.Deferred.Or_error attachment = attach ?elf record_opts pid in
     let { done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
@@ -367,11 +373,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> failwithf "Can't find executable for %s" cmd ()
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-             let elf =
-               Elf.create opts.executable |> Option.value_exn ~message:"Invalid ELF"
-             in
-             let%bind () = run_and_record opts elf ~command in
-             decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+             let elf = Elf.create opts.executable in
+             let%bind () = run_and_record ?elf ~command opts in
+             decode_to_trace ?elf ~record_dir:opts.record_dir decode_opts))
   ;;
 
   let select_pid () =
@@ -419,9 +423,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
            Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-             let elf = Elf.create opts.executable |> Option.value_exn in
-             let%bind () = attach_and_record opts elf pid in
-             decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+             let elf = Elf.create opts.executable in
+             let%bind () = attach_and_record ?elf opts pid in
+             decode_to_trace ?elf ~record_dir:opts.record_dir decode_opts))
   ;;
 
   let decode_command =
@@ -437,8 +441,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            ~doc:"FILE executable to extract information from"
        in
        fun () ->
-         let elf = Elf.create executable |> Option.value_exn in
-         decode_to_trace decode_opts ~record_dir elf)
+         let elf = Elf.create executable in
+         decode_to_trace ?elf ~record_dir decode_opts)
   ;;
 
   let commands =

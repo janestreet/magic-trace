@@ -41,9 +41,19 @@ let create filename =
       let statically_mappable = is_non_pie_executable header in
       let debug = Owee_elf.find_section_body buf sections ~section_name:".debug_line" in
       Some { string; symbol; debug; base_offset; filename; statically_mappable }
-    | _, _ -> None
+    | _, _ ->
+      Core.eprintf
+        "[Unable to find string or symbol table, will be unable to trigger on specific \
+         symbol. Was the binary built without debug info?]\n\
+         %!";
+      None
   with
-  | Owee_buf.Invalid_format _ -> None
+  | Owee_buf.Invalid_format _ ->
+    Core.eprintf
+      "[Invalid or unknown debug info format, will be unable to trigger on specific \
+       symbol.]\n\
+       %!";
+      None
 ;;
 
 let is_func sym =
