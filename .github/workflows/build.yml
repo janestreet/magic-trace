@@ -1,0 +1,36 @@
+name: build
+
+on:
+  - push
+  - pull_request
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        ocaml-version:
+          - 4.13.1
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        uses: ocaml/setup-ocaml@v1
+        with:
+          ocaml-version: ${{ matrix.ocaml-version }}
+
+      - run: opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
+
+      - run: opam install ./magic-trace.opam --deps-only
+
+      - run: opam exec -- make
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: magic-trace
+          path: _build/default/bin/magic_trace_bin.exe
+          if-no-files-found: error
