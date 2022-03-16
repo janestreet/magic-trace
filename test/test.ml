@@ -84,6 +84,16 @@ end = struct
   let () = ignore (events () : Event.t list)
 end
 
+module With = struct
+  let bind with_ ~f = with_ f
+
+  module Let_syntax = struct
+    module Let_syntax = struct
+      let bind = bind
+    end
+  end
+end
+
 let dump_using_file events =
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
