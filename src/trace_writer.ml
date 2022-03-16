@@ -48,52 +48,52 @@ let write_hits t hits =
     let pid = Tracing.Trace.allocate_pid t.trace ~name:"Snapshot symbol hits" in
     let thread = Tracing.Trace.allocate_thread t.trace ~pid ~name:"hits" in
     List.iter hits ~f:(fun (sym, (hit : Breakpoint.Hit.t)) ->
-      let is_default_symbol = String.( = ) sym Magic_trace.Private.stop_symbol in
-      let name = [%string "hit %{sym}"] in
-      let time = map_time t (Time_ns.Span.of_int_ns hit.timestamp) in
-      let args =
-        Tracing.Trace.Arg.
-          [ "timestamp", Int hit.timestamp; "tid", Int hit.tid; "ip", Int hit.ip ]
-      in
-      (* Args that are computed from captured registers are only meaningful on our
+        let is_default_symbol = String.( = ) sym Magic_trace.Private.stop_symbol in
+        let name = [%string "hit %{sym}"] in
+        let time = map_time t (Time_ns.Span.of_int_ns hit.timestamp) in
+        let args =
+          Tracing.Trace.Arg.
+            [ "timestamp", Int hit.timestamp; "tid", Int hit.tid; "ip", Int hit.ip ]
+        in
+        (* Args that are computed from captured registers are only meaningful on our
          special stop symbol, we still capture them regardless, but on other symbols
          they'll just have confusing broken values. *)
-      let args =
-        if is_default_symbol
-        then
-          Tracing.Trace.Arg.
-            [ "timestamp_passed", Int hit.passed_timestamp; "arg", Int hit.passed_val ]
-          @ args
-        else args
-      in
-      (* For the special symbol, if present the passed timestamp comes from
+        let args =
+          if is_default_symbol
+          then
+            Tracing.Trace.Arg.
+              [ "timestamp_passed", Int hit.passed_timestamp; "arg", Int hit.passed_val ]
+            @ args
+          else args
+        in
+        (* For the special symbol, if present the passed timestamp comes from
          Magic_trace.mark_start and marks the start of a region of interest.
 
          We check it for validity since it's possible someone uses an older version of
          [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
-      let valid_timestamp =
-        hit.passed_timestamp > Time_ns.Span.to_int_ns t.base_time
-        && hit.passed_timestamp < hit.timestamp
-      in
-      let start =
-        if is_default_symbol && valid_timestamp
-        then map_time t (Time_ns.Span.of_int_ns hit.passed_timestamp)
-        else time
-      in
-      Tracing.Trace.write_duration_complete
-        t.trace
-        ~thread
-        ~args
-        ~category:""
-        ~name
-        ~time:start
-        ~time_end:time))
+        let valid_timestamp =
+          hit.passed_timestamp > Time_ns.Span.to_int_ns t.base_time
+          && hit.passed_timestamp < hit.timestamp
+        in
+        let start =
+          if is_default_symbol && valid_timestamp
+          then map_time t (Time_ns.Span.of_int_ns hit.passed_timestamp)
+          else time
+        in
+        Tracing.Trace.write_duration_complete
+          t.trace
+          ~thread
+          ~args
+          ~category:""
+          ~name
+          ~time:start
+          ~time_end:time))
 ;;
 
 let create ~debug_info ~earliest_time ~hits trace =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
-      Time_ns.Span.min acc (Time_ns.Span.of_int_ns hit.timestamp))
+        Time_ns.Span.min acc (Time_ns.Span.of_int_ns hit.timestamp))
   in
   let t =
     { debug_info = Option.value debug_info ~default:(Int.Table.create ())
@@ -136,8 +136,8 @@ let write_pending_event' t thread time { name; kind } =
         ]
         @
         (match info.filename with
-         | Some x -> [ "file", Interned x ]
-         | None -> [])
+        | Some x -> [ "file", Interned x ]
+        | None -> [])
     in
     Tracing.Trace.write_duration_begin
       t.trace
@@ -194,18 +194,18 @@ let flush (t : t) ~to_time thread =
   let ns_offset = ref 0 in
   let shares_consumed = ref 0 in
   List.iter (List.rev thread.pending_events) ~f:(fun ev ->
-    let ns_share =
-      if consumes_time ev
-      then (
-        incr shares_consumed;
-        (total_ns - !ns_offset) / (count - !shares_consumed + 1))
-      else 0
-    in
-    let time =
-      Time_ns.Span.( + ) thread.pending_time (Time_ns.Span.of_int_ns !ns_offset)
-    in
-    ns_offset := !ns_offset + ns_share;
-    write_pending_event t thread time ev);
+      let ns_share =
+        if consumes_time ev
+        then (
+          incr shares_consumed;
+          (total_ns - !ns_offset) / (count - !shares_consumed + 1))
+        else 0
+      in
+      let time =
+        Time_ns.Span.( + ) thread.pending_time (Time_ns.Span.of_int_ns !ns_offset)
+      in
+      ns_offset := !ns_offset + ns_share;
+      write_pending_event t thread time ev);
   thread.pending_time <- to_time;
   thread.pending_events <- []
 ;;
@@ -217,11 +217,11 @@ let last_group_spread = Time_ns.Span.of_int_ns 10
 
 let flush_all t =
   Hashtbl.iter t.thread_info ~f:(fun thread ->
-    let to_time = Time_ns.Span.( + ) thread.pending_time last_group_spread in
-    flush t ~to_time thread;
-    Deque.iter' thread.start_events `front_to_back ~f:(fun (time, ev) ->
-      write_pending_event' t thread time ev);
-    Deque.clear thread.start_events)
+      let to_time = Time_ns.Span.( + ) thread.pending_time last_group_spread in
+      flush t ~to_time thread;
+      Deque.iter' thread.start_events `front_to_back ~f:(fun (time, ev) ->
+          write_pending_event' t thread time ev);
+      Deque.clear thread.start_events)
 ;;
 
 let add_event t thread time ev =
@@ -236,20 +236,20 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
   let time = map_time t time in
   let ({ thread; callstack; reset_time; frames_to_unwind; _ } as thread_info) =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
-      let trace_pid =
-        Tracing.Trace.allocate_pid
-          t.trace
-          ~name:[%string "%{thread.pid#Pid}/%{thread.tid#Int}"]
-      in
-      let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
-      { thread
-      ; callstack = Stack.create ()
-      ; reset_time = time
-      ; frames_to_unwind = ref 0
-      ; pending_events = []
-      ; pending_time = Time_ns.Span.zero
-      ; start_events = Deque.create ()
-      })
+        let trace_pid =
+          Tracing.Trace.allocate_pid
+            t.trace
+            ~name:[%string "%{thread.pid#Pid}/%{thread.tid#Int}"]
+        in
+        let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
+        { thread
+        ; callstack = Stack.create ()
+        ; reset_time = time
+        ; frames_to_unwind = ref 0
+        ; pending_events = []
+        ; pending_time = Time_ns.Span.zero
+        ; start_events = Deque.create ()
+        })
   in
   let call ?(time = time) name =
     let ev = { name; kind = Call { addr; offset; from_untraced = false } } in
@@ -298,10 +298,10 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
   in
   let ret_track_exn_data () =
     (match Stack.top callstack with
-     | Some "caml_next_frame_descriptor" -> incr frames_to_unwind
-     | Some "caml_raise_exn" -> unwind_stack (-2)
-     | Some "caml_raise_exception" -> unwind_stack 1
-     | _ -> ());
+    | Some "caml_next_frame_descriptor" -> incr frames_to_unwind
+    | Some "caml_raise_exn" -> unwind_stack (-2)
+    | Some "caml_raise_exception" -> unwind_stack 1
+    | _ -> ());
     ret ()
   in
   let rec clear_stack () =

@@ -10,15 +10,14 @@ type t =
   ; statically_mappable : bool
   }
 
-
 (** Elf files tend to have a "base offset" between where their sections end up in memory
     and where they are in the file, this function figures out that offset. *)
 let find_base_offset sections =
   (* iterate sections and find offset of first non-zero address *)
   Array.find_map sections ~f:(fun (section : Owee_elf.section) ->
-    if Int64.(section.sh_addr = 0L)
-    then None
-    else Some Int64.(section.sh_addr - section.sh_offset))
+      if Int64.(section.sh_addr = 0L)
+      then None
+      else Some Int64.(section.sh_addr - section.sh_offset))
 ;;
 
 let is_non_pie_executable (header : Owee_elf.header) =
@@ -56,14 +55,14 @@ let is_func sym =
 let matching_functions t symbol_re =
   let res = ref String.Map.empty in
   Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-    match Owee_elf.Symbol_table.Symbol.name symbol t.string with
-    | Some name when is_func symbol && Re.execp symbol_re name ->
-      (* Duplicate symbols are possible if a symbol is in both the dynamic and static
+      match Owee_elf.Symbol_table.Symbol.name symbol t.string with
+      | Some name when is_func symbol && Re.execp symbol_re name ->
+        (* Duplicate symbols are possible if a symbol is in both the dynamic and static
          symbol tables. *)
-      (match Map.add !res ~key:name ~data:symbol with
-       | `Ok a -> res := a
-       | `Duplicate -> ())
-    | _ -> ());
+        (match Map.add !res ~key:name ~data:symbol with
+        | `Ok a -> res := a
+        | `Duplicate -> ())
+      | _ -> ());
   !res
 ;;
 
@@ -88,37 +87,37 @@ let symbol_stop_info t symbol =
 let addr_table t =
   let table = Int.Table.create () in
   Option.iter t.debug ~f:(fun body ->
-    (* We only want to include line info from the start address of symbols in the table,
+      (* We only want to include line info from the start address of symbols in the table,
        lest it grow too large on big executables. We don't need to include mappings for
        lines in the middle of functions. *)
-    let symbol_starts = Int.Hash_set.create () in
-    Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      if is_func symbol
-      then
-        Hash_set.add
-          symbol_starts
-          (Owee_elf.Symbol_table.Symbol.value symbol |> Int64.to_int_exn));
-    let cursor = Owee_buf.cursor body in
-    let rec load_table_next () =
-      match Owee_debug_line.read_chunk cursor with
-      | None -> ()
-      | Some (header, chunk) ->
-        let process header (state : Owee_debug_line.state) () =
-          if (not state.end_sequence) && Hash_set.mem symbol_starts state.address
+      let symbol_starts = Int.Hash_set.create () in
+      Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
+          if is_func symbol
           then
-            Hashtbl.set
-              table
-              ~key:state.address
-              ~data:
-                { Location.filename = Owee_debug_line.get_filename header state
-                ; line = state.line
-                ; col = state.col
-                }
-        in
-        Owee_debug_line.fold_rows (header, chunk) process ();
-        load_table_next ()
-    in
-    load_table_next ());
+            Hash_set.add
+              symbol_starts
+              (Owee_elf.Symbol_table.Symbol.value symbol |> Int64.to_int_exn));
+      let cursor = Owee_buf.cursor body in
+      let rec load_table_next () =
+        match Owee_debug_line.read_chunk cursor with
+        | None -> ()
+        | Some (header, chunk) ->
+          let process header (state : Owee_debug_line.state) () =
+            if (not state.end_sequence) && Hash_set.mem symbol_starts state.address
+            then
+              Hashtbl.set
+                table
+                ~key:state.address
+                ~data:
+                  { Location.filename = Owee_debug_line.get_filename header state
+                  ; line = state.line
+                  ; col = state.col
+                  }
+          in
+          Owee_debug_line.fold_rows (header, chunk) process ();
+          load_table_next ()
+      in
+      load_table_next ());
   table
 ;;
 

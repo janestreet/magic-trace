@@ -21,11 +21,11 @@ let check_for_processor_trace_support () =
 let hits_file record_dir = record_dir ^/ "hits.sexp"
 
 let write_trace_from_events
-      ~verbose
-      ?debug_info
-      trace
-      hits
-      (events : Backend_intf.Event.t Pipe.Reader.t)
+    ~verbose
+    ?debug_info
+    trace
+    hits
+    (events : Backend_intf.Event.t Pipe.Reader.t)
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
@@ -36,8 +36,8 @@ let write_trace_from_events
   in
   let events =
     Pipe.map events ~f:(fun (event : Backend_intf.Event.t) ->
-      if verbose then Core.print_s (Backend_intf.Event.sexp_of_t event);
-      { event with time = event.time })
+        if verbose then Core.print_s (Backend_intf.Event.sexp_of_t event);
+        { event with time = event.time })
   in
   let writer = Trace_writer.create ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
@@ -154,16 +154,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let now = Time_ns.now () in
         let open Time_ns_unix.Option.Optional_syntax in
         (match%optional !last_hit with
-         | Some t ->
-           let interval = Time_ns.diff now t in
-           max_since_last_report := Time_ns.Span.max !max_since_last_report interval;
-           if Time_ns.Span.( > ) interval span_thresh
-           then take_snapshot_on_hit hit
-           else if Time_ns.( > ) now (Time_ns.add !last_report report_interval)
-           then (
-             print_report ();
-             last_report := now)
-         | _ -> ());
+        | Some t ->
+          let interval = Time_ns.diff now t in
+          max_since_last_report := Time_ns.Span.max !max_since_last_report interval;
+          if Time_ns.Span.( > ) interval span_thresh
+          then take_snapshot_on_hit hit
+          else if Time_ns.( > ) now (Time_ns.add !last_report report_interval)
+          then (
+            print_report ();
+            last_report := now)
+        | _ -> ());
         last_hit := Time_ns_unix.Option.some now
     in
     let maybe_take_snapshot hit =
@@ -216,8 +216,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ()
         in
         (match res with
-         | `Interrupted -> Breakpoint.destroy bp
-         | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
+        | `Interrupted -> Breakpoint.destroy bp
+        | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
     in
     { recording; done_ivar; breakpoint_done; finalize_recording }
   ;;
@@ -245,8 +245,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let { done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
-      Core.eprintf "[Got signal, detaching...]\n%!";
-      Ivar.fill_if_empty done_ivar ());
+        Core.eprintf "[Got signal, detaching...]\n%!";
+        Ivar.fill_if_empty done_ivar ());
     Core.eprintf "[Attached! Press Ctrl-C to stop recording]\n%!";
     let%bind () = stop in
     detach attachment
@@ -297,11 +297,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     and backend_opts = Backend.record_param in
     fun ~default_executable ~f ->
       (match duration_thresh, snap_symbol with
-       | Some _, Some _ ->
-         failwith
-           "Can't use -duration-thresh while using -symbol, the duration only works with \
-            Magic_trace.take_snapshot, try -delay-thresh instead."
-       | _ -> ());
+      | Some _, Some _ ->
+        failwith
+          "Can't use -duration-thresh while using -symbol, the duration only works with \
+           Magic_trace.take_snapshot, try -delay-thresh instead."
+      | _ -> ());
       let executable =
         match executable_override with
         | Some path -> path
@@ -324,16 +324,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
           if cleanup then Shell.rm ~r:() ~f:() record_dir;
           Deferred.unit)
         (fun () ->
-           f
-             { backend_opts
-             ; use_filter
-             ; multi_snapshot
-             ; snap_symbol
-             ; record_dir
-             ; executable
-             ; snap_on_delay_over
-             ; duration_thresh
-             })
+          f
+            { backend_opts
+            ; use_filter
+            ; multi_snapshot
+            ; snap_symbol
+            ; record_dir
+            ; executable
+            ; snap_on_delay_over
+            ; duration_thresh
+            })
   ;;
 
   let decode_flags =
@@ -366,11 +366,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> failwithf "Can't find executable for %s" cmd ()
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-           let elf =
-             Elf.create opts.executable |> Option.value_exn ~message:"Invalid ELF"
-           in
-           let%bind () = run_and_record opts elf ~command in
-           decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+             let elf =
+               Elf.create opts.executable |> Option.value_exn ~message:"Invalid ELF"
+             in
+             let%bind () = run_and_record opts elf ~command in
+             decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
   ;;
 
   let select_pid () =
@@ -418,9 +418,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
            Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-           let elf = Elf.create opts.executable |> Option.value_exn in
-           let%bind () = attach_and_record opts elf pid in
-           decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+             let elf = Elf.create opts.executable |> Option.value_exn in
+             let%bind () = attach_and_record opts elf pid in
+             decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
   ;;
 
   let decode_command =

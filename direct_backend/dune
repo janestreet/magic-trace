@@ -1,3 +1,5 @@
-(rule (targets explicit_dependencies.ml explicit_dependencies.mli)
+(rule
+ (targets explicit_dependencies.ml explicit_dependencies.mli)
  (deps %{workspace_root}/bin/gen-explicit-dependencies.sh)
- (action (bash "%{deps} libipt_a")))
+ (action
+  (bash "%{deps} libipt_a")))

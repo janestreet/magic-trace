@@ -1,4 +1,6 @@
-(executables (names sample)
+(executables
+ (names sample)
  (libraries core core_unix core_unix.command_unix magic_trace
-  core_unix.time_stamp_counter)
- (preprocess (pps ppx_jane)))
+   core_unix.time_stamp_counter)
+ (preprocess
+  (pps ppx_jane)))
