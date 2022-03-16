@@ -106,7 +106,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
       | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
     in
-    let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf sym) in
+    let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym) in
     let filter =
       match opts.use_filter, snap_loc with
       | true, Some { Elf.Stop_info.filter; _ } -> Some filter

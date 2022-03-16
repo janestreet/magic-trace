@@ -66,20 +66,26 @@ let matching_functions t symbol_re =
   !res
 ;;
 
-let symbol_stop_info t symbol =
-  if not t.statically_mappable
-  then
-    failwithf
-      "Tried to determine address to attach to a symbol in non-static ELF file '%s'. PIE \
-       executables aren't currently supported."
-      t.filename
-      ();
+let symbol_stop_info t pid symbol =
   let name = Owee_elf.Symbol_table.Symbol.name symbol t.string in
   let name = Option.value_exn ~message:"stop_info symbols must have a name" name in
+  let filename = Filename_unix.realpath t.filename in
   let addr = Owee_elf.Symbol_table.Symbol.value symbol in
+  let addr =
+    if t.statically_mappable
+    then addr
+    else
+      Owee_linux_maps.scan_pid (Pid.to_int pid)
+      |> List.filter_map ~f:(fun { address_start; address_end; pathname; offset; _ } ->
+             let open Int64 in
+             let length = address_end - address_start in
+             if String.(pathname = filename) && addr >= offset && addr < offset + length
+             then Some (addr - offset + address_start)
+             else None)
+      |> List.hd_exn
+  in
   let size = Owee_elf.Symbol_table.Symbol.size_in_bytes symbol in
   let offset = Int64.( - ) addr (Int64.of_int t.base_offset) in
-  let filename = Filename_unix.realpath t.filename in
   let filter = [%string {|stop %{offset#Int64}/%{size#Int64}@%{filename}|}] in
   { Stop_info.name; addr; filter }
 ;;
