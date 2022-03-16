@@ -519,13 +519,13 @@ let%expect_test "get debug information from ELF" =
   let debug_table =
     Magic_trace_core.Elf.addr_table (Option.value_exn elf)
     |> Hashtbl.filter ~f:(fun info ->
-      match info.filename with
-      | Some "sample.ml" -> true
-      | _ -> false)
+           match info.filename with
+           | Some "sample.ml" -> true
+           | _ -> false)
   in
   let raise_after_col =
     Hashtbl.filter_map debug_table ~f:(fun info ->
-      if info.line = 5 then Some info.col else None)
+        if info.line = 5 then Some info.col else None)
     |> Hashtbl.data
     |> List.hd_exn
   in

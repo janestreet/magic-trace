@@ -111,31 +111,31 @@ module Perf_line = struct
       line
       " %d/%d %d.%d: %s@=> %x %s@$"
       (fun pid tid time_hi time_lo kind addr rest ->
-         let symbol, offset =
-           try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
-           | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
-         in
-         { Backend_intf.Event.thread = { pid = Pid.of_int pid; tid }
-         ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
-         ; kind =
-             (match String.strip kind with
-              | "call" -> Call
-              | "return" -> Return
-              | "tr strt" -> Start
-              | "tr end" -> End None
-              | "tr end  call" -> End Call
-              | "tr end  return" -> End Return
-              | "tr end  syscall" -> End Syscall
-              | "jmp" -> Jump
-              | "jcc" -> Jump
-              | other ->
-                (* Hasn't occured in testing large traces, but there's not great documentation
+        let symbol, offset =
+          try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
+          | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
+        in
+        { Backend_intf.Event.thread = { pid = Pid.of_int pid; tid }
+        ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
+        ; kind =
+            (match String.strip kind with
+            | "call" -> Call
+            | "return" -> Return
+            | "tr strt" -> Start
+            | "tr end" -> End None
+            | "tr end  call" -> End Call
+            | "tr end  return" -> End Return
+            | "tr end  syscall" -> End Syscall
+            | "jmp" -> Jump
+            | "jcc" -> Jump
+            | other ->
+              (* Hasn't occured in testing large traces, but there's not great documentation
                    on what might be output for this field so raising seems like a bad idea. *)
-                Other other)
-         ; addr
-         ; symbol
-         ; offset
-         })
+              Other other)
+        ; addr
+        ; symbol
+        ; offset
+        })
   ;;
 end
 
