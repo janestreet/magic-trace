@@ -12,6 +12,8 @@ build: [
 depends: [
   "ocaml" {>= "4.08.0"}
   "async"
+  "cohttp"
+  "cohttp_static_handler"
   "core"
   "core_unix"
   "expect_test_helpers_async"
