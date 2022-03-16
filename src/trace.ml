@@ -47,7 +47,7 @@ let write_trace_from_events
 
 module Make_commands (Backend : Backend_intf.S) = struct
   type decode_opts =
-    { output_config : Tracing.Tool_output.t
+    { output_config : Tracing_tool_output.t
     ; decode_opts : Backend.decode_opts
     ; verbose : bool
     }
@@ -56,7 +56,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let decode_to_trace { output_config; decode_opts; verbose } ~record_dir elf =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
-    Tracing.Tool_output.write_and_view
+    Tracing_tool_output.write_and_view
       output_config
       ~default_name:"magic_trace"
       ~f:(fun w ->
@@ -337,7 +337,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   let decode_flags =
-    let%map_open.Command output_config = Tracing.Tool_output.param
+    let%map_open.Command output_config = Tracing_tool_output.param
     and verbose = flag "-verbose" no_arg ~doc:"print decoded events"
     and decode_opts = Backend.decode_param in
     { output_config; decode_opts; verbose }
