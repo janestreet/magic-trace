@@ -31,8 +31,26 @@ module Recording = struct
     | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
   ;;
 
-  let attach_and_record { Record_opts.multi_thread; full_execution } ~record_dir pid =
+  let perf_selector_of_trace_mode : Trace_mode.t -> string = function
+    | Userspace -> "u"
+    | Kernel -> "k"
+    | Userspace_and_kernel -> "uk"
+  ;;
+
+  let attach_and_record
+      { Record_opts.multi_thread; full_execution }
+      ~(trace_mode : Trace_mode.t)
+      ~record_dir
+      pid
+    =
     let%bind capabilities = Perf_capabilities.detect_exn () in
+    let%bind.Deferred.Or_error () =
+      match trace_mode, Perf_capabilities.(do_intersect capabilities kernel_tracing) with
+      | Userspace, _ | _, true -> return (Ok ())
+      | (Kernel | Userspace_and_kernel), false ->
+        Deferred.Or_error.error_string
+          "magic-trace must be run as root in order to trace the kernel"
+    in
     let thread_opts =
       match multi_thread with
       | false -> [ "--per-thread"; "-t" ]
@@ -42,19 +60,40 @@ module Recording = struct
       if Perf_capabilities.(do_intersect capabilities configurable_psb_period)
       then
         (* Using Intel Processor Trace with the highest possible granularity. *)
-        "--event=intel_pt/cyc=1,cyc_thresh=1,mtc_period=0/u"
+        [%string
+          "--event=intel_pt/cyc=1,cyc_thresh=1,mtc_period=0/%{perf_selector_of_trace_mode \
+           trace_mode}"]
       else (
         Core.eprintf
           "[Warning: This machine has an older generation processor, timing granularity \
            will be ~1us instead of ~10ns. Consider using a newer machine.]\n\
            %!";
-        "--event=intel_pt//u")
+        [%string "--event=intel_pt//%{perf_selector_of_trace_mode trace_mode}"])
+    in
+    let kcore_opts =
+      match trace_mode, Perf_capabilities.(do_intersect capabilities kcore) with
+      | Userspace, _ -> []
+      | (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
+      | (Kernel | Userspace_and_kernel), false ->
+        (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
+           here instead of bailing. But that's tricky, and upgrading to a newer
+           perf is easier. *)
+        Core.eprintf
+          "[Warning: old perf version detected! perf userspace tools v5.5 contain an \
+           important feature, kcore, that make decoding kernel traces more reliable. In \
+           our experience, tracing the kernel mostly works without this feature, but you \
+           may run into problems if you're trying to trace through self-modifying code \
+           (the kernel may do this more than you think). Install a perf version >= 5.5 \
+           to avoid this.]\n\
+           %!";
+        []
     in
     let argv =
       [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
       @ thread_opts
       @ [ Pid.to_int pid |> Int.to_string ]
-      @ if full_execution then [] else [ "--snapshot" ]
+      @ (if full_execution then [] else [ "--snapshot" ])
+      @ kcore_opts
     in
     if debug_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
@@ -104,7 +143,7 @@ module Perf_line = struct
 
   let line_re =
     Re.Posix.re
-      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|tr end|tr strt tr end|tr end  call|tr end  return|tr end  syscall|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  call|tr end  return|tr end  syscall|tr end  sysret|tr end  iret|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
     |> Re.compile
   ;;
 
@@ -162,13 +201,19 @@ module Perf_line = struct
             (match String.strip kind with
             | "call" -> Call
             | "return" -> Return
+            | "jmp" -> Jump
+            | "jcc" -> Jump
+            | "syscall" -> Syscall
+            | "hw int" -> Hardware_interrupt
+            | "iret" -> Iret
+            | "sysret" -> Sysret
             | "tr strt" -> Start
             | "tr end" -> End None
             | "tr end  call" -> End Call
             | "tr end  return" -> End Return
             | "tr end  syscall" -> End Syscall
-            | "jmp" -> Jump
-            | "jcc" -> Jump
+            | "tr end  iret" -> End Iret
+            | "tr end  sysret" -> End Sysret
             (* CR-someday wduff: I saw "tr strt tr end" in practice, but I'm not sure what we want
                to do with it. Calling it out redundantly here for now. *)
             | ("tr strt tr end" as kind) | kind ->

@@ -6,7 +6,8 @@ val command : Command.t
 
 module For_testing : sig
   val write_trace_from_events
-    :  ?debug_info:Elf.Addr_table.t
+    :  trace_mode:Trace_mode.t
+    -> ?debug_info:Elf.Addr_table.t
     -> Tracing.Trace.t
     -> (string * Breakpoint.Hit.t) list
     -> Event.t Pipe.Reader.t

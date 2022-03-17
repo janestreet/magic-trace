@@ -19,14 +19,28 @@ module Pending_event = struct
     }
 end
 
+module Callstack = struct
+  type t =
+    { stack : string Stack.t
+    ; create_time : Time_ns.Span.t
+    }
+
+  let create ~create_time = { stack = Stack.create (); create_time }
+  let push t v = Stack.push t.stack v
+  let pop t = Stack.pop t.stack
+  let top t = Stack.top t.stack
+  let is_empty t = Stack.is_empty t.stack
+end
+
 module Thread_info = struct
   type t =
     { thread : Tracing.Trace.Thread.t
     ; (* This isn't a canonical callstack, but represents all of the information that we
        know about the callstack at the point in the events up to the current event being
        processed, and is reflected in the trace at that point. *)
-      callstack : string Stack.t
-    ; mutable reset_time : Time_ns.Span.t
+      mutable callstack : Callstack.t
+    ; inactive_callstacks : Callstack.t Stack.t
+    ; mutable last_decode_error_time : Time_ns.Span.t
     ; (* Currently keeping track of the number of frames to unwind during an exception by
        counting the number of calls to next_frame_descriptor (called during backtrace
        collection) since the last raise. This fails on raise_notrace but that can be fixed
@@ -43,6 +57,7 @@ type t =
   ; trace : Tracing.Trace.t
   ; thread_info : Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
+  ; trace_mode : Trace_mode.t
   }
 
 let map_time t time = Time_ns.Span.( - ) time t.base_time
@@ -95,7 +110,7 @@ let write_hits t hits =
           ~time_end:time))
 ;;
 
-let create ~debug_info ~earliest_time ~hits trace =
+let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
         Time_ns.Span.min acc (Time_ns.Span.of_int_ns hit.timestamp))
@@ -105,10 +120,17 @@ let create ~debug_info ~earliest_time ~hits trace =
     ; trace
     ; thread_info = Hashtbl.create (module Event.Thread)
     ; base_time
+    ; trace_mode
     }
   in
   write_hits t hits;
   t
+;;
+
+let demangle_symbol name =
+  if String.is_prefix name ~prefix:"caml_"
+  then name
+  else Owee_location.demangled_symbol name
 ;;
 
 let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; kind } =
@@ -116,11 +138,6 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
   | Call { addr; offset; from_untraced = _ } ->
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
-    let demangled_name =
-      if String.is_prefix name ~prefix:"caml_"
-      then name
-      else Owee_location.demangled_symbol name
-    in
     let base_address = Int64.(addr - of_int offset) in
     let args =
       let open Tracing.Trace.Arg in
@@ -162,7 +179,7 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
     Tracing.Trace.write_duration_begin
       t.trace
       ~thread:thread.thread
-      ~name:demangled_name
+      ~name:(demangle_symbol name)
       ~time
       ~args
       ~category:""
@@ -261,24 +278,32 @@ let opt_int_to_string opt_int =
   | Some int -> Int.to_string int
 ;;
 
+let is_kernel_address addr = Int64.(addr < 0L)
+
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
     constants defined above. *)
 let write_event
     (t : t)
-    { Event.thread
-    ; time
-    ; symbol
-    ; kind
-    ; addr
-    ; offset
-    ; ip = _
-    ; ip_symbol = _
-    ; ip_offset = _
-    }
+    ({ Event.thread
+     ; time
+     ; symbol
+     ; kind
+     ; addr
+     ; offset
+     ; ip = _
+     ; ip_symbol = _
+     ; ip_offset = _
+     } as event)
   =
   let time = map_time t time in
-  let ({ Thread_info.thread; callstack; reset_time; frames_to_unwind; _ } as thread_info) =
+  let ({ Thread_info.thread
+       ; inactive_callstacks
+       ; last_decode_error_time
+       ; frames_to_unwind
+       ; _
+       } as thread_info)
+    =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
         let trace_pid =
           Tracing.Trace.allocate_pid
@@ -288,8 +313,9 @@ let write_event
         in
         let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
         { thread
-        ; callstack = Stack.create ()
-        ; reset_time = time
+        ; callstack = Callstack.create ~create_time:time
+        ; inactive_callstacks = Stack.create ()
+        ; last_decode_error_time = time
         ; frames_to_unwind = ref 0
         ; pending_events = []
         ; pending_time = Time_ns.Span.zero
@@ -301,11 +327,11 @@ let write_event
       { Pending_event.name; kind = Call { addr; offset; from_untraced = false } }
     in
     add_event t thread_info time ev;
-    Stack.push callstack name
+    Callstack.push thread_info.callstack name
   in
   let ret () =
-    match Stack.pop callstack with
-    | Some name -> add_event t thread_info time { Pending_event.name; kind = Ret }
+    match Callstack.pop thread_info.callstack with
+    | Some name -> add_event t thread_info time { name; kind = Ret }
     | None ->
       (* No known stackframe was popped --- could occur if the start of the snapshot
          started in the middle of a tracing region *)
@@ -313,14 +339,16 @@ let write_event
         t
         thread_info
         time
-        { Pending_event.name = "[unknown]"; kind = Ret_from_untraced { reset_time } }
+        { name = "[unknown]"
+        ; kind = Ret_from_untraced { reset_time = thread_info.callstack.create_time }
+        }
   in
   let check_current_symbol () =
     (* After every operation, we should be in a situation where the current symbol under
        the pc matches the symbol at the top of the callstack. This can go out-of-sync
        with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
        known function, so we have to correct the top of the stack here. *)
-    match Stack.top callstack with
+    match Callstack.top thread_info.callstack with
     | Some known when not (String.equal known symbol) ->
       ret ();
       call symbol
@@ -338,8 +366,8 @@ let write_event
         ; kind = Call { addr; offset; from_untraced = true }
         }
       in
-      write_pending_event t thread_info reset_time ev;
-      Stack.push callstack symbol
+      write_pending_event t thread_info thread_info.callstack.create_time ev;
+      Callstack.push thread_info.callstack symbol
   in
   let unwind_stack diff =
     for _ = 0 to !frames_to_unwind + diff do
@@ -348,39 +376,104 @@ let write_event
     frames_to_unwind := 0
   in
   let ret_track_exn_data () =
-    (match Stack.top callstack with
+    (match Callstack.top thread_info.callstack with
     | Some "caml_next_frame_descriptor" -> incr frames_to_unwind
     | Some "caml_raise_exn" -> unwind_stack (-2)
     | Some "caml_raise_exception" -> unwind_stack 1
     | _ -> ());
     ret ()
   in
-  let rec clear_stack () =
-    match Stack.top callstack with
+  let rec clear_callstack () =
+    match Callstack.top thread_info.callstack with
     | Some _ ->
       ret ();
-      clear_stack ()
+      clear_callstack ()
     | None -> ()
   in
+  let new_callstack () =
+    let create_time = if is_kernel_address addr then time else last_decode_error_time in
+    Callstack.create ~create_time
+  in
+  let assert_trace_mode trace_modes =
+    if List.find trace_modes ~f:(Trace_mode.equal t.trace_mode) |> Option.is_none
+    then
+      Core.eprint_s
+        [%message
+          "BUG: assumptions violated, saw an unexpected event for this trace mode"
+            ~trace_mode:(t.trace_mode : Trace_mode.t)
+            (event : Event.t)]
+  in
   match kind with
-  (* View stopping tracing always as a call (typically the result of a call into a
-     special library / linker), with starting tracing again as exiting it. The one
-     exception is the initial start of the trace for that process, when there is no
-     stack and a prior end won't have pushed a synthetic stack frame. *)
-  | Start when Stack.is_empty callstack -> call symbol
   | Call | End Call -> call symbol
   | End None -> call "[untraced]"
-  | End Syscall -> call "[syscall]"
+  | End Syscall ->
+    (* We should only be getting these under /u *)
+    assert_trace_mode [ Userspace ];
+    call "[syscall]"
   | End Return -> call "[returned]"
   | Return ->
     ret_track_exn_data ();
     check_current_symbol ()
   | Start ->
-    (* We don't call [check_current_symbol] here because stops don't change the program
-       location in most cases, and when a call to a symbol page faults, the restart after
-       the page fault at the new location would get treated as a tail call if we did call
-       [check_current_symbol]. *)
-    ret_track_exn_data ()
+    (* Might get this under /u, /k, and /uk, but we need to handle them all
+       differently. *)
+    if Trace_mode.equal t.trace_mode Kernel
+    then (
+      (* We're back in the kernel after having been in userspace. We have a
+         brand new stack to work with. [clear_callstack] here should only be
+         clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
+      clear_callstack ();
+      thread_info.callstack <- new_callstack ())
+    else if Callstack.is_empty thread_info.callstack
+    then
+      (* View stopping tracing always as a call (typically the result of a call
+         into a special library / linker), with starting tracing again as
+         exiting it. The one exception is the initial start of the trace for
+         that process, when there is no stack and a prior end won't have pushed
+         a synthetic stack frame. *)
+      call symbol
+    else
+      (* We don't call [check_current_symbol] here because stops don't change
+         the program location in most cases, and when a call to a symbol page
+         faults, the restart after the page fault at the new location would get
+         treated as a tail call if we did call [check_current_symbol]. *)
+      ret_track_exn_data ()
+  | Syscall | Hardware_interrupt ->
+    (* We should only be getting [Syscall] these under /uk, but we can get
+       [Hardware_interrupt] under /uk, /k. *)
+    [ [ Trace_mode.Userspace_and_kernel ]
+    ; (if Event.Kind.equal kind Hardware_interrupt then [ Kernel ] else [])
+    ]
+    |> List.concat
+    |> assert_trace_mode;
+    (* A syscall or hardware interrupt can be modelled as operating on a new
+       stack, and shouldn't be allowed to modify the previous stack.
+
+       Also, hardware interrupts can occur during syscalls, so we maintain a
+       "stack of callstacks" here. *)
+    Stack.push inactive_callstacks thread_info.callstack;
+    thread_info.callstack <- new_callstack ();
+    call symbol
+  | End Iret | End Sysret ->
+    (* We should only be getting these under /k *)
+    assert_trace_mode [ Kernel ];
+    clear_callstack ();
+    call "[untraced]"
+  | Sysret | Iret ->
+    (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
+       well (because the kernel can be interrupted). *)
+    [ [ Trace_mode.Userspace_and_kernel ]
+    ; (if Event.Kind.equal kind Iret then [ Kernel ] else [])
+    ]
+    |> List.concat
+    |> assert_trace_mode;
+    clear_callstack ();
+    flush_all t;
+    (match Stack.pop inactive_callstacks with
+    | Some callstack -> thread_info.callstack <- callstack
+    | None ->
+      thread_info.callstack <- new_callstack ();
+      check_current_symbol ())
   | Decode_error ->
     Tracing.Trace.write_duration_instant
       t.trace
@@ -389,8 +482,16 @@ let write_event
       ~time
       ~args:[]
       ~category:"";
-    clear_stack ();
+    let rec clear_all_callstacks () =
+      match Stack.pop inactive_callstacks with
+      | None -> ()
+      | Some callstack ->
+        thread_info.callstack <- callstack;
+        clear_all_callstacks ()
+    in
+    clear_all_callstacks ();
     flush_all t;
-    thread_info.reset_time <- time
+    thread_info.last_decode_error_time <- time;
+    thread_info.callstack <- new_callstack ()
   | Jump -> check_current_symbol ()
 ;;

@@ -16,6 +16,7 @@ module type S = sig
 
     val attach_and_record
       :  Record_opts.t
+      -> trace_mode:Trace_mode.t
       -> record_dir:string
       -> Pid.t
       -> t Deferred.Or_error.t
