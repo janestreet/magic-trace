@@ -236,6 +236,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
     let%bind attachment = attach record_opts elf pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
+    Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
+      UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
     detach attachment
   ;;
