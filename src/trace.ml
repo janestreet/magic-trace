@@ -1,4 +1,4 @@
-(** Runs a program under Intel ProcessorTrace in Snapshot mode *)
+(** Runs a program under Intel Processor Trace in Snapshot mode *)
 open! Core
 
 open! Async
@@ -44,6 +44,7 @@ let check_for_processor_trace_support () =
 
 let write_trace_from_events
     ~verbose
+    ~trace_mode
     ?debug_info
     trace
     hits
@@ -61,7 +62,7 @@ let write_trace_from_events
         if verbose then Core.print_s (Event.sexp_of_t event);
         { event with time = event.time })
   in
-  let writer = Trace_writer.create ~debug_info ~earliest_time ~hits trace in
+  let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
   let%map () = Pipe.iter_without_pushback events ~f:process_event in
   Trace_writer.flush_all writer
@@ -82,7 +83,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let filename ~record_dir = record_dir ^/ "hits.sexp"
   end
 
-  let decode_to_trace ~elf ~record_dir { Decode_opts.output_config; decode_opts; verbose }
+  let decode_to_trace
+      ~elf
+      ~trace_mode
+      ~record_dir
+      { Decode_opts.output_config; decode_opts; verbose }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_view output_config ~f:(fun w ->
@@ -96,7 +101,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let debug_info = Option.map elf ~f:Elf.addr_table in
         let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
         let%bind () =
-          write_trace_from_events ?debug_info ~verbose trace_writer hits event_pipe
+          write_trace_from_events
+            ?debug_info
+            ~trace_mode
+            ~verbose
+            trace_writer
+            hits
+            event_pipe
           |> Deferred.ok
         in
         Tracing.Trace.close trace_writer;
@@ -110,6 +121,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; when_to_snapshot : When_to_snapshot.t
       ; record_dir : string
       ; executable : string
+      ; trace_mode : Trace_mode.t
       }
   end
 
@@ -158,6 +170,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%map.Deferred.Or_error recording =
       Backend.Recording.attach_and_record
         opts.backend_opts
+        ~trace_mode:opts.trace_mode
         ~record_dir:opts.record_dir
         pid
     in
@@ -276,6 +289,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     and when_to_snapshot = When_to_snapshot.param
     and multi_snapshot =
       flag "-multi-snapshot" no_arg ~doc:"allow taking multiple snapshots if possible"
+    and trace_mode = Trace_mode.param
     and backend_opts = Backend.Record_opts.param in
     fun ~default_executable ~f ->
       let executable =
@@ -301,6 +315,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; when_to_snapshot
             ; record_dir
             ; executable
+            ; trace_mode
             })
   ;;
 
@@ -334,10 +349,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> failwithf "Can't find executable for %s" cmd ()
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-             let { Record_opts.executable; when_to_snapshot; _ } = opts in
-             let%bind elf = create_elf ~executable ~when_to_snapshot in
+             let elf = Elf.create opts.executable in
              let%bind () = run_and_record ~elf ~command opts in
-             decode_to_trace ~elf ~record_dir:opts.record_dir decode_opts))
+             decode_to_trace
+               ~elf
+               ~trace_mode:opts.trace_mode
+               ~record_dir:opts.record_dir
+               decode_opts))
   ;;
 
   let select_pid () =
@@ -403,7 +421,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
              let { Record_opts.executable; when_to_snapshot; _ } = opts in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind () = attach_and_record ?elf opts pid in
-             decode_to_trace ~elf ~record_dir:opts.record_dir decode_opts))
+             decode_to_trace
+               ~elf
+               ~trace_mode:opts.trace_mode
+               ~record_dir:opts.record_dir
+               decode_opts))
   ;;
 
   let decode_command =
@@ -411,6 +433,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~summary:
         "Decode processor trace data and convert the results to a viewable Fuchsia trace."
       (let%map_open.Command record_dir = record_dir_flag required
+       and trace_mode = Trace_mode.param
        and decode_opts = decode_flags
        and executable =
          flag
@@ -422,7 +445,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
          let elf = Elf.create executable in
-         decode_to_trace ~elf ~record_dir decode_opts)
+         decode_to_trace ~elf ~trace_mode ~record_dir decode_opts)
   ;;
 
   let commands =

@@ -113,7 +113,7 @@ let dump_using_file events =
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
   let trace = Tracing.Trace.Expert.create ~base_time:None writer in
-  let%bind () = write_trace_from_events trace [] events in
+  let%bind () = write_trace_from_events ~trace_mode:Userspace trace [] events in
   Tracing.Trace.close trace;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
   while%bind_open.Result Ok true do

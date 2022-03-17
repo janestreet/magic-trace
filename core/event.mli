@@ -5,8 +5,10 @@ module End_kind : sig
     | Call
     | Return
     | Syscall
+    | Sysret
+    | Iret
     | None
-  [@@deriving sexp]
+  [@@deriving sexp, compare, equal]
 end
 
 module Kind : sig
@@ -14,10 +16,14 @@ module Kind : sig
     | Call
     | Return
     | Start
+    | Syscall
+    | Sysret
+    | Hardware_interrupt
+    | Iret
     | Decode_error
     | End of End_kind.t
     | Jump
-  [@@deriving sexp]
+  [@@deriving sexp, compare, equal]
 end
 
 module Thread : sig

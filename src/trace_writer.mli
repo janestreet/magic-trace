@@ -4,7 +4,8 @@ open! Import
 type t
 
 val create
-  :  debug_info:Elf.Addr_table.t option
+  :  trace_mode:Trace_mode.t
+  -> debug_info:Elf.Addr_table.t option
   -> earliest_time:Time_ns.Span.t
   -> hits:(string * Breakpoint.Hit.t) list
   -> Tracing.Trace.t
