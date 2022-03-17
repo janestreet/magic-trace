@@ -282,7 +282,7 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
       (* If we have no callstack left, then we just returned out of something we didn't
          see the call for. Since we're in snapshot mode, this happens with functions
          called before the perf events started, so add in a call that begins at the
-         start of the trace for that pid. 
+         start of the trace for that pid.
 
          These shouldn't be buffered for spreading since we want them exactly at the reset
          time. *)
@@ -342,5 +342,5 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
     flush_all t;
     thread_info.reset_time <- time
   | Jump -> check_current_symbol ()
-  | Other _ | Unknown -> ()
+  | Unknown -> ()
 ;;
