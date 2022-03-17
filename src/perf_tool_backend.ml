@@ -109,7 +109,7 @@ module Perf_line = struct
   let to_event line =
     Scanf.sscanf
       line
-      " %d/%d %d.%d: %s@=> %x %s@$"
+      " %d/%d %d.%d: %s@=> %Lx %s@$"
       (fun pid tid time_hi time_lo kind addr rest ->
         let symbol, offset =
           try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with

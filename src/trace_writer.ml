@@ -4,7 +4,7 @@ module Event = Backend_intf.Event
 
 type pending_kind =
   | Call of
-      { addr : int
+      { addr : int64
       ; offset : int
       ; from_untraced : bool
       }
@@ -116,7 +116,7 @@ let write_pending_event' t thread time { name; kind } =
       then name
       else Owee_location.demangled_symbol name
     in
-    let base_address = addr - offset in
+    let base_address = Int64.(addr - of_int offset) in
     let args =
       let open Tracing.Trace.Arg in
       (* Using [Interned] may cause some issues with the 32k interned string limit, on
@@ -125,11 +125,26 @@ let write_pending_event' t thread time { name; kind } =
          happen around twice as fast. It does make the traces noticeably smaller.
 
          The real solution is to get around to improving the interning table management
-         in the trace writer library. *)
-      match Hashtbl.find t.debug_info base_address with
-      | None -> [ "address", Int addr; "symbol", Interned name ]
+         in the trace writer library.
+
+         ---
+
+         [base_address] might be lie in the kernel, in which case [to_int] will fail (but
+         that's alright, because we wouldn't have a symbol for it in the executable's
+         [debug_info] anyway. *)
+      match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
+      | None ->
+        [ ( "address"
+          , (* FIXME(tbrindus): this truncates kernel addresses, because [Tracing] doesn't
+             support int64 types yet. *)
+            Int (Int64.to_int_trunc addr) )
+        ; "symbol", Interned name
+        ]
       | Some (info : Elf.Location.t) ->
-        [ "address", Int addr
+        [ ( "address"
+          , (* FIXME(tbrindus): this truncates kernel addresses, because [Tracing] doesn't
+             support int64 types yet. *)
+            Int (Int64.to_int_trunc addr) )
         ; "line", Int info.line
         ; "col", Int info.col
         ; "symbol", Interned name
