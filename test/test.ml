@@ -24,7 +24,7 @@ end = struct
     !cur_time
   ;;
 
-  let addr () = Random.State.int_incl !rng 0 0x7fffffffffff
+  let addr () = Random.State.int64_incl !rng 0L 0x7fffffffffffL
   let offset () = Random.State.int_incl !rng 0 0x1000
 
   let symbol () =
@@ -52,7 +52,7 @@ end = struct
 
   let add kind ns symbol =
     let time = Time_ns.Span.of_int_ns ns in
-    Queue.enqueue events { thread; time; kind; symbol; addr = 0; offset = 0 }
+    Queue.enqueue events { thread; time; kind; symbol; addr = 0L; offset = 0 }
   ;;
 
   let ret () =

@@ -32,7 +32,7 @@ module Event = struct
   type t =
     { thread : Thread.t
     ; time : Time_ns.Span.t
-    ; addr : int
+    ; addr : int64
     ; kind : kind
     ; symbol : string
     ; offset : int
