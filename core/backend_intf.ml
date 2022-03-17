@@ -25,8 +25,8 @@ module Event = struct
 
   module Thread = struct
     type t =
-      { pid : Pid.t
-      ; tid : int
+      { pid : Pid.t option
+      ; tid : int option
       }
     [@@deriving sexp, compare, hash]
   end

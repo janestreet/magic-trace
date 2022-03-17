@@ -229,6 +229,16 @@ let add_event t thread time ev =
   thread.pending_events <- ev :: thread.pending_events
 ;;
 
+let opt_pid_to_string opt_pid =
+  match opt_pid with
+  | None -> "?"
+  | Some pid -> Pid.to_string pid
+
+let opt_int_to_string opt_int =
+  match opt_int with
+  | None -> "?"
+  | Some int -> Int.to_string int
+
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
     constants defined above. *)
@@ -239,7 +249,7 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
         let trace_pid =
           Tracing.Trace.allocate_pid
             t.trace
-            ~name:[%string "%{thread.pid#Pid}/%{thread.tid#Int}"]
+            ~name:[%string "%{opt_pid_to_string thread.pid}/%{opt_int_to_string thread.tid}"]
         in
         let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
         { thread
@@ -282,7 +292,7 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
       (* If we have no callstack left, then we just returned out of something we didn't
          see the call for. Since we're in snapshot mode, this happens with functions
          called before the perf events started, so add in a call that begins at the
-         start of the trace for that pid. 
+         start of the trace for that pid.
 
          These shouldn't be buffered for spreading since we want them exactly at the reset
          time. *)

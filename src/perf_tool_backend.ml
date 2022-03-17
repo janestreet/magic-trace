@@ -115,7 +115,11 @@ module Perf_line = struct
           try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
           | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
         in
-        { Backend_intf.Event.thread = { pid = Pid.of_int pid; tid }
+        { Backend_intf.Event.
+          thread =
+            { pid = if pid = 0 then None else Some (Pid.of_int pid)
+            ; tid = if tid = 0 then None else Some tid
+            }
         ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
         ; kind =
             (match String.strip kind with
