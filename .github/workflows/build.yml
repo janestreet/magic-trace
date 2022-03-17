@@ -27,6 +27,9 @@ jobs:
 
       - run: opam install ./magic-trace.opam --deps-only
 
+      - run: opam install ocamlformat
+      - run: opam exec -- dune build @fmt
+
       - run: opam exec -- make
 
       - uses: actions/upload-artifact@v3
