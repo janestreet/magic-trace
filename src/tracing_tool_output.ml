@@ -110,20 +110,19 @@ end
 
 type t =
   { serve_info : Serve.t
-  ; serve_always : bool
-  ; store_path : string option
+  ; serve : bool
+  ; store_path : string
   }
 
 let param =
   let%map_open.Command store_path =
     flag
       "output"
-      (optional string)
-      ~doc:"FILE output file name, serves temporary trace if missing"
-  and serve_always =
-    flag "serve-always" no_arg ~doc:"serve trace even when output path provided"
+      (required string)
+      ~doc:"FILE output file name"
+  and serve = flag "serve" no_arg ~doc:"also serve the trace"
   and serve_info = Serve.param in
-  { serve_info; serve_always; store_path }
+  { serve_info; serve; store_path }
 ;;
 
 let notify_trace ~store_path =
@@ -131,37 +130,21 @@ let notify_trace ~store_path =
   Deferred.Or_error.ok_unit
 ;;
 
-let maybe_serve t ~is_temporary ~filename ~store_path =
-  if (is_temporary || t.serve_always)
-     && Option.is_some t.serve_info.perfetto_ui_base_directory
-  then Serve.serve_trace_file t.serve_info ~filename ~store_path
-  else notify_trace ~store_path
+let maybe_serve t ~filename =
+  if t.serve && Option.is_some t.serve_info.perfetto_ui_base_directory
+  then Serve.serve_trace_file t.serve_info ~filename ~store_path:t.store_path
+  else notify_trace ~store_path:t.store_path
 ;;
 
-let write_and_maybe_serve ?num_temp_strs t ~is_temporary ~filename ~store_path ~f =
+let write_and_maybe_serve ?num_temp_strs t ~filename ~f =
   let open Deferred.Or_error.Let_syntax in
-  let w = Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:store_path () in
+  let w = Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:t.store_path () in
   let%bind res = f w in
-  let%map () = maybe_serve t ~is_temporary ~filename ~store_path in
+  let%map () = maybe_serve t ~filename in
   res
 ;;
 
-let with_tempfile ~prefix ~suffix f =
-  let filename, fd = Core_unix.mkstemp [%string "%{prefix}.tmp.XXXXXX%{suffix}"] in
-  Core_unix.close fd;
-  let go () = f filename in
-  let finally () = Unix.unlink filename in
-  Monitor.protect ~here:[%here] ~name:"with_tempfile" go ~finally
-;;
-
-let write_and_view ?num_temp_strs t ~default_name ~f =
-  match t.store_path with
-  | Some store_path ->
-    let filename = Filename.basename store_path in
-    write_and_maybe_serve ?num_temp_strs t ~is_temporary:false ~filename ~store_path ~f
-  | None ->
-    (* FIXME: Use an in-memory trace destination instead of a temp file *)
-    with_tempfile ~prefix:"trace" ~suffix:".ftf" (fun store_path ->
-        let filename = default_name ^ ".ftf" in
-        write_and_maybe_serve ?num_temp_strs t ~is_temporary:true ~filename ~store_path ~f)
+let write_and_view ?num_temp_strs t ~f =
+  let filename = Filename.basename t.store_path in
+  write_and_maybe_serve ?num_temp_strs t ~filename ~f
 ;;

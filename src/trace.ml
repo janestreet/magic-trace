@@ -58,7 +58,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_view
       output_config
-      ~default_name:"magic_trace"
       ~f:(fun w ->
         let open Deferred.Or_error.Let_syntax in
         let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
