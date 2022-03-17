@@ -128,10 +128,12 @@ module Perf_line = struct
             | "tr end  syscall" -> End Syscall
             | "jmp" -> Jump
             | "jcc" -> Jump
-            | other ->
-              (* Hasn't occured in testing large traces, but there's not great documentation
-                   on what might be output for this field so raising seems like a bad idea. *)
-              Other other)
+            | kind ->
+              raise_s [%message
+                 "BUG: unrecognized perf event. Please report this to \
+                  https://github.com/janestreet/magic-trace/issues/"
+                   (kind : string)
+                   ~unrecognized_perf_output:(line : string)])
         ; addr
         ; symbol
         ; offset

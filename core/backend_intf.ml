@@ -19,7 +19,6 @@ module Event = struct
     | Decode_error
     | End of end_kind
     | Jump
-    | Other of string
     | Unknown
   [@@deriving sexp]
 
