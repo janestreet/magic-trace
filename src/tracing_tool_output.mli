@@ -14,7 +14,6 @@ val param : t Command.Param.t
 val write_and_view
   :  ?num_temp_strs:int
   -> t
-  -> default_name:string
   -> f:(Tracing_zero.Writer.t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
 
