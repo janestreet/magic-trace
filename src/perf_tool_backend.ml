@@ -107,41 +107,50 @@ module Perf_line = struct
   let report_fields = "pid,tid,time,flags,addr,sym,symoff"
 
   let to_event line =
-    Scanf.sscanf
-      line
-      " %d/%d %d.%d: %s@=> %Lx %s@$"
-      (fun pid tid time_hi time_lo kind addr rest ->
-        let symbol, offset =
-          try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
-          | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
-        in
-        { Backend_intf.Event.thread =
-            { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-            ; tid = (if tid = 0 then None else Some tid)
-            }
-        ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
-        ; kind =
-            (match String.strip kind with
-            | "call" -> Call
-            | "return" -> Return
-            | "tr strt" -> Start
-            | "tr end" -> End None
-            | "tr end  call" -> End Call
-            | "tr end  return" -> End Return
-            | "tr end  syscall" -> End Syscall
-            | "jmp" -> Jump
-            | "jcc" -> Jump
-            | kind ->
-              raise_s
-                [%message
-                  "BUG: unrecognized perf event. Please report this to \
-                   https://github.com/janestreet/magic-trace/issues/"
-                    (kind : string)
-                    ~unrecognized_perf_output:(line : string)])
-        ; addr
-        ; symbol
-        ; offset
-        })
+    try
+      Scanf.sscanf
+        line
+        " %d/%d %d.%d: %s@=> %Lx %s@$"
+        (fun pid tid time_hi time_lo kind addr rest ->
+          let symbol, offset =
+            try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
+            | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
+          in
+          { Backend_intf.Event.thread =
+              { pid = (if pid = 0 then None else Some (Pid.of_int pid))
+              ; tid = (if tid = 0 then None else Some tid)
+              }
+          ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
+          ; kind =
+              (match String.strip kind with
+              | "call" -> Call
+              | "return" -> Return
+              | "tr strt" -> Start
+              | "tr end" -> End None
+              | "tr end  call" -> End Call
+              | "tr end  return" -> End Return
+              | "tr end  syscall" -> End Syscall
+              | "jmp" -> Jump
+              | "jcc" -> Jump
+              | kind ->
+                raise_s
+                  [%message
+                    "BUG: unrecognized perf event. Please report this to \
+                     https://github.com/janestreet/magic-trace/issues/"
+                      (kind : string)
+                      ~unrecognized_perf_output:(line : string)])
+          ; addr
+          ; symbol
+          ; offset
+          })
+    with
+    | exn ->
+      raise_s
+        [%message
+          "BUG: exception raised while parsing perf output. Please report this to \
+           https://github.com/janestreet/magic-trace/issues/"
+            (exn : exn)
+            ~perf_output:(line : string)]
   ;;
 end
 
