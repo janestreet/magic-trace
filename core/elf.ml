@@ -53,7 +53,7 @@ let create filename =
       "[Invalid or unknown debug info format, will be unable to trigger on specific \
        symbol.]\n\
        %!";
-      None
+    None
 ;;
 
 let is_func sym =

@@ -115,10 +115,9 @@ module Perf_line = struct
           try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
           | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
         in
-        { Backend_intf.Event.
-          thread =
-            { pid = if pid = 0 then None else Some (Pid.of_int pid)
-            ; tid = if tid = 0 then None else Some tid
+        { Backend_intf.Event.thread =
+            { pid = (if pid = 0 then None else Some (Pid.of_int pid))
+            ; tid = (if tid = 0 then None else Some tid)
             }
         ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
         ; kind =
@@ -133,11 +132,12 @@ module Perf_line = struct
             | "jmp" -> Jump
             | "jcc" -> Jump
             | kind ->
-              raise_s [%message
-                 "BUG: unrecognized perf event. Please report this to \
-                  https://github.com/janestreet/magic-trace/issues/"
-                   (kind : string)
-                   ~unrecognized_perf_output:(line : string)])
+              raise_s
+                [%message
+                  "BUG: unrecognized perf event. Please report this to \
+                   https://github.com/janestreet/magic-trace/issues/"
+                    (kind : string)
+                    ~unrecognized_perf_output:(line : string)])
         ; addr
         ; symbol
         ; offset
