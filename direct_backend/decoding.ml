@@ -173,7 +173,16 @@ let convert_trace_event state (event : Stub.Event.t) =
     | Decode_error -> Decode_error
   in
   let offset = event.addr - resolved.start_addr in
-  { Backend_intf.Event.thread; time; addr; kind; symbol; offset }
+  { Backend_intf.Event.thread
+  ; time
+  ; addr
+  ; kind
+  ; symbol
+  ; offset
+  ; ip
+  ; ip_symbol
+  ; ip_offset
+  }
 ;;
 
 type t =

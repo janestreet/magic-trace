@@ -36,6 +36,9 @@ module Event = struct
     ; kind : kind
     ; symbol : string
     ; offset : int
+    ; ip : int64
+    ; ip_symbol : string
+    ; ip_offset : int
     }
   [@@deriving sexp]
 end

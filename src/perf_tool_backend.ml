@@ -104,18 +104,28 @@ let finish_recording { pid; _ } =
 
 module Perf_line = struct
   let report_itraces = "b"
-  let report_fields = "pid,tid,time,flags,addr,sym,symoff"
+  let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
 
   let to_event line =
     try
       Scanf.sscanf
         line
         " %d/%d %d.%d: %s@=> %Lx %s@$"
-        (fun pid tid time_hi time_lo kind addr rest ->
-          let symbol, offset =
-            try Scanf.sscanf rest "%s@+0x%x" (fun symbol offset -> symbol, offset) with
+        (fun pid tid time_hi time_lo kind_and_ip addr rest ->
+          let kind_and_ip, ip_rest =
+            String.rsplit2_exn ~on:' ' (String.strip kind_and_ip)
+          in
+          let kind, ip_string = String.rsplit2_exn ~on:' ' (String.strip kind_and_ip) in
+          let ip =
+            try Scanf.sscanf ip_string "%Lx" (fun ip -> ip) with
+            | Scanf.Scan_failure _ | End_of_file -> 0L
+          in
+          let parse_symbol_offset str =
+            try Scanf.sscanf str "%s@+0x%x" (fun symbol offset -> symbol, offset) with
             | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
           in
+          let ip_symbol, ip_offset = parse_symbol_offset ip_rest in
+          let symbol, offset = parse_symbol_offset rest in
           { Backend_intf.Event.thread =
               { pid = (if pid = 0 then None else Some (Pid.of_int pid))
               ; tid = (if tid = 0 then None else Some tid)
@@ -142,6 +152,9 @@ module Perf_line = struct
           ; addr
           ; symbol
           ; offset
+          ; ip
+          ; ip_symbol
+          ; ip_offset
           })
     with
     | exn ->

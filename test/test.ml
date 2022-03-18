@@ -39,6 +39,9 @@ end = struct
     ; addr = addr ()
     ; symbol = ""
     ; offset = offset ()
+    ; ip = addr ()
+    ; ip_symbol = ""
+    ; ip_offset = offset ()
     }
   ;;
 
@@ -52,7 +55,18 @@ end = struct
 
   let add kind ns symbol =
     let time = Time_ns.Span.of_int_ns ns in
-    Queue.enqueue events { thread; time; kind; symbol; addr = 0L; offset = 0 }
+    Queue.enqueue
+      events
+      { thread
+      ; time
+      ; kind
+      ; symbol
+      ; addr = 0L
+      ; offset = 0
+      ; ip = 0L
+      ; ip_symbol = symbol
+      ; ip_offset = 0
+      }
   ;;
 
   let ret () =
