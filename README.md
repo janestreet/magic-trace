@@ -1,4 +1,4 @@
-# magic-trace
+# magic-trace [![Linux Build Status](https://img.shields.io/github/workflow/status/janestreet/magic-trace/build?logo=github)](https://github.com/janestreet/magic-trace/actions?query=workflow%3Abuild) 
 
 `magic-trace` is a tool for diagnosing tricky performance issues using
 Intel Processor Trace. You tell it a function and attach it to a
