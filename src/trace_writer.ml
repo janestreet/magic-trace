@@ -233,11 +233,13 @@ let opt_pid_to_string opt_pid =
   match opt_pid with
   | None -> "?"
   | Some pid -> Pid.to_string pid
+;;
 
 let opt_int_to_string opt_int =
   match opt_int with
   | None -> "?"
   | Some int -> Int.to_string int
+;;
 
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
@@ -249,7 +251,8 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
         let trace_pid =
           Tracing.Trace.allocate_pid
             t.trace
-            ~name:[%string "%{opt_pid_to_string thread.pid}/%{opt_int_to_string thread.tid}"]
+            ~name:
+              [%string "%{opt_pid_to_string thread.pid}/%{opt_int_to_string thread.tid}"]
         in
         let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
         { thread

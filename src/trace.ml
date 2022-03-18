@@ -56,9 +56,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let decode_to_trace ?elf ~record_dir { output_config; decode_opts; verbose } =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
-    Tracing_tool_output.write_and_view
-      output_config
-      ~f:(fun w ->
+    Tracing_tool_output.write_and_view output_config ~f:(fun w ->
         let open Deferred.Or_error.Let_syntax in
         let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
         let hits =
@@ -109,7 +107,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
           | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
           | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
         in
-        let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym) in
+        let snap_loc =
+          Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym)
+        in
         let filter =
           match opts.use_filter, snap_loc with
           | true, Some { Elf.Stop_info.filter; _ } -> Some filter
@@ -242,7 +242,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%bind attachment = attach ?elf record_opts pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
-      UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
+        UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
     detach attachment
   ;;
