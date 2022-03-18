@@ -259,7 +259,11 @@ let opt_int_to_string opt_int =
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
     constants defined above. *)
-let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t) =
+let write_event
+    (t : t)
+    ({ thread; time; symbol; kind; addr; offset; ip = _; ip_symbol = _; ip_offset = _ } :
+      Event.t)
+  =
   let time = map_time t time in
   let ({ thread; callstack; reset_time; frames_to_unwind; _ } as thread_info) =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
