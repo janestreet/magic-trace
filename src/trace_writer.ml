@@ -352,5 +352,4 @@ let write_event (t : t) ({ thread; time; symbol; kind; addr; offset } : Event.t)
     flush_all t;
     thread_info.reset_time <- time
   | Jump -> check_current_symbol ()
-  | Unknown -> ()
 ;;
