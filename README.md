@@ -1,5 +1,5 @@
 # magic-trace
-
+ 
 `magic-trace` is a tool for diagnosing tricky performance issues using
 Intel Processor Trace. You tell it a function and attach it to a
 running process, and when that function is called it'll detach and give
