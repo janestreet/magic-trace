@@ -39,10 +39,10 @@ type t =
   ; time : Time_ns.Span.t
   ; addr : Int64.Hex.t
   ; kind : Kind.t
-  ; symbol : string
+  ; symbol : Symbol.t
   ; offset : Int.Hex.t
   ; ip : Int64.Hex.t
-  ; ip_symbol : string
+  ; ip_symbol : Symbol.t
   ; ip_offset : Int.Hex.t
   }
 [@@deriving sexp]

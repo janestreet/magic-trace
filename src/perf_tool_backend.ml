@@ -154,6 +154,12 @@ module Perf_line = struct
   let report_itraces = "b"
   let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
 
+  let saturating_sub_i64 a b =
+    match Int64.(to_int (a - b)) with
+    | None -> Int.max_value
+    | Some offset -> offset
+  ;;
+
   let line_re =
     Re.Perl.re
       {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
@@ -162,7 +168,7 @@ module Perf_line = struct
 
   let symbol_and_offset_re = Re.Posix.re {|^(.*)\+(0x[0-9a-f]+)$|} |> Re.compile
 
-  let to_event line : Event.t =
+  let to_event line ~(perf_map : Perf_map.t option) : Event.t =
     try
       match Re.Group.all (Re.exec line_re line) with
       | [| _
@@ -194,16 +200,27 @@ module Perf_line = struct
         in
         let src_instruction_pointer = int64_of_hex_string src_instruction_pointer in
         let dst_instruction_pointer = int64_of_hex_string dst_instruction_pointer in
-        let parse_symbol_and_offset str =
+        let parse_symbol_and_offset str ~addr =
           match Re.Group.all (Re.exec symbol_and_offset_re str) with
-          | [| _; symbol; offset |] -> symbol, Int.Hex.of_string offset
-          | _ | (exception _) -> "[unknown]", 0
+          | [| _; symbol; offset |] -> Symbol.From_perf symbol, Int.Hex.of_string offset
+          | _ | (exception _) ->
+            let failed = Symbol.Unknown, 0 in
+            (match perf_map with
+            | None -> failed
+            | Some perf_map ->
+              (match Perf_map.symbol perf_map ~addr with
+              | None -> failed
+              | Some location ->
+                (* It's strange that perf isn't resolving these symbols. It says on the tin that
+                   it supports perf map files! *)
+                let offset = saturating_sub_i64 addr location.start_addr in
+                From_perf_map location, offset))
         in
         let src_symbol, src_symbol_offset =
-          parse_symbol_and_offset src_symbol_and_offset
+          parse_symbol_and_offset src_symbol_and_offset ~addr:src_instruction_pointer
         in
         let dst_symbol, dst_symbol_offset =
-          parse_symbol_and_offset dst_symbol_and_offset
+          parse_symbol_and_offset dst_symbol_and_offset ~addr:dst_instruction_pointer
         in
         { thread =
             { pid = (if pid = 0 then None else Some (Pid.of_int pid))
@@ -260,54 +277,51 @@ module Perf_line = struct
     (module struct
       open Core
 
+      let check s = to_event s ~perf_map:None |> [%sexp_of: Event.t] |> print_s
+
       let%expect_test "C symbol" =
-        to_event
-          {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 =>     7ffd193838e0 __vdso_clock_gettime+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 =>     7ffd193838e0 __vdso_clock_gettime+0x0|};
         [%expect
           {|
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-           (addr 0x7ffd193838e0) (kind Call) (symbol __vdso_clock_gettime) (offset 0x0)
-           (ip 0x7f6fce0b71f4) (ip_symbol __clock_gettime) (ip_offset 0x24)) |}]
+           (addr 0x7ffd193838e0) (kind Call) (symbol (From_perf __vdso_clock_gettime))
+           (offset 0x0) (ip 0x7f6fce0b71f4) (ip_symbol (From_perf __clock_gettime))
+           (ip_offset 0x24)) |}]
       ;;
 
       let%expect_test "C symbol trace start" =
-        to_event
-          {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] =>     7f6fce0b71d0 __clock_gettime+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] =>     7f6fce0b71d0 __clock_gettime+0x0|};
         [%expect
           {|
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-           (addr 0x7f6fce0b71d0) (kind Start) (symbol __clock_gettime) (offset 0x0)
-           (ip 0x0) (ip_symbol [unknown]) (ip_offset 0x0)) |}]
+           (addr 0x7f6fce0b71d0) (kind Start) (symbol (From_perf __clock_gettime))
+           (offset 0x0) (ip 0x0) (ip_symbol Unknown) (ip_offset 0x0)) |}]
       ;;
 
       let%expect_test "C++ symbol" =
-        to_event
-          {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb =>           9f68b0 J::K<int, std::string>+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb =>           9f68b0 J::K<int, std::string>+0x0|};
         [%expect
           {|
           ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
-           (addr 0x9f68b0) (kind Call) (symbol "J::K<int, std::string>") (offset 0x0)
-           (ip 0x9bc6db)
-           (ip_symbol "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run")
+           (addr 0x9f68b0) (kind Call) (symbol (From_perf "J::K<int, std::string>"))
+           (offset 0x0) (ip 0x9bc6db)
+           (ip_symbol
+            (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
            (ip_offset 0x1eb)) |}]
       ;;
 
       let%expect_test "OCaml symbol" =
-        to_event
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb =>     56234f4bc7a0 caml_apply2+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb =>     56234f4bc7a0 caml_apply2+0x0|};
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
-           (ip 0x56234f77576b) (ip_symbol Base.Comparable.=_2352) (ip_offset 0xb)) |}]
+           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
+           (offset 0x0) (ip 0x56234f77576b)
+           (ip_symbol (From_perf Base.Comparable.=_2352)) (ip_offset 0xb)) |}]
       ;;
 
       (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
@@ -315,55 +329,49 @@ module Perf_line = struct
 
          {[
            let%expect_test "Unknown Go symbol" =
-             to_event
-               {|2118573/2118573 770614.599007116:   tr strt tr end                      0 [unknown] =>           4591e1 [unknown]|}
-             |> [%sexp_of: Event.t]
-             |> print_s;
+           check
+               {|2118573/2118573 770614.599007116:   tr strt tr end                      0 [unknown] =>           4591e1 [unknown]|};
              [%expect]
            ;;
          ]}
       *)
 
       let%expect_test "manufactured example 1" =
-        to_event
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 caml_apply2+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 caml_apply2+0x0|};
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
-           (ip 0x56234f77576b) (ip_symbol "x => ") (ip_offset 0xb)) |}]
+           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
+           (offset 0x0) (ip 0x56234f77576b) (ip_symbol (From_perf "x => "))
+           (ip_offset 0xb)) |}]
       ;;
 
       let%expect_test "manufactured example 2" =
-        to_event
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 => +0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 => +0x0|};
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol "=> ") (offset 0x0)
-           (ip 0x56234f77576b) (ip_symbol "x => ") (ip_offset 0xb)) |}]
+           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf "=> ")) (offset 0x0)
+           (ip 0x56234f77576b) (ip_symbol (From_perf "x => ")) (ip_offset 0xb)) |}]
       ;;
 
       let%expect_test "manufactured example 3" =
-        to_event
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb =>     56234f4bc7a0 caml_apply2+0x0|}
-        |> [%sexp_of: Event.t]
-        |> print_s;
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb =>     56234f4bc7a0 caml_apply2+0x0|};
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
-           (ip 0x56234f77576b) (ip_symbol "+ ") (ip_offset 0xb)) |}]
+           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
+           (offset 0x0) (ip 0x56234f77576b) (ip_symbol (From_perf "+ "))
+           (ip_offset 0xb)) |}]
       ;;
     end)
   ;;
 end
 
-let decode_events () ~record_dir =
+let decode_events () ~record_dir ~perf_map =
   let args =
     [ "script"
     ; "-i"
@@ -384,7 +392,7 @@ let decode_events () ~record_dir =
        including converting to pipes which says that the stream creation should be
        switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
        can't see a reason why filter_map would lead to memory leaks. *)
-    Pipe.map line_pipe ~f:Perf_line.to_event
+    Pipe.map line_pipe ~f:(Perf_line.to_event ~perf_map)
   in
   Ok event_pipe
 ;;
