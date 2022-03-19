@@ -1,6 +1,7 @@
 open! Core
 open! Async
 open! Magic_trace_lib.Trace.For_testing
+module Symbol = Magic_trace_core.Symbol
 module Event = Magic_trace_core.Event
 
 module Trace_helpers : sig
@@ -28,8 +29,9 @@ end = struct
   let offset () = Random.State.int_incl !rng 0 0x1000
 
   let symbol () =
-    List.init (Random.State.int_incl !rng 1 10) ~f:(fun _ -> Random.State.ascii !rng)
-    |> String.of_char_list
+    Symbol.From_perf
+      (List.init (Random.State.int_incl !rng 1 10) ~f:(fun _ -> Random.State.ascii !rng)
+      |> String.of_char_list)
   ;;
 
   let random_event () : Event.t =
@@ -37,10 +39,10 @@ end = struct
     ; time = time ()
     ; kind = Call
     ; addr = addr ()
-    ; symbol = ""
+    ; symbol = From_perf ""
     ; offset = offset ()
     ; ip = addr ()
-    ; ip_symbol = ""
+    ; ip_symbol = From_perf ""
     ; ip_offset = offset ()
     }
   ;;
@@ -60,11 +62,11 @@ end = struct
       { thread
       ; time
       ; kind
-      ; symbol
+      ; symbol = From_perf symbol
       ; addr = 0L
       ; offset = 0
       ; ip = 0L
-      ; ip_symbol = symbol
+      ; ip_symbol = From_perf symbol
       ; ip_offset = 0
       }
   ;;
@@ -81,7 +83,7 @@ end = struct
   let jmp () =
     let symbol = symbol () in
     Queue.enqueue events { (random_event ()) with kind = Call; symbol };
-    ignore (Stack.pop stack : string option);
+    ignore (Stack.pop stack : Symbol.t option);
     Stack.push stack symbol
   ;;
 

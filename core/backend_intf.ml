@@ -34,5 +34,6 @@ module type S = sig
   val decode_events
     :  Decode_opts.t
     -> record_dir:string
+    -> perf_map:Perf_map.t option
     -> Event.t Pipe.Reader.t Deferred.Or_error.t
 end

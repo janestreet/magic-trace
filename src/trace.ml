@@ -87,6 +87,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~elf
       ~trace_mode
       ~record_dir
+      ~perf_map
       { Decode_opts.output_config; decode_opts; verbose }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
@@ -99,7 +100,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           |> [%of_sexp: Hits_file.t]
         in
         let debug_info = Option.map elf ~f:Elf.addr_table in
-        let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
+        let%bind event_pipe = Backend.decode_events decode_opts ~record_dir ~perf_map in
         let%bind () =
           write_trace_from_events
             ?debug_info
@@ -254,7 +255,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
         UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
-    detach attachment
+    let%bind () = detach attachment in
+    return pid
   ;;
 
   let attach_and_record ?elf record_opts pid =
@@ -348,11 +350,15 @@ module Make_commands (Backend : Backend_intf.S) = struct
          in
          record_opt_fn ~executable ~f:(fun opts ->
              let elf = Elf.create opts.executable in
-             let%bind () = run_and_record ~elf ~command_with_args opts in
+             let%bind pid = run_and_record ~elf ~command_with_args opts in
+             let%bind.Deferred perf_map =
+               Perf_map.load (Perf_map.default_filename ~pid)
+             in
              decode_to_trace
                ~elf
                ~trace_mode:opts.trace_mode
                ~record_dir:opts.record_dir
+               ~perf_map
                decode_opts))
   ;;
 
@@ -415,10 +421,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
              let { Record_opts.executable; when_to_snapshot; _ } = opts in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind () = attach_and_record ?elf opts pid in
+             let%bind.Deferred perf_map =
+               Perf_map.load (Perf_map.default_filename ~pid)
+             in
              decode_to_trace
                ~elf
                ~trace_mode:opts.trace_mode
                ~record_dir:opts.record_dir
+               ~perf_map
                decode_opts))
   ;;
 
@@ -433,12 +443,22 @@ module Make_commands (Backend : Backend_intf.S) = struct
            "-executable"
            (required Filename_unix.arg_type)
            ~doc:"FILE Executable to extract debug symbols from."
+       and perf_map_file =
+         flag
+           "-perf-map-file"
+           (optional Filename_unix.arg_type)
+           ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
        in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
          let elf = Elf.create executable in
-         decode_to_trace ~elf ~trace_mode ~record_dir decode_opts)
+         let%bind perf_map =
+           match perf_map_file with
+           | None -> return None
+           | Some file -> Perf_map.load file
+         in
+         decode_to_trace ~elf ~trace_mode ~record_dir ~perf_map decode_opts)
   ;;
 
   let commands =

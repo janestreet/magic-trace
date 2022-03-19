@@ -14,14 +14,14 @@ module Pending_event = struct
   end
 
   type t =
-    { name : string
+    { symbol : Symbol.t
     ; kind : Kind.t
     }
 end
 
 module Callstack = struct
   type t =
-    { stack : string Stack.t
+    { stack : Symbol.t Stack.t
     ; create_time : Time_ns.Span.t
     }
 
@@ -127,13 +127,9 @@ let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
   t
 ;;
 
-let demangle_symbol name =
-  if String.is_prefix name ~prefix:"caml_"
-  then name
-  else Owee_location.demangled_symbol name
-;;
-
-let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; kind } =
+let write_pending_event' t (thread : Thread_info.t) time { Pending_event.symbol; kind } =
+  let symbol = Symbol.demangle symbol in
+  let display_name = Symbol.display_name symbol in
   match kind with
   | Call { addr; offset; from_untraced } ->
     (* Adding a call is always the result of seeing something new on the top of the
@@ -153,23 +149,27 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
 
          [base_address] might be lie in the kernel, in which case [to_int] will fail (but
          that's alright, because we wouldn't have a symbol for it in the executable's
-         [debug_info] anyway. *)
-      match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
-      | None -> [ "address", Pointer addr; "symbol", Interned name ]
-      | Some (info : Elf.Location.t) ->
-        [ "address", Pointer addr
-        ; "line", Int info.line
-        ; "col", Int info.col
-        ; "symbol", Interned name
-        ]
-        @
-        (match info.filename with
-        | Some x -> [ "file", Interned x ]
-        | None -> [])
+         [debug_info] anyway). *)
+      let address = [ "address", Pointer addr ] in
+      match symbol with
+      | From_perf_map { start_addr = _; size = _; function_ = _ } ->
+        address @ [ "symbol", Interned display_name ]
+      | _ ->
+        (match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
+        | None -> address @ [ "symbol", Interned display_name ]
+        | Some (info : Elf.Location.t) ->
+          address
+          @ [ "line", Int info.line
+            ; "col", Int info.col
+            ; "symbol", Interned display_name
+            ]
+          @
+          (match info.filename with
+          | Some x -> [ "file", Interned x ]
+          | None -> []))
     in
     let name =
-      let name = demangle_symbol name in
-      if from_untraced then name ^ " [inferred start time]" else name
+      if from_untraced then display_name ^ " [inferred start time]" else display_name
     in
     Tracing.Trace.write_duration_begin
       t.trace
@@ -181,7 +181,7 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
   | Ret ->
     Tracing.Trace.write_duration_end
       t.trace
-      ~name
+      ~name:display_name
       ~time
       ~thread:thread.thread
       ~args:[]
@@ -191,7 +191,7 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
       t.trace
       ~time:reset_time
       ~time_end:time
-      ~name:"[unknown]"
+      ~name:(Symbol.display_name Unknown)
       ~thread:thread.thread
       ~args:[]
       ~category:""
@@ -201,7 +201,7 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
    consume time substantially reduces the frequency where we need to use zero-duration
    events. In general the traces are easier to read if returns aren't counted as consuming
    time. *)
-let consumes_time { Pending_event.name = _; kind } =
+let consumes_time { Pending_event.symbol = _; kind } =
   match kind with
   | Call _ -> true
   | Ret | Ret_from_untraced _ -> false
@@ -317,16 +317,16 @@ let write_event
         ; start_events = Deque.create ()
         })
   in
-  let call ?(time = time) name =
+  let call ?(time = time) symbol =
     let ev =
-      { Pending_event.name; kind = Call { addr; offset; from_untraced = false } }
+      { Pending_event.symbol; kind = Call { addr; offset; from_untraced = false } }
     in
     add_event t thread_info time ev;
-    Callstack.push thread_info.callstack name
+    Callstack.push thread_info.callstack symbol
   in
   let ret () =
     match Callstack.pop thread_info.callstack with
-    | Some name -> add_event t thread_info time { name; kind = Ret }
+    | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
     | None ->
       (* No known stackframe was popped --- could occur if the start of the snapshot
          started in the middle of a tracing region *)
@@ -334,7 +334,7 @@ let write_event
         t
         thread_info
         time
-        { name = "[unknown]"
+        { symbol = From_perf "[unknown]"
         ; kind = Ret_from_untraced { reset_time = thread_info.callstack.create_time }
         }
   in
@@ -344,7 +344,7 @@ let write_event
        with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
        known function, so we have to correct the top of the stack here. *)
     match Callstack.top thread_info.callstack with
-    | Some known when not (String.equal known symbol) ->
+    | Some known when not ([%compare.equal: Symbol.t] known symbol) ->
       ret ();
       call symbol
     | Some _ -> ()
@@ -357,9 +357,7 @@ let write_event
          These shouldn't be buffered for spreading since we want them exactly at the reset
          time. *)
       let ev =
-        { Pending_event.name = symbol
-        ; kind = Call { addr; offset; from_untraced = true }
-        }
+        { Pending_event.symbol; kind = Call { addr; offset; from_untraced = true } }
       in
       write_pending_event t thread_info thread_info.callstack.create_time ev;
       Callstack.push thread_info.callstack symbol
@@ -372,9 +370,12 @@ let write_event
   in
   let ret_track_exn_data () =
     (match Callstack.top thread_info.callstack with
-    | Some "caml_next_frame_descriptor" -> incr frames_to_unwind
-    | Some "caml_raise_exn" -> unwind_stack (-2)
-    | Some "caml_raise_exception" -> unwind_stack 1
+    | Some (From_perf symbol) ->
+      (match symbol with
+      | "caml_next_frame_descriptor" -> incr frames_to_unwind
+      | "caml_raise_exn" -> unwind_stack (-2)
+      | "caml_raise_exception" -> unwind_stack 1
+      | _ -> ())
     | _ -> ());
     ret ()
   in
@@ -400,12 +401,12 @@ let write_event
   in
   match kind with
   | Call | End Call -> call symbol
-  | End None -> call "[untraced]"
+  | End None -> call Untraced
   | End Syscall ->
     (* We should only be getting these under /u *)
     assert_trace_mode [ Userspace ];
-    call "[syscall]"
-  | End Return -> call "[returned]"
+    call Syscall
+  | End Return -> call Returned
   | Return ->
     ret_track_exn_data ();
     check_current_symbol ()
@@ -453,7 +454,7 @@ let write_event
     (* We should only be getting these under /k *)
     assert_trace_mode [ Kernel ];
     clear_callstack ();
-    call "[untraced]"
+    call Untraced
   | Sysret | Iret ->
     (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
        well (because the kernel can be interrupted). *)
