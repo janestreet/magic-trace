@@ -383,7 +383,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
        running processes. The [ps] command uses the /proc/ filesystem and is much easier
        than walking the /proc/ system and filtering ourselves. *)
     let process_lines =
-      Shell.run_lines "ps" [ "x"; "-w"; "--no-headers"; "-o"; "pid,args" ]
+      [ [ "x"; "-w"; "--no-headers" ]
+      ; [ "-o"; "pid,args" ]
+        (* If running as root, allow tracing all processes, including those owned
+         by non-root users. *)
+      ; (if Core_unix.geteuid () = 0 then [ "-e" ] else [])
+      ]
+      |> List.concat
+      |> Shell.run_lines "ps"
     in
     let%bind.Deferred.Or_error sel_line =
       Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
