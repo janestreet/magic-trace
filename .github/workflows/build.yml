@@ -35,5 +35,5 @@ jobs:
       - uses: actions/upload-artifact@v3
         with:
           name: magic-trace
-          path: _build/default/bin/magic_trace_bin.exe
+          path: _build/install/default/bin/magic-trace
           if-no-files-found: error
