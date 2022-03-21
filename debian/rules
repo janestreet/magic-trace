@@ -1,0 +1,21 @@
+#!/usr/bin/make -f
+export DH_VERBOSE=1
+export DEBIAN_DIR=$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
+export OPAMROOT=${DEBIAN_DIR}/.opam
+
+%:
+	dh $@
+
+override_dh_clean:
+	rm -rf "${OPAMROOT}"
+	dh_clean
+
+override_dh_auto_build:
+	opam init -y --compiler=4.13.1
+	opam exec -- opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
+	opam exec -- opam install -y ./magic-trace.opam --deps-only
+	opam exec -- dh_auto_build
+
+override_dh_auto_install:
+	make install PREFIX=debian/magic-trace
+	rm -rf debian/magic-trace/lib
