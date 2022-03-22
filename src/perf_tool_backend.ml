@@ -154,15 +154,15 @@ module Perf_line = struct
   ;;
 end
 
-type decode_opts = unit
+type decode_opts = { perf_data_filename : string option }
 
-let decode_param = Command.Param.return ()
+let decode_param = Command.Param.return { perf_data_filename = None }
 
-let decode_events () ~record_dir =
+let decode_events { perf_data_filename } ~record_dir =
   let args =
     [ "script"
     ; "-i"
-    ; "perf.data"
+    ; Option.value perf_data_filename ~default:"perf.data"
     ; "--ns"
     ; [%string "--itrace=%{Perf_line.report_itraces}"]
     ; "-F"
@@ -182,4 +182,8 @@ let decode_events () ~record_dir =
     Pipe.map line_pipe ~f:Perf_line.to_event
   in
   Ok event_pipe
+;;
+
+let create_decode_opts ~perf_data_filename =
+  { perf_data_filename = Some perf_data_filename }
 ;;
