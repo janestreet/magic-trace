@@ -31,26 +31,13 @@ module Recording = struct
     | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
   ;;
 
-  let supports_cyc () =
-    let cyc_cap =
-      In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc"
-    in
-    let supports_cyc = String.( = ) cyc_cap "1\n" in
-    if not supports_cyc
-    then
-      Core.eprintf
-        "[Warning: This machine has an older generation processor, timing granularity \
-         will be ~1us instead of ~10ns. Consider using a newer machine.]\n\
-         %!";
-    supports_cyc
-  ;;
-
   let attach_and_record
       { Record_opts.multi_thread; full_execution }
       ~record_dir
       ?filter
       pid
     =
+    let%bind capabilities = Perf_capabilities.detect_exn () in
     let opts =
       match filter with
       | None -> []
@@ -62,11 +49,16 @@ module Recording = struct
       | true -> [ "-p" ]
     in
     let ev_arg =
-      if supports_cyc ()
+      if Perf_capabilities.(do_intersect capabilities configurable_psb_period)
       then
         (* Using Intel Processor Trace with the highest possible granularity. *)
         "--event=intel_pt/cyc=1,cyc_thresh=1,mtc_period=0/u"
-      else "--event=intel_pt//u"
+      else (
+        Core.eprintf
+          "[Warning: This machine has an older generation processor, timing granularity \
+           will be ~1us instead of ~10ns. Consider using a newer machine.]\n\
+           %!";
+        "--event=intel_pt//u")
     in
     let argv =
       [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
