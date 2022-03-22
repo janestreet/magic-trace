@@ -175,7 +175,7 @@ let decode_events () ~record_dir =
   let args =
     [ "script"
     ; "-i"
-    ; "perf.data"
+    ; record_dir ^/ "perf.data"
     ; "--ns"
     ; [%string "--itrace=%{Perf_line.report_itraces}"]
     ; "-F"
