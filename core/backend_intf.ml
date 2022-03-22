@@ -44,28 +44,34 @@ module Event = struct
 end
 
 module type S = sig
-  type record_opts
+  module Record_opts : sig
+    type t
 
-  val record_param : record_opts Command.Param.t
+    val param : t Command.Param.t
+  end
 
-  type recording
+  module Recording : sig
+    type t
 
-  val attach_and_record
-    :  record_opts
-    -> record_dir:string
-    -> ?filter:string
-    -> Pid.t
-    -> recording Deferred.Or_error.t
+    val attach_and_record
+      :  Record_opts.t
+      -> record_dir:string
+      -> ?filter:string
+      -> Pid.t
+      -> t Deferred.Or_error.t
 
-  val take_snapshot : recording -> unit Or_error.t
-  val finish_recording : recording -> unit Deferred.Or_error.t
+    val take_snapshot : t -> unit Or_error.t
+    val finish_recording : t -> unit Deferred.Or_error.t
+  end
 
-  type decode_opts
+  module Decode_opts : sig
+    type t
 
-  val decode_param : decode_opts Command.Param.t
+    val param : t Command.Param.t
+  end
 
   val decode_events
-    :  decode_opts
+    :  Decode_opts.t
     -> record_dir:string
     -> Event.t Pipe.Reader.t Deferred.Or_error.t
 end

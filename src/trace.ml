@@ -48,7 +48,7 @@ let write_trace_from_events
 module Make_commands (Backend : Backend_intf.S) = struct
   type decode_opts =
     { output_config : Tracing_tool_output.t
-    ; decode_opts : Backend.decode_opts
+    ; decode_opts : Backend.Decode_opts.t
     ; verbose : bool
     }
 
@@ -75,7 +75,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   type record_opts =
-    { backend_opts : Backend.record_opts
+    { backend_opts : Backend.Record_opts.t
     ; use_filter : bool
     ; multi_snapshot : bool
     ; snap_symbol : Re.re
@@ -86,7 +86,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     }
 
   type attachment =
-    { recording : Backend.recording
+    { recording : Backend.Recording.t
     ; done_ivar : unit Ivar.t
     ; breakpoint_done : unit Deferred.t
     ; finalize_recording : unit -> unit
@@ -118,12 +118,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
         Deferred.Or_error.return (filter, snap_loc)
     in
     let%map.Deferred.Or_error recording =
-      Backend.attach_and_record opts.backend_opts ~record_dir:opts.record_dir ?filter pid
+      Backend.Recording.attach_and_record
+        opts.backend_opts
+        ~record_dir:opts.record_dir
+        ?filter
+        pid
     in
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
     let take_snapshot () =
-      match Backend.take_snapshot recording with
+      match Backend.Recording.take_snapshot recording with
       | Ok () ->
         snapshot_taken := true;
         Core.eprintf "[Snapshot taken!]\n%!";
@@ -232,7 +236,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%bind () = breakpoint_done in
     Core.eprintf "[Finished recording!]\n%!";
     finalize_recording ();
-    Backend.finish_recording recording
+    Backend.Recording.finish_recording recording
   ;;
 
   let run_and_record ?elf ~command record_opts =
@@ -301,7 +305,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         ~doc:"stop immediately on snapshot, may crash kernel on EL8"
     and multi_snapshot =
       flag "-multi-snapshot" no_arg ~doc:"allow taking multiple snapshots if possible"
-    and backend_opts = Backend.record_param in
+    and backend_opts = Backend.Record_opts.param in
     fun ~default_executable ~f ->
       (match duration_thresh, snap_symbol with
       | Some _, Some _ ->
@@ -346,7 +350,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let decode_flags =
     let%map_open.Command output_config = Tracing_tool_output.param
     and verbose = flag "-verbose" no_arg ~doc:"print decoded events"
-    and decode_opts = Backend.decode_param in
+    and decode_opts = Backend.Decode_opts.param in
     { output_config; decode_opts; verbose }
   ;;
 
