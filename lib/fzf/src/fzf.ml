@@ -247,7 +247,7 @@ type ('a, 'return) pick_fun =
   -> 'return
 
 module Blocking = struct
-  let prog = "/usr/bin/fzf"
+  let prog = "fzf"
 
   let really_write_with_newline fd str =
     let str = str ^ "\n" in
