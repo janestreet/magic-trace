@@ -1,0 +1,4 @@
+(library (name tracing_zero) (public_name tracing.tracing_zero)
+ (preprocess (pps ppx_jane))
+ (libraries core core_kernel.iobuf core_unix.iobuf_unix
+  core_unix.time_stamp_counter))
