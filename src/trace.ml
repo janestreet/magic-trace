@@ -18,14 +18,12 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
-let hits_file record_dir = record_dir ^/ "hits.sexp"
-
 let write_trace_from_events
     ~verbose
     ?debug_info
     trace
     hits
-    (events : Backend_intf.Event.t Pipe.Reader.t)
+    (events : Event.t Pipe.Reader.t)
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
@@ -35,8 +33,8 @@ let write_trace_from_events
     | None -> Time_ns.Span.zero
   in
   let events =
-    Pipe.map events ~f:(fun (event : Backend_intf.Event.t) ->
-        if verbose then Core.print_s (Backend_intf.Event.sexp_of_t event);
+    Pipe.map events ~f:(fun (event : Event.t) ->
+        if verbose then Core.print_s (Event.sexp_of_t event);
         { event with time = event.time })
   in
   let writer = Trace_writer.create ~debug_info ~earliest_time ~hits trace in
@@ -46,23 +44,30 @@ let write_trace_from_events
 ;;
 
 module Make_commands (Backend : Backend_intf.S) = struct
-  type decode_opts =
-    { output_config : Tracing_tool_output.t
-    ; decode_opts : Backend.Decode_opts.t
-    ; verbose : bool
-    }
+  module Decode_opts = struct
+    type t =
+      { output_config : Tracing_tool_output.t
+      ; decode_opts : Backend.Decode_opts.t
+      ; verbose : bool
+      }
+  end
 
-  type hits_file = (string * Breakpoint.Hit.t) list [@@deriving sexp]
+  module Hits_file = struct
+    type t = (string * Breakpoint.Hit.t) list [@@deriving sexp]
 
-  let decode_to_trace ?elf ~record_dir { output_config; decode_opts; verbose } =
+    let filename ~record_dir = record_dir ^/ "hits.sexp"
+  end
+
+  let decode_to_trace ?elf ~record_dir { Decode_opts.output_config; decode_opts; verbose }
+    =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_view output_config ~f:(fun w ->
         let open Deferred.Or_error.Let_syntax in
         let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
         let hits =
-          In_channel.read_all (hits_file record_dir)
+          In_channel.read_all (Hits_file.filename ~record_dir)
           |> Sexp.of_string
-          |> [%of_sexp: hits_file]
+          |> [%of_sexp: Hits_file.t]
         in
         let debug_info = Option.map elf ~f:Elf.addr_table in
         let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
@@ -74,25 +79,29 @@ module Make_commands (Backend : Backend_intf.S) = struct
         return ())
   ;;
 
-  type record_opts =
-    { backend_opts : Backend.Record_opts.t
-    ; use_filter : bool
-    ; multi_snapshot : bool
-    ; snap_symbol : Re.re
-    ; record_dir : string
-    ; executable : string
-    ; snap_on_delay_over : Time_ns.Span.t option
-    ; duration_thresh : Time_ns.Span.t option
-    }
+  module Record_opts = struct
+    type t =
+      { backend_opts : Backend.Record_opts.t
+      ; use_filter : bool
+      ; multi_snapshot : bool
+      ; snap_symbol : Re.re
+      ; record_dir : string
+      ; executable : string
+      ; snap_on_delay_over : Time_ns.Span.t option
+      ; duration_thresh : Time_ns.Span.t option
+      }
+  end
 
-  type attachment =
-    { recording : Backend.Recording.t
-    ; done_ivar : unit Ivar.t
-    ; breakpoint_done : unit Deferred.t
-    ; finalize_recording : unit -> unit
-    }
+  module Attachment = struct
+    type t =
+      { recording : Backend.Recording.t
+      ; done_ivar : unit Ivar.t
+      ; breakpoint_done : unit Deferred.t
+      ; finalize_recording : unit -> unit
+      }
+  end
 
-  let attach ?elf opts pid =
+  let attach ?elf (opts : Record_opts.t) pid =
     let%bind.Deferred.Or_error () =
       check_for_processor_trace_support () |> Deferred.return
     in
@@ -138,8 +147,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let finalize_recording () =
       if not !snapshot_taken then take_snapshot ();
       Out_channel.write_all
-        (hits_file opts.record_dir)
-        ~data:([%sexp (!hits : hits_file)] |> Sexp.to_string)
+        (Hits_file.filename ~record_dir:opts.record_dir)
+        ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string)
     in
     let last_hit = ref Time_ns_unix.Option.none in
     let last_report = ref Time_ns.epoch in
@@ -228,10 +237,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
         | `Interrupted -> Breakpoint.destroy bp
         | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
     in
-    { recording; done_ivar; breakpoint_done; finalize_recording }
+    { Attachment.recording; done_ivar; breakpoint_done; finalize_recording }
   ;;
 
-  let detach { recording; done_ivar; breakpoint_done; finalize_recording } =
+  let detach { Attachment.recording; done_ivar; breakpoint_done; finalize_recording } =
     Ivar.fill_if_empty done_ivar ();
     let%bind () = breakpoint_done in
     Core.eprintf "[Finished recording!]\n%!";
@@ -253,7 +262,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let attach_and_record ?elf record_opts pid =
     let%bind.Deferred.Or_error attachment = attach ?elf record_opts pid in
-    let { done_ivar; _ } = attachment in
+    let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
         Core.eprintf "[Got signal, detaching...]\n%!";
@@ -336,7 +345,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           Deferred.unit)
         (fun () ->
           f
-            { backend_opts
+            { Record_opts.backend_opts
             ; use_filter
             ; multi_snapshot
             ; snap_symbol
@@ -351,7 +360,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%map_open.Command output_config = Tracing_tool_output.param
     and verbose = flag "-verbose" no_arg ~doc:"print decoded events"
     and decode_opts = Backend.Decode_opts.param in
-    { output_config; decode_opts; verbose }
+    { Decode_opts.output_config; decode_opts; verbose }
   ;;
 
   let trace_command =

@@ -1,42 +1,47 @@
 open! Core
 open! Import
-module Event = Backend_intf.Event
 
-type pending_kind =
-  | Call of
-      { addr : int64
-      ; offset : int
-      ; from_untraced : bool
-      }
-  | Ret
-  | Ret_from_untraced of { reset_time : Time_ns.Span.t }
+module Pending_event = struct
+  module Kind = struct
+    type t =
+      | Call of
+          { addr : int64
+          ; offset : int
+          ; from_untraced : bool
+          }
+      | Ret
+      | Ret_from_untraced of { reset_time : Time_ns.Span.t }
+  end
 
-type pending_event =
-  { name : string
-  ; kind : pending_kind
-  }
+  type t =
+    { name : string
+    ; kind : Kind.t
+    }
+end
 
-type thread_info =
-  { thread : Tracing.Trace.Thread.t
-  ; (* This isn't a canonical callstack, but represents all of the information that we
+module Thread_info = struct
+  type t =
+    { thread : Tracing.Trace.Thread.t
+    ; (* This isn't a canonical callstack, but represents all of the information that we
        know about the callstack at the point in the events up to the current event being
        processed, and is reflected in the trace at that point. *)
-    callstack : string Stack.t
-  ; mutable reset_time : Time_ns.Span.t
-  ; (* Currently keeping track of the number of frames to unwind during an exception by
+      callstack : string Stack.t
+    ; mutable reset_time : Time_ns.Span.t
+    ; (* Currently keeping track of the number of frames to unwind during an exception by
        counting the number of calls to next_frame_descriptor (called during backtrace
        collection) since the last raise. This fails on raise_notrace but that can be fixed
        soon. *)
-    frames_to_unwind : int ref
-  ; mutable pending_events : pending_event list
-  ; mutable pending_time : Time_ns.Span.t
-  ; start_events : (Time_ns.Span.t * pending_event) Deque.t
-  }
+      frames_to_unwind : int ref
+    ; mutable pending_events : Pending_event.t list
+    ; mutable pending_time : Time_ns.Span.t
+    ; start_events : (Time_ns.Span.t * Pending_event.t) Deque.t
+    }
+end
 
 type t =
   { debug_info : Elf.Addr_table.t
   ; trace : Tracing.Trace.t
-  ; thread_info : thread_info Hashtbl.M(Event.Thread).t
+  ; thread_info : Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
   }
 
@@ -106,7 +111,7 @@ let create ~debug_info ~earliest_time ~hits trace =
   t
 ;;
 
-let write_pending_event' t thread time { name; kind } =
+let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; kind } =
   match kind with
   | Call { addr; offset; from_untraced = _ } ->
     (* Adding a call is always the result of seeing something new on the top of the
@@ -184,13 +189,13 @@ let write_pending_event' t thread time { name; kind } =
    consume time substantially reduces the frequency where we need to use zero-duration
    events. In general the traces are easier to read if returns aren't counted as consuming
    time. *)
-let consumes_time { name = _; kind } =
+let consumes_time { Pending_event.name = _; kind } =
   match kind with
   | Call _ -> true
   | Ret | Ret_from_untraced _ -> false
 ;;
 
-let write_pending_event t thread time ev =
+let write_pending_event t (thread : Thread_info.t) time (ev : Pending_event.t) =
   match ev.kind with
   | Ret_from_untraced _ | Call { from_untraced = true; _ } ->
     Deque.enqueue_front thread.start_events (time, ev)
@@ -199,7 +204,7 @@ let write_pending_event t thread time ev =
   | _ -> write_pending_event' t thread time ev
 ;;
 
-let flush (t : t) ~to_time thread =
+let flush (t : t) ~to_time (thread : Thread_info.t) =
   (* Try to evenly distribute the time between timestamp updates between all the
      time-consuming events in the batch. *)
   let count = List.count thread.pending_events ~f:consumes_time in
@@ -239,7 +244,7 @@ let flush_all t =
       Deque.clear thread.start_events)
 ;;
 
-let add_event t thread time ev =
+let add_event t (thread : Thread_info.t) time ev =
   if Time_ns.Span.( <> ) time thread.pending_time then flush t ~to_time:time thread;
   thread.pending_events <- ev :: thread.pending_events
 ;;
@@ -261,11 +266,19 @@ let opt_int_to_string opt_int =
     constants defined above. *)
 let write_event
     (t : t)
-    ({ thread; time; symbol; kind; addr; offset; ip = _; ip_symbol = _; ip_offset = _ } :
-      Event.t)
+    { Event.thread
+    ; time
+    ; symbol
+    ; kind
+    ; addr
+    ; offset
+    ; ip = _
+    ; ip_symbol = _
+    ; ip_offset = _
+    }
   =
   let time = map_time t time in
-  let ({ thread; callstack; reset_time; frames_to_unwind; _ } as thread_info) =
+  let ({ Thread_info.thread; callstack; reset_time; frames_to_unwind; _ } as thread_info) =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
         let trace_pid =
           Tracing.Trace.allocate_pid
@@ -284,13 +297,15 @@ let write_event
         })
   in
   let call ?(time = time) name =
-    let ev = { name; kind = Call { addr; offset; from_untraced = false } } in
+    let ev =
+      { Pending_event.name; kind = Call { addr; offset; from_untraced = false } }
+    in
     add_event t thread_info time ev;
     Stack.push callstack name
   in
   let ret () =
     match Stack.pop callstack with
-    | Some name -> add_event t thread_info time { name; kind = Ret }
+    | Some name -> add_event t thread_info time { Pending_event.name; kind = Ret }
     | None ->
       (* No known stackframe was popped --- could occur if the start of the snapshot
          started in the middle of a tracing region *)
@@ -298,7 +313,7 @@ let write_event
         t
         thread_info
         time
-        { name = "[unknown]"; kind = Ret_from_untraced { reset_time } }
+        { Pending_event.name = "[unknown]"; kind = Ret_from_untraced { reset_time } }
   in
   let check_current_symbol () =
     (* After every operation, we should be in a situation where the current symbol under
@@ -318,7 +333,11 @@ let write_event
 
          These shouldn't be buffered for spreading since we want them exactly at the reset
          time. *)
-      let ev = { name = symbol; kind = Call { addr; offset; from_untraced = true } } in
+      let ev =
+        { Pending_event.name = symbol
+        ; kind = Call { addr; offset; from_untraced = true }
+        }
+      in
       write_pending_event t thread_info reset_time ev;
       Stack.push callstack symbol
   in

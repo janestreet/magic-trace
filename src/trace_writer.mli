@@ -10,5 +10,5 @@ val create
   -> Tracing.Trace.t
   -> t
 
-val write_event : t -> Backend_intf.Event.t -> unit
+val write_event : t -> Event.t -> unit
 val flush_all : t -> unit

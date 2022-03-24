@@ -133,7 +133,7 @@ module Perf_line = struct
           in
           let ip_symbol, ip_offset = parse_symbol_offset ip_rest in
           let symbol, offset = parse_symbol_offset rest in
-          { Backend_intf.Event.thread =
+          { Event.thread =
               { pid = (if pid = 0 then None else Some (Pid.of_int pid))
               ; tid = (if tid = 0 then None else Some tid)
               }
