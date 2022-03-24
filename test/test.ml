@@ -1,13 +1,13 @@
 open! Core
 open! Async
 open! Magic_trace_lib.Trace.For_testing
-module Event = Magic_trace_core.Backend_intf.Event
+module Event = Magic_trace_core.Event
 
 module Trace_helpers : sig
   val events : unit -> Event.t list
   val start_recording : unit -> unit
   val call : unit -> unit
-  val add : Event.kind -> int -> string -> unit
+  val add : Event.Kind.t -> int -> string -> unit
   val ret : unit -> unit
   val jmp : unit -> unit
 end = struct

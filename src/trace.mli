@@ -9,6 +9,6 @@ module For_testing : sig
     :  ?debug_info:Elf.Addr_table.t
     -> Tracing.Trace.t
     -> (string * Breakpoint.Hit.t) list
-    -> Backend_intf.Event.t Pipe.Reader.t
+    -> Event.t Pipe.Reader.t
     -> unit Deferred.t
 end

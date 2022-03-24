@@ -4,45 +4,6 @@
 open! Core
 open! Async
 
-module Event = struct
-  type end_kind =
-    | Call
-    | Return
-    | Syscall
-    | None
-  [@@deriving sexp]
-
-  type kind =
-    | Call
-    | Return
-    | Start
-    | Decode_error
-    | End of end_kind
-    | Jump
-  [@@deriving sexp]
-
-  module Thread = struct
-    type t =
-      { pid : Pid.t option
-      ; tid : int option
-      }
-    [@@deriving sexp, compare, hash]
-  end
-
-  type t =
-    { thread : Thread.t
-    ; time : Time_ns.Span.t
-    ; addr : int64
-    ; kind : kind
-    ; symbol : string
-    ; offset : int
-    ; ip : int64
-    ; ip_symbol : string
-    ; ip_offset : int
-    }
-  [@@deriving sexp]
-end
-
 module type S = sig
   module Record_opts : sig
     type t
