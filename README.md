@@ -1,4 +1,15 @@
-# <img src="https://user-images.githubusercontent.com/128969/160153610-22726be8-faf9-4042-97c3-d5c9fb2027dd.svg" alt="drawing" width="50"/> magic-trace [![Linux Build Status](https://img.shields.io/github/workflow/status/janestreet/magic-trace/build?logo=github)](https://github.com/janestreet/magic-trace/actions?query=workflow%3Abuild)
+<h1 align="center">
+  <img src="https://user-images.githubusercontent.com/128969/160153610-22726be8-faf9-4042-97c3-d5c9fb2027dd.svg" width="150px"/>
+  <br/>
+  magic-trace
+</h1>
+  <p align="center">
+    <a href="https://github.com/janestreet/magic-trace/actions?query=workflow%3Abuild" alt="Linux Build Status">
+      <img src="https://img.shields.io/github/workflow/status/janestreet/magic-trace/build?logo=github&style=flat-square"/>
+  </a>
+  <img src="https://img.shields.io/github/v/tag/janestreet/magic-trace?label=version&style=flat-square"/>
+  <img src="https://img.shields.io/github/license/janestreet/magic-trace?style=flat-square"/>
+</p>
 
 `magic-trace` is a tool for diagnosing tricky performance issues using
 Intel Processor Trace. You tell it a function and attach it to a
