@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://user-images.githubusercontent.com/128969/160157021-3dd34456-e1d7-4ce4-b7c6-9413eb4bddb4.svg" width="150px"/>
+  <img src="https://user-images.githubusercontent.com/128969/160157739-f721c425-2db1-493a-83dc-afe94cffb093.svg" width="150px"/>
   <br/>
   magic-trace
 </h1>
