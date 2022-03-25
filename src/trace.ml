@@ -198,7 +198,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         Core.eprintf "[Couldn't find symbol. Will still snapshot on end]\n%!";
         Deferred.unit
       | Some { Elf.Stop_info.name; addr; _ } ->
-        Core.eprintf "[Attaching to %Ld]\n%!" addr;
+        Core.eprintf "[Attaching to %s @ 0x%016Lx]\n%!" name addr;
         (* This is a safety feature so that if you accidentally attach to a symbol that
            gets called very frequently, in single snapshot mode it will only trigger the
            breakpoint once before the breakpoint gets disabled. In [multi_snapshot] mode
