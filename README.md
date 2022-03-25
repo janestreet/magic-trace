@@ -22,4 +22,6 @@ this data, but it has timing resolution of around 40ns:
 
 [Get started.](https://github.com/janestreet/magic-trace/wiki/Getting-started)
 
-If you'd like to contribute, follow the [Build Instructions](https://github.com/janestreet/magic-trace/wiki/Build-instructions).
+If you'd like to contribute, follow the [Build instructions](https://github.com/janestreet/magic-trace/wiki/Build-instructions).
+
+If you're on the fence about trying this out, we've collected some [testimonials](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews) from other users.
