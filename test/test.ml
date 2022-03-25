@@ -153,7 +153,7 @@ let%expect_test "random perfs" =
     (Interned_thread (index 1)
      (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
     (Interned_string (index 104) (value address))
-    (Interned_string (index 105) (value "E{3\tST]'i"))
+    (Interned_string (index 105) (value S))
     (Interned_string (index 106) (value symbol))
     (Interned_string (index 107) (value ""))
     (Event
@@ -162,13 +162,13 @@ let%expect_test "random perfs" =
       (event_type Duration_begin)))
     (Interned_string (index 108) (value "+d8;mv5\026j"))
     (Event
-     ((timestamp 156ns) (thread 1) (category 107) (name 108)
-      (arguments ((104 (Int 70347080186905)) (106 (String 108))))
+     ((timestamp 152ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Int 18056637561335)) (106 (String 108))))
       (event_type Duration_begin)))
-    (Interned_string (index 109) (value J0))
+    (Interned_string (index 109) (value "_\025dd;?\\"))
     (Event
-     ((timestamp 234ns) (thread 1) (category 107) (name 109)
-      (arguments ((104 (Int 40368494698790)) (106 (String 109))))
+     ((timestamp 185ns) (thread 1) (category 107) (name 109)
+      (arguments ((104 (Int 132616083027461)) (106 (String 109))))
       (event_type Duration_begin)))
     (Interned_string (index 110) (value [unknown]))
     (Event
@@ -177,7 +177,7 @@ let%expect_test "random perfs" =
     (Interned_string (index 111) (value "\025J\015\018\023\018"))
     (Event
      ((timestamp 0s) (thread 1) (category 107) (name 111)
-      (arguments ((104 (Int 138189158431799)) (106 (String 111))))
+      (arguments ((104 (Int 78866027486094)) (106 (String 111))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
   let%bind () = dump_one "2" in
@@ -196,7 +196,7 @@ let%expect_test "random perfs" =
 (Interned_string (index 107) (value ""))
 (Event
  ((timestamp 0s) (thread 1) (category 107) (name 105)
-  (arguments ((104 (Int 138189158431799)) (106 (String 105))))
+  (arguments ((104 (Int 78866027486094)) (106 (String 105))))
   (event_type Duration_begin)))
 (Error No_more_words) |}];
   let%bind () = dump_one "3" in
@@ -210,7 +210,7 @@ let%expect_test "random perfs" =
     (Interned_thread (index 1)
      (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
     (Interned_string (index 104) (value address))
-    (Interned_string (index 105) (value "E{3\tST]'i"))
+    (Interned_string (index 105) (value S))
     (Interned_string (index 106) (value symbol))
     (Interned_string (index 107) (value ""))
     (Event
@@ -219,8 +219,8 @@ let%expect_test "random perfs" =
       (event_type Duration_begin)))
     (Interned_string (index 108) (value "+d8;mv5\026j"))
     (Event
-     ((timestamp 156ns) (thread 1) (category 107) (name 108)
-      (arguments ((104 (Int 70347080186905)) (106 (String 108))))
+     ((timestamp 152ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Int 18056637561335)) (106 (String 108))))
       (event_type Duration_begin)))
     (Interned_string (index 109) (value [unknown]))
     (Event
@@ -229,7 +229,7 @@ let%expect_test "random perfs" =
     (Interned_string (index 110) (value "\025J\015\018\023\018"))
     (Event
      ((timestamp 0s) (thread 1) (category 107) (name 110)
-      (arguments ((104 (Int 138189158431799)) (106 (String 110))))
+      (arguments ((104 (Int 78866027486094)) (106 (String 110))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
   let%bind () = dump_one "4" in
@@ -243,7 +243,7 @@ let%expect_test "random perfs" =
 (Interned_thread (index 1)
  (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
 (Interned_string (index 104) (value address))
-(Interned_string (index 105) (value "E{3\tST]'i"))
+(Interned_string (index 105) (value S))
 (Interned_string (index 106) (value symbol))
 (Interned_string (index 107) (value ""))
 (Event
@@ -251,36 +251,36 @@ let%expect_test "random perfs" =
   (arguments ((104 (Int 117693177829825)) (106 (String 105))))
   (event_type Duration_begin)))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 105) (arguments ())
+ ((timestamp 147ns) (thread 1) (category 107) (name 105) (arguments ())
   (event_type Duration_end)))
 (Interned_string (index 108) (value "\025J\015\018\023\018"))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 108) (arguments ())
+ ((timestamp 147ns) (thread 1) (category 107) (name 108) (arguments ())
   (event_type Duration_end)))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 105)
-  (arguments ((104 (Int 68335834690794)) (106 (String 105))))
+ ((timestamp 147ns) (thread 1) (category 107) (name 105)
+  (arguments ((104 (Int 127332186018541)) (106 (String 105))))
   (event_type Duration_begin)))
 (Event
- ((timestamp 170ns) (thread 1) (category 107) (name 105) (arguments ())
+ ((timestamp 202ns) (thread 1) (category 107) (name 105) (arguments ())
   (event_type Duration_end)))
-(Interned_string (index 109) (value ":k\025"))
+(Interned_string (index 109) (value "\025dd;?\\&"))
 (Event
- ((timestamp 222ns) (thread 1) (category 107) (name 109)
-  (arguments ((104 (Int 18056637561335)) (106 (String 109))))
+ ((timestamp 237ns) (thread 1) (category 107) (name 109)
+  (arguments ((104 (Int 85218555566586)) (106 (String 109))))
   (event_type Duration_begin)))
-(Interned_string (index 110) (value "_\025dd;?\\"))
+(Interned_string (index 110) (value "GGCP!p\015"))
 (Event
- ((timestamp 245ns) (thread 1) (category 107) (name 110)
-  (arguments ((104 (Int 13980643522868)) (106 (String 110))))
+ ((timestamp 274ns) (thread 1) (category 107) (name 110)
+  (arguments ((104 (Int 122787015563720)) (106 (String 110))))
   (event_type Duration_begin)))
 (Event
  ((timestamp 0s) (thread 1) (category 107) (name 108)
-  (arguments ((104 (Int 95718477123387)) (106 (String 108))))
+  (arguments ((104 (Int 121487422884678)) (106 (String 108))))
   (event_type Duration_begin)))
 (Event
  ((timestamp 0s) (thread 1) (category 107) (name 108)
-  (arguments ((104 (Int 138189158431799)) (106 (String 108))))
+  (arguments ((104 (Int 78866027486094)) (106 (String 108))))
   (event_type Duration_begin)))
 (Error No_more_words) |}];
   return ()
@@ -318,78 +318,78 @@ let%expect_test "with initial returns" =
     (Event
      ((timestamp 100ns) (thread 1) (category 105) (name 104) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 106) (value "E{3\tST]'i"))
+    (Interned_string (index 106) (value S))
     (Event
-     ((timestamp 156ns) (thread 1) (category 105) (name 106) (arguments ())
+     ((timestamp 152ns) (thread 1) (category 105) (name 106) (arguments ())
       (event_type Duration_end)))
     (Interned_string (index 107) (value "+d8;mv5\026j"))
     (Event
-     ((timestamp 234ns) (thread 1) (category 105) (name 107) (arguments ())
+     ((timestamp 185ns) (thread 1) (category 105) (name 107) (arguments ())
       (event_type Duration_end)))
     (Interned_string (index 108) (value address))
-    (Interned_string (index 109) (value "\017\\4y_\025d"))
+    (Interned_string (index 109) (value GGCP!p))
     (Interned_string (index 110) (value symbol))
     (Event
-     ((timestamp 267ns) (thread 1) (category 105) (name 109)
-      (arguments ((108 (Int 132616083027461)) (110 (String 109))))
+     ((timestamp 222ns) (thread 1) (category 105) (name 109)
+      (arguments ((108 (Int 122787015563720)) (110 (String 109))))
       (event_type Duration_begin)))
-    (Interned_string (index 111) (value GGCP!p))
+    (Interned_string (index 111) (value "\031q\0212\002\016"))
     (Event
-     ((timestamp 320ns) (thread 1) (category 105) (name 111)
-      (arguments ((108 (Int 112862868341507)) (110 (String 111))))
-      (event_type Duration_begin)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 111) (arguments ())
-      (event_type Duration_end)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 109) (arguments ())
-      (event_type Duration_end)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 111)
-      (arguments ((108 (Int 88716997803698)) (110 (String 111))))
-      (event_type Duration_begin)))
-    (Interned_string (index 112) (value "\002"))
-    (Event
-     ((timestamp 448ns) (thread 1) (category 105) (name 112)
-      (arguments ((108 (Int 86021545478677)) (110 (String 112))))
+     ((timestamp 319ns) (thread 1) (category 105) (name 111)
+      (arguments ((108 (Int 32921123688219)) (110 (String 111))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 112) (arguments ())
+     ((timestamp 329ns) (thread 1) (category 105) (name 111) (arguments ())
       (event_type Duration_end)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 111) (arguments ())
+     ((timestamp 329ns) (thread 1) (category 105) (name 109) (arguments ())
       (event_type Duration_end)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 112)
-      (arguments ((108 (Int 67678953014964)) (110 (String 112))))
+     ((timestamp 329ns) (thread 1) (category 105) (name 111)
+      (arguments ((108 (Int 20989024948660)) (110 (String 111))))
+      (event_type Duration_begin)))
+    (Interned_string (index 112) (value I))
+    (Event
+     ((timestamp 365ns) (thread 1) (category 105) (name 112)
+      (arguments ((108 (Int 51976414893270)) (110 (String 112))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 112) (arguments ())
+     ((timestamp 436ns) (thread 1) (category 105) (name 112) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 113) (value J0))
     (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 113) (arguments ())
+     ((timestamp 436ns) (thread 1) (category 105) (name 111) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 114) (value y))
     (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 114)
-      (arguments ((108 (Int 120939934736912)) (110 (String 114))))
+     ((timestamp 436ns) (thread 1) (category 105) (name 112)
+      (arguments ((108 (Int 133110582289134)) (110 (String 112))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 658ns) (thread 1) (category 105) (name 114) (arguments ())
+     ((timestamp 521ns) (thread 1) (category 105) (name 112) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 115) (value [4))
+    (Interned_string (index 113) (value "_\025dd;?\\"))
+    (Event
+     ((timestamp 521ns) (thread 1) (category 105) (name 113) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 114) (value "N8\016$>"))
+    (Event
+     ((timestamp 521ns) (thread 1) (category 105) (name 114)
+      (arguments ((108 (Int 8892312327129)) (110 (String 114))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 562ns) (thread 1) (category 105) (name 114) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 115) (value ";|\025K?\029A\025"))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 115)
-      (arguments ((108 (Int 84055102840523)) (110 (String 115))))
+      (arguments ((108 (Int 1972815520075)) (110 (String 115))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 113)
-      (arguments ((108 (Int 40368494698790)) (110 (String 113))))
+      (arguments ((108 (Int 132616083027461)) (110 (String 113))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 107)
-      (arguments ((108 (Int 70347080186905)) (110 (String 107))))
+      (arguments ((108 (Int 18056637561335)) (110 (String 107))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 106)
@@ -401,7 +401,7 @@ let%expect_test "with initial returns" =
       (event_type (Duration_complete (end_time 0s)))))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 104)
-      (arguments ((108 (Int 138189158431799)) (110 (String 104))))
+      (arguments ((108 (Int 78866027486094)) (110 (String 104))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
   return ()
