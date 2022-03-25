@@ -31,12 +31,12 @@ end
 type t =
   { thread : Thread.t
   ; time : Time_ns.Span.t
-  ; addr : int64
+  ; addr : Int64.Hex.t
   ; kind : Kind.t
   ; symbol : string
-  ; offset : int
-  ; ip : int64
+  ; offset : Int.Hex.t
+  ; ip : Int64.Hex.t
   ; ip_symbol : string
-  ; ip_offset : int
+  ; ip_offset : Int.Hex.t
   }
 [@@deriving sexp]
