@@ -39,6 +39,8 @@ jobs:
 
       - run: opam exec -- make
 
+      - run: opam exec -- dune runtest
+
       - uses: actions/upload-artifact@v3
         with:
           name: magic-trace
