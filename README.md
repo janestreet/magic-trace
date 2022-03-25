@@ -7,7 +7,9 @@
     <a href="https://github.com/janestreet/magic-trace/actions?query=workflow%3Abuild" alt="Linux Build Status">
       <img src="https://img.shields.io/github/workflow/status/janestreet/magic-trace/build?logo=github&style=flat-square"/>
   </a>
-  <img src="https://img.shields.io/github/v/tag/janestreet/magic-trace?label=version&style=flat-square"/>
+  <a href="https://github.com/janestreet/magic-trace/releases/latest">
+    <img src="https://img.shields.io/github/v/tag/janestreet/magic-trace?label=version&style=flat-square"/>
+  </a>
   <img src="https://img.shields.io/github/license/janestreet/magic-trace?style=flat-square"/>
 </p>
 
