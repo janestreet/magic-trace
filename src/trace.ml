@@ -4,6 +4,15 @@ open! Core
 open! Async
 open! Import
 
+let supports_fzf =
+  Lazy.from_fun (fun () ->
+      let pid = Core_unix.fork_exec ~prog:"fzf" ~argv:[ "--version" ] ~use_path:true () in
+      let exit_or_signal = Core_unix.waitpid pid in
+      match Core_unix.Exit_or_signal.or_error exit_or_signal with
+      | Error _ -> false
+      | Ok () -> true)
+;;
+
 (* Other parts of the process would fail after this without IPT, but by checking directly
    we can give a more helpful error message regardless of backend. *)
 let check_for_processor_trace_support () =
@@ -114,7 +123,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
           match Map.length snap_syms, Map.min_elt snap_syms with
           | 0, _ -> Deferred.Or_error.return None
           | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
-          | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
+          | _ ->
+            if force supports_fzf
+            then Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
+            else
+              Deferred.Or_error.error_string
+                "Multiple matches found for the given symbol. magic-trace could show you \
+                 a fuzzy-finding selector here if \"fzf\" were in your PATH, but it is \
+                 not."
         in
         let snap_loc =
           Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym)
@@ -392,31 +408,37 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   let select_pid () =
-    (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
+    if force supports_fzf
+    then (
+      (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
        running processes. The [ps] command uses the /proc/ filesystem and is much easier
        than walking the /proc/ system and filtering ourselves. *)
-    let process_lines =
-      [ [ "x"; "-w"; "--no-headers" ]
-      ; [ "-o"; "pid,args" ]
-        (* If running as root, allow tracing all processes, including those owned
+      let process_lines =
+        [ [ "x"; "-w"; "--no-headers" ]
+        ; [ "-o"; "pid,args" ]
+          (* If running as root, allow tracing all processes, including those owned
          by non-root users. *)
-      ; (if Core_unix.geteuid () = 0 then [ "-e" ] else [])
-      ]
-      |> List.concat
-      |> Shell.run_lines "ps"
-    in
-    let%bind.Deferred.Or_error sel_line =
-      Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
-    in
-    let pid =
-      let%bind.Option sel_line = sel_line in
-      let sel_line = String.lstrip sel_line in
-      let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
-      Pid.of_string first_part
-    in
-    match pid with
-    | Some s -> Deferred.return (Ok s)
-    | None -> Deferred.Or_error.error_string "No pid selected"
+        ; (if Core_unix.geteuid () = 0 then [ "-e" ] else [])
+        ]
+        |> List.concat
+        |> Shell.run_lines "ps"
+      in
+      let%bind.Deferred.Or_error sel_line =
+        Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
+      in
+      let pid =
+        let%bind.Option sel_line = sel_line in
+        let sel_line = String.lstrip sel_line in
+        let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
+        Pid.of_string first_part
+      in
+      match pid with
+      | Some s -> Deferred.return (Ok s)
+      | None -> Deferred.Or_error.error_string "No pid selected")
+    else
+      Deferred.Or_error.error_string
+        "The [-pid] argument is mandatory. magic-trace could show you a fuzzy-finding \
+         selector here if \"fzf\" were in your PATH, but it is not."
   ;;
 
   let attach_command =
@@ -430,7 +452,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
          flag
            "-pid"
            (optional int)
-           ~doc:"PID Process to attach to, presents an fzf if omitted"
+           ~doc:
+             "PID Process to attach to. Required if you don't have the \"fzf\" \
+              application available in your PATH."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
