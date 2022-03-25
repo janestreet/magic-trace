@@ -1,19 +1,34 @@
-///usr/bin/env -S clang -gdwarf-4 "$0" -o /tmp/demo && exec /tmp/demo "$@"
-#include <unistd.h>
-#include <fcntl.h>
+/// usr/bin/env -S gcc -gdwarf-4 -fno-omit-frame-pointer -ldl -o demo "$0" -o /tmp/demo &&
+/// exec /tmp/demo "$@"
 
-int main(void)
-{
-    int r = open("/dev/zero", O_RDONLY);
-    int w = open("/dev/null", O_WRONLY);
-    char buf[4096] = {0};
-    for (;;)
-    {
-        ssize_t bytes_read = read(r, buf, sizeof(buf));
-        if (bytes_read < 0)
-            break;
-        if (write(w, buf, (size_t)bytes_read) < 0)
-            break;
+#include <dlfcn.h>
+#include <gnu/lib-names.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+int main(void) {
+  FILE *out = fopen("/dev/null", "w");
+  for (;;) {
+    void *handle;
+    double (*cosine)(double);
+    char *error;
+
+    handle = dlopen(LIBM_SO, RTLD_LAZY);
+    if (!handle) {
+      fprintf(stderr, "%s\n", dlerror());
+      exit(EXIT_FAILURE);
     }
-    return 0;
+
+    dlerror();
+
+    cosine = (double (*)(double))dlsym(handle, "cos");
+    error = dlerror();
+    if (error != NULL) {
+      fprintf(stderr, "%s\n", error);
+      exit(EXIT_FAILURE);
+    }
+
+    fprintf(out, "%f\n", (*cosine)(2.0));
+    dlclose(handle);
+  }
 }
