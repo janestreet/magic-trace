@@ -7,5 +7,6 @@
  (libraries core async core_unix.filename_unix fzf re shell
    core_unix.sys_unix cohttp cohttp_static_handler core_unix.signal_unix
    tracing ocaml-probes.probes_lib magic_trace magic_trace_core)
+ (inline_tests)
  (preprocess
   (pps ppx_jane)))

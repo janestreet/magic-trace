@@ -113,56 +113,58 @@ module Perf_line = struct
   let report_itraces = "b"
   let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
 
+  let kind_and_ip_re =
+    Re.Posix.re
+      {|(call|return|tr strt|tr end|tr end  call|tr end  return|tr end  syscall|jmp|jcc) +([0-9a-f]+) (.*)|}
+    |> Re.compile
+  ;;
+
   let to_event line =
     try
       Scanf.sscanf
         line
         " %d/%d %d.%d: %s@=> %Lx %s@$"
         (fun pid tid time_hi time_lo kind_and_ip addr rest ->
-          let kind_and_ip, ip_rest =
-            String.rsplit2_exn ~on:' ' (String.strip kind_and_ip)
-          in
-          let kind, ip_string = String.rsplit2_exn ~on:' ' (String.strip kind_and_ip) in
-          let ip =
-            try Scanf.sscanf ip_string "%Lx" (fun ip -> ip) with
-            | Scanf.Scan_failure _ | End_of_file -> 0L
-          in
-          let parse_symbol_offset str =
-            try Scanf.sscanf str "%s@+0x%x" (fun symbol offset -> symbol, offset) with
-            | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
-          in
-          let ip_symbol, ip_offset = parse_symbol_offset ip_rest in
-          let symbol, offset = parse_symbol_offset rest in
-          { Event.thread =
-              { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-              ; tid = (if tid = 0 then None else Some tid)
-              }
-          ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
-          ; kind =
-              (match String.strip kind with
-              | "call" -> Call
-              | "return" -> Return
-              | "tr strt" -> Start
-              | "tr end" -> End None
-              | "tr end  call" -> End Call
-              | "tr end  return" -> End Return
-              | "tr end  syscall" -> End Syscall
-              | "jmp" -> Jump
-              | "jcc" -> Jump
-              | kind ->
-                raise_s
-                  [%message
-                    "BUG: unrecognized perf event. Please report this to \
-                     https://github.com/janestreet/magic-trace/issues/"
-                      (kind : string)
-                      ~unrecognized_perf_output:(line : string)])
-          ; addr
-          ; symbol
-          ; offset
-          ; ip
-          ; ip_symbol
-          ; ip_offset
-          })
+          match Re.Group.all (Re.exec kind_and_ip_re kind_and_ip) with
+          | [| _; kind; ip_string; ip_rest |] ->
+            let ip =
+              try Scanf.sscanf ip_string "%Lx" (fun ip -> ip) with
+              | Scanf.Scan_failure _ | End_of_file -> 0L
+            in
+            let parse_symbol_offset str =
+              try Scanf.sscanf str "%s@+0x%x" (fun symbol offset -> symbol, offset) with
+              | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
+            in
+            let ip_symbol, ip_offset = parse_symbol_offset ip_rest in
+            let symbol, offset = parse_symbol_offset rest in
+            { Event.thread =
+                { pid = (if pid = 0 then None else Some (Pid.of_int pid))
+                ; tid = (if tid = 0 then None else Some tid)
+                }
+            ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
+            ; kind =
+                (match String.strip kind with
+                | "call" -> Call
+                | "return" -> Return
+                | "tr strt" -> Start
+                | "tr end" -> End None
+                | "tr end  call" -> End Call
+                | "tr end  return" -> End Return
+                | "tr end  syscall" -> End Syscall
+                | "jmp" -> Jump
+                | "jcc" -> Jump
+                | kind -> raise_s [%message "unrecognized perf event" (kind : string)])
+            ; addr
+            ; symbol
+            ; offset
+            ; ip
+            ; ip_symbol
+            ; ip_offset
+            }
+          | results ->
+            raise_s
+              [%message
+                "Regex of expected perf output did not match." (results : string array)])
     with
     | exn ->
       raise_s
@@ -171,6 +173,50 @@ module Perf_line = struct
            https://github.com/janestreet/magic-trace/issues/"
             (exn : exn)
             ~perf_output:(line : string)]
+  ;;
+
+  let%test_module _ =
+    (module struct
+      open Core
+
+      let%expect_test "C symbol" =
+        to_event
+          {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 =>     7ffd193838e0 __vdso_clock_gettime+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (addr 0x7ffd193838e0) (kind Call) (symbol __vdso_clock_gettime) (offset 0x0)
+           (ip 0x7f6fce0b71f4) (ip_symbol __clock_gettime) (ip_offset 0x24)) |}]
+      ;;
+
+      let%expect_test "C symbol trace start" =
+        to_event
+          {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] =>     7f6fce0b71d0 __clock_gettime+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (addr 0x7f6fce0b71d0) (kind Start) (symbol __clock_gettime) (offset 0x0)
+           (ip 0x0) (ip_symbol [unknown]) (ip_offset 0x0)) |}]
+      ;;
+
+      let%expect_test "C++ symbol" =
+        to_event
+          {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb =>           9f68b0 J::K<int, std::string>+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
+           (addr 0x9f68b0) (kind Call) (symbol "J::K<int, std::string>") (offset 0x0)
+           (ip 0x9bc6db)
+           (ip_symbol "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run")
+           (ip_offset 0x1eb)) |}]
+      ;;
+    end)
   ;;
 end
 
