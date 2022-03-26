@@ -1,4 +1,4 @@
-/// usr/bin/env -S gcc -gdwarf-4 -fno-omit-frame-pointer -ldl -o demo "$0" -o /tmp/demo && exec /tmp/demo "$@"
+///usr/bin/env -S gcc -gdwarf-4 -fno-omit-frame-pointer -ldl -o demo "$0" -o /tmp/demo && exec /tmp/demo "$@"
 
 #include <dlfcn.h>
 #include <gnu/lib-names.h>
