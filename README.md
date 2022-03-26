@@ -58,7 +58,7 @@ There are two ways to take a snapshot:
 
 You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates with already having taken a snapshot, it takes a snapshot.
 
-You can also trigger snapshots when the application calls a function. You can either use the default stop indicator function, `magic_trace_stop_indicator`, or supply the `-symbol` flag to magic-trace to supply your own symbol. The function which triggers the snapshot doesn't need to do anything in particular, magic-trace just needs the name. Our official ocaml library's "take snapshot" function is just an empty C stub.
+You can also trigger snapshots when the application calls a function. You can either use the default stop indicator function, `magic_trace_stop_indicator`, or supply the `-symbol` flag to magic-trace to supply your own symbol. The function which triggers the snapshot doesn't need to do anything in particular, magic-trace just needs the name. Our official ocaml library's "take snapshot" function is just an empty C function.
 
 # Contributing
 
