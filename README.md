@@ -52,9 +52,9 @@ Magic-trace traces *all control flow* in the snapshot, and that means you can ge
 
 Congratulations, you just magically traced your first program!
 
-The way magic-trace works is that it continuously records all control flow into a ring buffer. Upon some sort of trigger, it takes a snapshot of that buffer and reconstructs call stacks.
+The way magic-trace works is that it continuously records control flow into a ring buffer. Upon some sort of trigger, it takes a snapshot of that buffer and reconstructs call stacks.
 
-There are two ways to make that happen:
+There are two ways to take a snapshot:
 
 You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates with already having taken a snapshot, it takes a snapshot.
 
