@@ -34,7 +34,7 @@ Magic-trace traces *all control flow* in the snapshot, and that means you can ge
 
    Then, test it by running `magic-trace -help`, which should bring up some help text.
 
-1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -gdwarf-4 -fno-omit-frame-pointer -ldl demo.c -o demo`, then leave it running `./demo`.
+1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -gdwarf-4 -ldl demo.c -o demo`, then leave it running `./demo`.
 
 1. Run `magic-trace attach -pid $(pidof demo) -output trace`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace` in your working directory.
 
