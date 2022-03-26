@@ -6,11 +6,16 @@ open! Import
 
 let supports_fzf =
   Lazy.from_fun (fun () ->
-      let pid = Core_unix.fork_exec ~prog:"fzf" ~argv:[ "--version" ] ~use_path:true () in
-      let exit_or_signal = Core_unix.waitpid pid in
-      match Core_unix.Exit_or_signal.or_error exit_or_signal with
-      | Error _ -> false
-      | Ok () -> true)
+      match Core_unix.fork () with
+      | `In_the_child ->
+        Core_unix.close Core_unix.stdout;
+        Core_unix.exec ~prog:"fzf" ~argv:[ "fzf"; "--version" ] ~use_path:true ()
+        |> never_returns
+      | `In_the_parent pid ->
+        let exit_or_signal = Core_unix.waitpid pid in
+        (match Core_unix.Exit_or_signal.or_error exit_or_signal with
+        | Error _ -> false
+        | Ok () -> true))
 ;;
 
 (* Other parts of the process would fail after this without IPT, but by checking directly
