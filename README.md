@@ -10,7 +10,9 @@
   <a href="https://github.com/janestreet/magic-trace/releases/latest">
     <img src="https://img.shields.io/github/v/tag/janestreet/magic-trace?label=version&style=flat-square"/>
   </a>
-  <img src="https://img.shields.io/github/license/janestreet/magic-trace?style=flat-square"/>
+  <a href="LICENSE.md">
+    <img src="https://img.shields.io/github/license/janestreet/magic-trace?style=flat-square"/>
+  </a>
 </p>
 
 Magic-trace uses Intel PT to tell you what just happened. You give it a function name. Then, it attaches to a running process and when that function is called it will show you everything that happened for ~10ms (varies, and is partially configurable) leading up to that function call.
