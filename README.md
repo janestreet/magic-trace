@@ -64,9 +64,15 @@ There are two ways to take a snapshot:
 
 You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates with already having taken a snapshot, it takes a snapshot.
 
-You can also trigger snapshots when the application calls a function. You can either use the default stop indicator function, `magic_trace_stop_indicator`, or supply the `-symbol` flag to magic-trace to supply your own symbol. 
+You can also trigger snapshots when the application calls a function. To do so, pass magic-trace
+the `-trigger` flag.
 
-Some ideas about where you might want to call the stop indicator:
+- `-trigger $` brings up a fuzzy-finding selector that lets you choose from all
+  symbols in your executable,
+- `-trigger SYMBOL` selects a specific, fully mangled, symbol you know ahead of time, and
+- `-trigger .` selects the default symbol `magic_trace_stop_indicator`.
+
+Stop indicators are powerful. Here are some ideas for where you might want to place one:
 
 - If you're using an asynchronous runtime, any time a scheduler cycle takes too long.
 - In a server, when a request takes a surprisingly long time.
