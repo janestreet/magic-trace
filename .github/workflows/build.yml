@@ -46,3 +46,13 @@ jobs:
           name: magic-trace
           path: _build/install/default/bin/magic-trace
           if-no-files-found: error
+
+      - name: Upload to GitHub releases
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: _build/install/default/bin/magic-trace
+          asset_name: magic-trace
+          tag: ${{ github.ref }}
+          overwrite: true
