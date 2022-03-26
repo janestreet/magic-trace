@@ -18,6 +18,16 @@ let supports_fzf =
         | Ok () -> true))
 ;;
 
+let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
+  let elf = Elf.create executable in
+  match when_to_snapshot, elf with
+  | Application_calls_a_function _, None ->
+    Deferred.Or_error.errorf
+      "As far as magic-trace can tell, that executable doesn't have a symbol table. Was \
+       the binary built without debug info?"
+  | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
+;;
+
 (* Other parts of the process would fail after this without IPT, but by checking directly
    we can give a more helpful error message regardless of backend. *)
 let check_for_processor_trace_support () =
@@ -72,7 +82,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let filename ~record_dir = record_dir ^/ "hits.sexp"
   end
 
-  let decode_to_trace ?elf ~record_dir { Decode_opts.output_config; decode_opts; verbose }
+  let decode_to_trace ~elf ~record_dir { Decode_opts.output_config; decode_opts; verbose }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_view output_config ~f:(fun w ->
@@ -96,13 +106,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
   module Record_opts = struct
     type t =
       { backend_opts : Backend.Record_opts.t
-      ; use_filter : bool
       ; multi_snapshot : bool
-      ; snap_symbol : Re.re
+      ; when_to_snapshot : When_to_snapshot.t
       ; record_dir : string
       ; executable : string
-      ; snap_on_delay_over : Time_ns.Span.t option
-      ; duration_thresh : Time_ns.Span.t option
       }
   end
 
@@ -115,43 +122,43 @@ module Make_commands (Backend : Backend_intf.S) = struct
       }
   end
 
-  let attach ?elf (opts : Record_opts.t) pid =
+  let attach ~elf (opts : Record_opts.t) pid =
     let%bind.Deferred.Or_error () =
       check_for_processor_trace_support () |> Deferred.return
     in
-    let%bind.Deferred.Or_error filter, snap_loc =
+    let%bind.Deferred.Or_error snap_loc =
       match elf with
-      | None -> Deferred.Or_error.return (None, None)
+      | None -> return (Ok None)
       | Some elf ->
-        let snap_syms = Elf.matching_functions elf opts.snap_symbol in
-        let%bind.Deferred.Or_error snap_sym =
-          match Map.length snap_syms, Map.min_elt snap_syms with
-          | 0, _ -> Deferred.Or_error.return None
-          | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
-          | _ ->
-            if force supports_fzf
-            then Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
-            else
-              Deferred.Or_error.error_string
-                "Multiple matches found for the given symbol. magic-trace could show you \
-                 a fuzzy-finding selector here if \"fzf\" were in your PATH, but it is \
-                 not."
-        in
-        let snap_loc =
-          Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf pid sym)
-        in
-        let filter =
-          match opts.use_filter, snap_loc with
-          | true, Some { Elf.Stop_info.filter; _ } -> Some filter
-          | _, _ -> None
-        in
-        Deferred.Or_error.return (filter, snap_loc)
+        (match opts.when_to_snapshot with
+        | Magic_trace_or_the_application_terminates -> return (Ok None)
+        | Application_calls_a_function which_function ->
+          let%bind.Deferred.Or_error snap_sym =
+            match which_function with
+            | Use_fzf_to_select_one ->
+              let all_symbols = Elf.all_symbols elf in
+              if force supports_fzf
+              then (
+                match%bind.Deferred.Or_error Fzf.pick_one (Assoc all_symbols) with
+                | None -> Deferred.Or_error.error_string "No symbol selected"
+                | Some symbol -> return (Ok symbol))
+              else
+                Deferred.Or_error.error_string
+                  "magic-trace could show you a fuzzy-finding selector here if \"fzf\" \
+                   were in your PATH, but it is not."
+            | User_selected symbol_name ->
+              (match Elf.find_symbol elf symbol_name with
+              | None ->
+                Deferred.Or_error.errorf "Snapshot symbol not found: %s" symbol_name
+              | Some symbol -> return (Ok symbol))
+          in
+          let snap_loc = Elf.symbol_stop_info elf pid snap_sym in
+          return (Ok (Some snap_loc)))
     in
     let%map.Deferred.Or_error recording =
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~record_dir:opts.record_dir
-        ?filter
         pid
     in
     let done_ivar = Ivar.create () in
@@ -171,53 +178,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
         (Hits_file.filename ~record_dir:opts.record_dir)
         ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string)
     in
-    let last_hit = ref Time_ns_unix.Option.none in
-    let last_report = ref Time_ns.epoch in
-    let max_since_last_report = ref Time_ns.Span.zero in
-    let report_interval = Time_ns.Span.of_int_sec 5 in
-    let print_report () =
-      Core.eprintf
-        !"[Waiting for delay over threshold. Max delay since last report: %{Time_ns.Span}]\n\
-          %!"
-        !max_since_last_report;
-      max_since_last_report := Time_ns.Span.zero
-    in
     let take_snapshot_on_hit hit =
       hits := hit :: !hits;
       take_snapshot ()
     in
-    let maybe_take_snapshot' hit =
-      match opts.snap_on_delay_over with
-      | None -> take_snapshot_on_hit hit
-      | Some span_thresh ->
-        let now = Time_ns.now () in
-        let open Time_ns_unix.Option.Optional_syntax in
-        (match%optional !last_hit with
-        | Some t ->
-          let interval = Time_ns.diff now t in
-          max_since_last_report := Time_ns.Span.max !max_since_last_report interval;
-          if Time_ns.Span.( > ) interval span_thresh
-          then take_snapshot_on_hit hit
-          else if Time_ns.( > ) now (Time_ns.add !last_report report_interval)
-          then (
-            print_report ();
-            last_report := now)
-        | _ -> ());
-        last_hit := Time_ns_unix.Option.some now
-    in
-    let maybe_take_snapshot hit =
-      match opts.duration_thresh with
-      | None -> maybe_take_snapshot' hit
-      | Some duration_thresh ->
-        let _, { Breakpoint.Hit.timestamp; passed_timestamp; _ } = hit in
-        let duration = Time_ns.Span.of_int_ns (timestamp - passed_timestamp) in
-        if Time_ns.Span.( > ) duration duration_thresh then maybe_take_snapshot' hit
-    in
     let breakpoint_done =
       match snap_loc with
-      | None ->
-        Core.eprintf "[Couldn't find symbol. Will still snapshot on end]\n%!";
-        Deferred.unit
+      | None -> Deferred.unit
       | Some { Elf.Stop_info.name; addr; _ } ->
         Core.eprintf "[Attaching to %s @ 0x%016Lx]\n%!" name addr;
         (* This is a safety feature so that if you accidentally attach to a symbol that
@@ -225,11 +192,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            breakpoint once before the breakpoint gets disabled. In [multi_snapshot] mode
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
-        let single_hit =
-          (not opts.multi_snapshot)
-          && Option.is_none opts.snap_on_delay_over
-          && Option.is_none opts.duration_thresh
-        in
+        let single_hit = not opts.multi_snapshot in
         let bp = Breakpoint.breakpoint_fd pid ~addr:(Int.of_int64_exn addr) ~single_hit in
         let bp = Or_error.ok_exn bp in
         let fd =
@@ -241,7 +204,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let rec read_evs snapshot_enabled =
           match Breakpoint.next_hit bp with
           | Some hit ->
-            if snapshot_enabled then maybe_take_snapshot (name, hit);
+            if snapshot_enabled then take_snapshot_on_hit (name, hit);
             read_evs false
           | None -> ()
         in
@@ -269,11 +232,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Backend.Recording.finish_recording recording
   ;;
 
-  let run_and_record ?elf ~command record_opts =
+  let run_and_record ~elf ~command record_opts =
     let open Deferred.Or_error.Let_syntax in
     let argv = Array.of_list command in
     let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
-    let%bind attachment = attach ?elf record_opts pid in
+    let%bind attachment = attach ~elf record_opts pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
         UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
@@ -282,7 +245,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   let attach_and_record ?elf record_opts pid =
-    let%bind.Deferred.Or_error attachment = attach ?elf record_opts pid in
+    let%bind.Deferred.Or_error attachment = attach ~elf record_opts pid in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
@@ -310,48 +273,38 @@ module Make_commands (Backend : Backend_intf.S) = struct
         ~doc:
           "FILE executable to extract information from, default is to use the first part \
            of COMMAND"
-    and snap_symbol =
+    and when_to_snapshot =
       flag
-        "-symbol"
+        "-trigger"
         (optional string)
         ~doc:
-          "SYMBOL take a snapshot when a symbol matching this regex is called, lets you \
-           pick a symbol with fzf if many match, use the empty string to show all \
-           symbols, defaults to Magic_trace.take_snapshot"
-    and snap_on_delay_over =
-      flag
-        "-delay-thresh"
-        (optional Time_ns_unix.Span.arg_type)
-        ~doc:"SPAN only snapshot when delay between symbol calls is longer than this"
-    and duration_thresh =
-      flag
-        "-duration-thresh"
-        (optional Time_ns_unix.Span.arg_type)
-        ~doc:"SPAN only snapshot intervals between mark_start and take_snapshot over this"
-    and use_filter =
-      flag
-        "-immediate-stop"
-        no_arg
-        ~doc:"stop immediately on snapshot, may crash kernel on EL8"
+          "SYMBOL Decides when magic-trace takes a trace. There are three trigger modes \
+           to choose from:\n\
+           1) If you do not provide [-trigger], magic-trace takes a snapshot when either \
+           it or the application under trace ends. You can Ctrl+C magic-trace to \
+           manually trigger a snapshot.\n\
+           2) If you provide [-trigger $], magic-trace will open up a fuzzy-find dialog \
+           to help you choose a symbol to trace.\n\
+           3) If you provide [-trigger <FUNCTION NAME>], magic-trace will snapshot when \
+           the application being traced calls the given function. This takes the \
+           fully-mangled name, so if you're using anything except C, fuzzy-find mode \
+           will probably be easier to use. [-trigger .] is a shorthand for [-trigger \
+           magic_trace_stop_indicator]."
+      |> map ~f:(function
+             | None -> When_to_snapshot.Magic_trace_or_the_application_terminates
+             | Some "$" -> Application_calls_a_function Use_fzf_to_select_one
+             | Some "." ->
+               Application_calls_a_function
+                 (User_selected Magic_trace.Private.stop_symbol)
+             | Some symbol -> Application_calls_a_function (User_selected symbol))
     and multi_snapshot =
       flag "-multi-snapshot" no_arg ~doc:"allow taking multiple snapshots if possible"
     and backend_opts = Backend.Record_opts.param in
     fun ~default_executable ~f ->
-      (match duration_thresh, snap_symbol with
-      | Some _, Some _ ->
-        failwith
-          "Can't use -duration-thresh while using -symbol, the duration only works with \
-           Magic_trace.take_snapshot, try -delay-thresh instead."
-      | _ -> ());
       let executable =
         match executable_override with
         | Some path -> path
         | None -> default_executable ()
-      in
-      let snap_symbol =
-        match snap_symbol with
-        | Some sym -> Re.Posix.re sym |> Re.compile
-        | None -> Re.str Magic_trace.Private.stop_symbol |> Re.whole_string |> Re.compile
       in
       let record_dir, cleanup =
         match record_dir with
@@ -367,13 +320,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
         (fun () ->
           f
             { Record_opts.backend_opts
-            ; use_filter
             ; multi_snapshot
-            ; snap_symbol
+            ; when_to_snapshot
             ; record_dir
             ; executable
-            ; snap_on_delay_over
-            ; duration_thresh
             })
   ;;
 
@@ -407,9 +357,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> failwithf "Can't find executable for %s" cmd ()
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-             let elf = Elf.create opts.executable in
-             let%bind () = run_and_record ?elf ~command opts in
-             decode_to_trace ?elf ~record_dir:opts.record_dir decode_opts))
+             let { Record_opts.executable; when_to_snapshot; _ } = opts in
+             let%bind elf = create_elf ~executable ~when_to_snapshot in
+             let%bind () = run_and_record ~elf ~command opts in
+             decode_to_trace ~elf ~record_dir:opts.record_dir decode_opts))
   ;;
 
   let select_pid () =
@@ -472,9 +423,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
            Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
          in
          record_opt_fn ~default_executable ~f:(fun opts ->
-             let elf = Elf.create opts.executable in
+             let { Record_opts.executable; when_to_snapshot; _ } = opts in
+             let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind () = attach_and_record ?elf opts pid in
-             decode_to_trace ?elf ~record_dir:opts.record_dir decode_opts))
+             decode_to_trace ~elf ~record_dir:opts.record_dir decode_opts))
   ;;
 
   let decode_command =
@@ -490,8 +442,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
            ~doc:"FILE executable to extract information from"
        in
        fun () ->
+         (* Doesn't use create_elf because there's no need to check that the binary has symbols if
+            we're trying to snapshot it. *)
          let elf = Elf.create executable in
-         decode_to_trace ?elf ~record_dir decode_opts)
+         decode_to_trace ~elf ~record_dir decode_opts)
   ;;
 
   let commands =

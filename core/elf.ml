@@ -41,18 +41,10 @@ let create filename =
       let statically_mappable = is_non_pie_executable header in
       let debug = Owee_elf.find_section_body buf sections ~section_name:".debug_line" in
       Some { string; symbol; debug; base_offset; filename; statically_mappable }
-    | _, _ ->
-      Core.eprintf
-        "[Unable to find string or symbol table, will be unable to trigger on specific \
-         symbol. Was the binary built without debug info?]\n\
-         %!";
-      None
+    | _, _ -> None
   with
   | Owee_buf.Invalid_format _ ->
-    Core.eprintf
-      "[Invalid or unknown debug info format, will be unable to trigger on specific \
-       symbol.]\n\
-       %!";
+    Core.eprintf "Invalid or unknown debug info format.\n";
     None
 ;;
 
@@ -74,6 +66,33 @@ let matching_functions t symbol_re =
         | `Duplicate -> ())
       | _ -> ());
   !res
+;;
+
+let find_symbol t name =
+  let some_name = Some name in
+  with_return (fun return ->
+      Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
+          if is_func symbol
+             && [%compare.equal: string option]
+                  (Owee_elf.Symbol_table.Symbol.name symbol t.string)
+                  some_name
+          then return.return (Some symbol));
+      None)
+;;
+
+let all_symbols t =
+  let res = String.Table.create () in
+  Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
+      if is_func symbol
+      then (
+        match Owee_elf.Symbol_table.Symbol.name symbol t.string with
+        | None -> ()
+        | Some name ->
+          (* Duplicate symbols are possible if a symbol is in both the dynamic and static
+           symbol tables. *)
+          (match Hashtbl.add res ~key:name ~data:symbol with
+          | `Ok | `Duplicate -> ())));
+  String.Table.to_alist res
 ;;
 
 let symbol_stop_info t pid symbol =

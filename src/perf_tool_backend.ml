@@ -31,18 +31,8 @@ module Recording = struct
     | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
   ;;
 
-  let attach_and_record
-      { Record_opts.multi_thread; full_execution }
-      ~record_dir
-      ?filter
-      pid
-    =
+  let attach_and_record { Record_opts.multi_thread; full_execution } ~record_dir pid =
     let%bind capabilities = Perf_capabilities.detect_exn () in
-    let opts =
-      match filter with
-      | None -> []
-      | Some filter -> [ "--filter"; filter ]
-    in
     let thread_opts =
       match multi_thread with
       | false -> [ "--per-thread"; "-t" ]
@@ -64,8 +54,7 @@ module Recording = struct
       [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
       @ thread_opts
       @ [ Pid.to_int pid |> Int.to_string ]
-      @ (if full_execution then [] else [ "--snapshot" ])
-      @ opts
+      @ if full_execution then [] else [ "--snapshot" ]
     in
     if debug_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)

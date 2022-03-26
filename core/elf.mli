@@ -19,6 +19,9 @@ val addr_table : t -> Addr_table.t
     suitable for asking the user to disambiguate. *)
 val matching_functions : t -> Re.re -> Owee_elf.Symbol_table.Symbol.t String.Map.t
 
+val all_symbols : t -> (string * Owee_elf.Symbol_table.Symbol.t) list
+val find_symbol : t -> string -> Owee_elf.Symbol_table.Symbol.t option
+
 module Symbol_resolver : sig
   type nonrec t =
     { elf : t
