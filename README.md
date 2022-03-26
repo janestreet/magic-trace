@@ -13,12 +13,11 @@
   <img src="https://img.shields.io/github/license/janestreet/magic-trace?style=flat-square"/>
 </p>
 
-`magic-trace` is a tool for diagnosing tricky performance issues using
-Intel Processor Trace. You tell it a function and attach it to a
-running process, and when that function is called it'll detach and give
-you a visualization of everything that happened in the around 10ms
-leading up to that function call. Here's me zoomed in to about 10us of
-this data, but it has timing resolution of around 40ns:
+Magic-trace uses Intel PT to tell you what just happened. You give it a function name. then, it attaches to a running process and when that function is called it will show you everything that happened for ~10ms (varies, and is partially configurable) leading up to that function call.
+
+There's also a lazy way to use this: attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, and see a random trace of your program. This is especially useful if your program is being slow and you don't know why.
+
+Magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing. For example, here's 10us of an ocaml program's startup procedure, with timing resolution of around 40ns:
 
 ![10us of OCaml program startup](docs/assets/example-trace.png) 
 
