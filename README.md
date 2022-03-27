@@ -1,5 +1,5 @@
 <h1 align="center">
-  <img src="https://user-images.githubusercontent.com/128969/160190311-6b614b68-ab0a-430d-9cc5-c6759d9dc118.svg?sanitize=true#gh-dark-mode-only" width="150px"><img src="https://user-images.githubusercontent.com/128969/160190307-f3fdc6bc-f6f9-418f-8058-a5c71ed3ab44.svg?sanitize=true#gh-light-mode-only" width="150px">
+  <img src="docs/assets/logo-dark.svg?sanitize=true#gh-dark-mode-only" width="150px"><img src="docs/assets/logo-light.svg?sanitize=true#gh-light-mode-only" width="150px">
   <br>
   magic-trace
 </h1>
@@ -42,15 +42,15 @@ magic-trace traces *all control flow* in the snapshot, and that means you can ge
 
 6. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
 
-![](https://user-images.githubusercontent.com/128969/160213103-7c5d9b07-793c-43f1-9fe1-d56ded1c98e5.png)
+![](docs/assets/perfetto-1.png)
 
 7. That should have expanded into a trace. Your screen should now look something like this:
 
-![](https://user-images.githubusercontent.com/128969/160200722-aac49645-e0cc-4ebf-a149-e0c04c2f23d0.png)
+![](docs/assets/perfetto-2.png)
 
 8. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> and the scroll wheel to navigate around. <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful), <kbd>S</kbd> zooms out, <kbd>A</kbd> moves left, <kbd>D</kbd> moves right, and scroll wheel moves your viewport up and down the stack. You'll only need to scroll to see particularly deep stack traces, it's probably not useful for this example. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
 
-![](https://user-images.githubusercontent.com/128969/160201314-33ee72d0-c0b0-41e4-86e2-e80a0075cc2b.png)
+![](docs/assets/perfetto-3.png)
 
 9. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~3us.
 
