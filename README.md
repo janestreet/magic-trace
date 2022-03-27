@@ -67,6 +67,7 @@ Some ideas about where you might want to call the stop indicator:
 - If you're using an asynchronous runtime, any time a scheduler cycle takes too long.
 - In a server, when a request takes a surprisingly long time.
 - After the garbage collector runs, to see what it's doing and what it interrupted.
+- After a compiler pass has completed.
 
 You may leave the stop indicator in production code. It doesn't need to do anything in particular, magic-trace just needs the name. It is just an empty, but not inlined, function. It will cost ~10us to call, but *only when magic-trace actually uses it to take a snapshot*.
 
