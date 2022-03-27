@@ -19,7 +19,7 @@ Magic-trace uses Intel PT to tell you what just happened. You give it a function
 
 There's also a lazy way to use this: attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, and see a random trace of your program. This is especially useful if your program is being slow and you don't know why.
 
-Magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing. For example, here's 10us of an ocaml program's startup procedure, with timing resolution of around 40ns:
+Magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing.
 
 ![](https://user-images.githubusercontent.com/128969/160288084-d91d838b-79a1-4a5e-bc62-0ff459b4cfcb.mov)
 
