@@ -21,7 +21,7 @@ There's also a lazy way to use this: attach it to a running process and detatch 
 
 magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing.
 
-![](https://user-images.githubusercontent.com/128969/160288084-d91d838b-79a1-4a5e-bc62-0ff459b4cfcb.mov)
+![](docs/assets/example.mov)
 
 # Getting started
 
