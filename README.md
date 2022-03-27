@@ -15,7 +15,7 @@
   </a>
 </p>
 
-Magic-trace uses Intel PT to tell you what just happened. You give it a function name. Then, it attaches to a running process and when that function is called it will show you everything that happened for ~10ms (varies, and is partially configurable) leading up to that function call.
+Magic-trace uses Intel PT to tell you what just happened. You give it a function name. Then, it attaches to a running process and when that function is called it will show you everything that happened for ~10ms (varies, and is partially configurable) leading up to that function call, with ~40ns timing resolution.
 
 There's also a lazy way to use this: attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, and see a random trace of your program. This is especially useful if your program is being slow and you don't know why.
 
