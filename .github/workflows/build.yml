@@ -21,14 +21,12 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}
-          restore-keys: |
-            ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
-        uses: ocaml/setup-ocaml@v1
+        uses: ocaml/setup-ocaml@v2
         with:
-          ocaml-version: ${{ matrix.ocaml-version }}
+          ocaml-compiler: ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda
 
       - run: opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
 
