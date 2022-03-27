@@ -88,7 +88,7 @@ If you'd like to contribute:
 
 If you're on the fence about trying this out, we've collected some [testimonials](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews) from other users.
 
-# Privacy
+# Privacy policy
 
 magic-trace does not send your code or derivatives of your code (including traces) anywhere. Perfetto runs entirely in your browser and therefore also does not send your trace anywhere. If you're worried about that changing one day, build your own local copy of the perfetto UI locally and use that instead.
 
