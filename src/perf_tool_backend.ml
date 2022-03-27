@@ -113,58 +113,92 @@ module Perf_line = struct
   let report_itraces = "b"
   let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
 
-  let kind_and_ip_re =
+  let line_re =
     Re.Posix.re
-      {|(call|return|tr strt|tr end|tr end  call|tr end  return|tr end  syscall|jmp|jcc) +([0-9a-f]+) (.*)|}
+      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|tr end|tr strt tr end|tr end  call|tr end  return|tr end  syscall|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
     |> Re.compile
   ;;
 
-  let to_event line =
+  let symbol_and_offset_re = Re.Posix.re {|^(.*)\+(0x[0-9a-f]+)$|} |> Re.compile
+
+  let to_event line : Event.t =
     try
-      Scanf.sscanf
-        line
-        " %d/%d %d.%d: %s@=> %Lx %s@$"
-        (fun pid tid time_hi time_lo kind_and_ip addr rest ->
-          match Re.Group.all (Re.exec kind_and_ip_re kind_and_ip) with
-          | [| _; kind; ip_string; ip_rest |] ->
-            let ip =
-              try Scanf.sscanf ip_string "%Lx" (fun ip -> ip) with
-              | Scanf.Scan_failure _ | End_of_file -> 0L
-            in
-            let parse_symbol_offset str =
-              try Scanf.sscanf str "%s@+0x%x" (fun symbol offset -> symbol, offset) with
-              | Scanf.Scan_failure _ | End_of_file -> "[unknown]", 0
-            in
-            let ip_symbol, ip_offset = parse_symbol_offset ip_rest in
-            let symbol, offset = parse_symbol_offset rest in
-            { Event.thread =
-                { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-                ; tid = (if tid = 0 then None else Some tid)
-                }
-            ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
-            ; kind =
-                (match String.strip kind with
-                | "call" -> Call
-                | "return" -> Return
-                | "tr strt" -> Start
-                | "tr end" -> End None
-                | "tr end  call" -> End Call
-                | "tr end  return" -> End Return
-                | "tr end  syscall" -> End Syscall
-                | "jmp" -> Jump
-                | "jcc" -> Jump
-                | kind -> raise_s [%message "unrecognized perf event" (kind : string)])
-            ; addr
-            ; symbol
-            ; offset
-            ; ip
-            ; ip_symbol
-            ; ip_offset
+      match Re.Group.all (Re.exec line_re line) with
+      | [| _
+         ; pid
+         ; tid
+         ; time_hi
+         ; time_lo
+         ; kind
+         ; src_instruction_pointer
+         ; src_symbol_and_offset
+         ; dst_instruction_pointer
+         ; dst_symbol_and_offset
+        |] ->
+        let pid = Int.of_string pid in
+        let tid = Int.of_string tid in
+        let time_lo =
+          (* In practice, [time_lo] seems to always be 9 decimal places, but it seems good to guard
+             against other possibilities. *)
+          let num_decimal_places = String.length time_lo in
+          match Ordering.of_int (Int.compare num_decimal_places 9) with
+          | Less -> Int.of_string time_lo * Int.pow 10 (9 - num_decimal_places)
+          | Equal -> Int.of_string time_lo
+          | Greater -> Int.of_string (String.prefix time_lo 9)
+        in
+        let time_hi = Int.of_string time_hi in
+        let int64_of_hex_string str =
+          try Scanf.sscanf str "%Lx" Fn.id with
+          | Scanf.Scan_failure _ | End_of_file -> 0L
+        in
+        let src_instruction_pointer = int64_of_hex_string src_instruction_pointer in
+        let dst_instruction_pointer = int64_of_hex_string dst_instruction_pointer in
+        let parse_symbol_and_offset str =
+          match Re.Group.all (Re.exec symbol_and_offset_re str) with
+          | [| _; symbol; offset |] -> symbol, Int.Hex.of_string offset
+          | _ | (exception _) -> "[unknown]", 0
+        in
+        let src_symbol, src_symbol_offset =
+          parse_symbol_and_offset src_symbol_and_offset
+        in
+        let dst_symbol, dst_symbol_offset =
+          parse_symbol_and_offset dst_symbol_and_offset
+        in
+        { thread =
+            { pid = (if pid = 0 then None else Some (Pid.of_int pid))
+            ; tid = (if tid = 0 then None else Some tid)
             }
-          | results ->
-            raise_s
-              [%message
-                "Regex of expected perf output did not match." (results : string array)])
+        ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
+        ; kind =
+            (match String.strip kind with
+            | "call" -> Call
+            | "return" -> Return
+            | "tr strt" -> Start
+            | "tr end" -> End None
+            | "tr end  call" -> End Call
+            | "tr end  return" -> End Return
+            | "tr end  syscall" -> End Syscall
+            | "jmp" -> Jump
+            | "jcc" -> Jump
+            (* CR-someday wduff: I saw "tr strt tr end" in practice, but I'm not sure what we want
+               to do with it. Calling it out redundantly here for now. *)
+            | ("tr strt tr end" as kind) | kind ->
+              raise_s [%message "unrecognized perf event" (kind : string)])
+            (* CR-someday wduff: These names make a lot more sense to me than the names that were here
+           before, but maybe I'm missing some context. We should either change the names in
+           [Event.t], or change them here, or something in between. That said, it seems best to
+           separate figuring out the names from the present improvements. *)
+        ; addr = dst_instruction_pointer
+        ; symbol = dst_symbol
+        ; offset = dst_symbol_offset
+        ; ip = src_instruction_pointer
+        ; ip_symbol = src_symbol
+        ; ip_offset = src_symbol_offset
+        }
+      | results ->
+        raise_s
+          [%message
+            "Regex of expected perf output did not match." (results : string array)]
     with
     | exn ->
       raise_s
@@ -215,6 +249,68 @@ module Perf_line = struct
            (ip 0x9bc6db)
            (ip_symbol "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run")
            (ip_offset 0x1eb)) |}]
+      ;;
+
+      let%expect_test "OCaml symbol" =
+        to_event
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb =>     56234f4bc7a0 caml_apply2+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
+           (ip 0x56234f77576b) (ip_symbol Base.Comparable.=_2352) (ip_offset 0xb)) |}]
+      ;;
+
+      (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
+         comment above as well.
+
+         {[
+           let%expect_test "Unknown Go symbol" =
+             to_event
+               {|2118573/2118573 770614.599007116:   tr strt tr end                      0 [unknown] =>           4591e1 [unknown]|}
+             |> [%sexp_of: Event.t]
+             |> print_s;
+             [%expect]
+           ;;
+         ]}
+      *)
+
+      let%expect_test "manufactured example 1" =
+        to_event
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 caml_apply2+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
+           (ip 0x56234f77576b) (ip_symbol "x => ") (ip_offset 0xb)) |}]
+      ;;
+
+      let%expect_test "manufactured example 2" =
+        to_event
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 => +0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (addr 0x56234f4bc7a0) (kind Call) (symbol "=> ") (offset 0x0)
+           (ip 0x56234f77576b) (ip_symbol "x => ") (ip_offset 0xb)) |}]
+      ;;
+
+      let%expect_test "manufactured example 3" =
+        to_event
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb =>     56234f4bc7a0 caml_apply2+0x0|}
+        |> [%sexp_of: Event.t]
+        |> print_s;
+        [%expect
+          {|
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (addr 0x56234f4bc7a0) (kind Call) (symbol caml_apply2) (offset 0x0)
+           (ip 0x56234f77576b) (ip_symbol "+ ") (ip_offset 0xb)) |}]
       ;;
     end)
   ;;
