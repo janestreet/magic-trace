@@ -79,10 +79,10 @@ You may leave the stop indicator in production code. It doesn't need to do anyth
 
 If you'd like to contribute:
 
-- [read the build instructions](https://github.com/janestreet/magic-trace/wiki/Build-instructions),
-- [set up your editor](https://ocaml.org/learn/tutorials/up_and_running.html#Editor-support-for-OCaml),
-- [take a quick tour through the codebase](https://github.com/janestreet/magic-trace/wiki/A-quick-tour-of-the-codebase), then
-- [hit up the issue tracker](https://github.com/janestreet/magic-trace/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for a good starter project.
+1. [read the build instructions](https://github.com/janestreet/magic-trace/wiki/Build-instructions),
+1. [set up your editor](https://ocaml.org/learn/tutorials/up_and_running.html#Editor-support-for-OCaml),
+1. [take a quick tour through the codebase](https://github.com/janestreet/magic-trace/wiki/A-quick-tour-of-the-codebase), then
+1. [hit up the issue tracker](https://github.com/janestreet/magic-trace/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for a good starter project.
 
 # Testimonials
 
