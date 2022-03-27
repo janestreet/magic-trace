@@ -88,6 +88,10 @@ If you'd like to contribute:
 
 If you're on the fence about trying this out, we've collected some [testimonials](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews) from other users.
 
+# Privacy
+
+magic-trace does not send your code or derivatives of your code (including traces) anywhere. Perfetto runs entirely in your browser and therefore also does not send your trace anywhere. If you're worried about that changing one day, build your own local copy of the perfetto UI locally and use that instead.
+
 # Acknowledgements
 
-[Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/).
+[Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), and they currently maintain it.
