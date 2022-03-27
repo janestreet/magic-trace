@@ -21,7 +21,7 @@ There's also a lazy way to use this: attach it to a running process and detatch 
 
 Magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing. For example, here's 10us of an ocaml program's startup procedure, with timing resolution of around 40ns:
 
-![10us of OCaml program startup](docs/assets/example-trace.png)
+![](https://user-images.githubusercontent.com/128969/160288084-d91d838b-79a1-4a5e-bc62-0ff459b4cfcb.mov)
 
 # Getting started
 
