@@ -15,6 +15,7 @@ module Event_arg = struct
     | String of String_index.t
     | Int of int
     | Int64 of int64
+    | Pointer of Int64.Hex.t
     | Float of float
   [@@deriving sexp_of, compare]
 
@@ -325,6 +326,9 @@ let rec parse_args ?(args = []) t ~num_args =
       | 6 ->
         let value = extract_string_index t header_high_word ~pos:0 in
         (arg_name, String value) :: args
+      | 7 ->
+        let value = consume_int64_t_exn t.cur_record in
+        (arg_name, Pointer value) :: args
       | _ ->
         (* Advance [rsize - 1] words to the next argument after reading the header word. *)
         advance_iobuf_exn t.cur_record ~by:(8 * (rsize - 1));

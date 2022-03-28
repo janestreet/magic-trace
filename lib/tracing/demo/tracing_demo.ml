@@ -96,7 +96,16 @@ let write_demo_trace t =
     ~name
     ~ticks:20_000_000
     ~counter_id:1;
-  TW.Write_arg.int64 t ~name:category Int64.max_value
+  TW.Write_arg.int64 t ~name:category Int64.max_value;
+  TW.write_counter
+    t
+    ~arg_types:(TW.Arg_types.create ~int64s:1 ())
+    ~thread
+    ~category
+    ~name
+    ~ticks:20_000_000
+    ~counter_id:1;
+  TW.Write_arg.pointer t ~name:category Int64.max_value
 ;;
 
 (** This must be kept in sync with [write_demo_trace] and write a byte-identical trace *)
@@ -163,6 +172,13 @@ let write_demo_trace_high_level writer =
   Trace.write_counter
     trace
     ~args:Trace.Arg.[ "stuff", Int64 Int64.max_value ]
+    ~thread
+    ~category
+    ~name
+    ~time:(time_for_us 20_000);
+  Trace.write_counter
+    trace
+    ~args:Trace.Arg.[ "stuff", Pointer Int64.max_value ]
     ~thread
     ~category
     ~name
