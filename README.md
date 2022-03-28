@@ -15,11 +15,24 @@
   </a>
 </p>
 
-magic-trace uses Intel PT to tell you what just happened. You give it a function name. Then, it attaches to a running process and when that function is called it will show you everything that happened for ~10ms (varies, and is partially configurable) leading up to that function call, with ~40ns timing resolution.
+magic-trace collects and displays high-resolution traces of what a process is doing.
 
-There's also a lazy way to use this: attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, and see a random trace of your program. This is especially useful if your program is being slow and you don't know why.
+It:
 
-magic-trace traces *all control flow* in the snapshot, and that means you can get extremely low granularity data on what your program is doing.
+- has low overhead[^1],
+- doesn't require application changes to use,
+- traces *every function call* with ~40ns resolution, and
+- renders a timeline of call stacks going back (a configurable) ~10ms.
+
+You use it like [`perf`](https://en.wikipedia.org/wiki/Perf_(Linux)): point it to a process and off it goes. The key difference from `perf` is that instead of sampling call stacks throughout time, magic-trace uses [Intel Processor Trace](https://man7.org/linux/man-pages/man1/perf-intel-pt.1.html) to snapshot a ring buffer of *all control flow* leading up to a chosen point in time[^2]. Then, you can explore an interactive timeline of what happened.
+
+You can point magic-trace at a function such that when your application calls it, magic-trace takes a snapshot. Alternatively, you can attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, to see a trace of an arbitrary point in your program.
+
+[^1]: Less than `perf -g`, more than `perf -glbr`.
+
+[^2]: `perf` can do this too, but that's not how most people use it. In fact, if you peek under the hood you'll discover that magic-trace uses `perf` for exactly this.
+
+# Demo
 
 ![](docs/assets/example.mov)
 
