@@ -142,8 +142,8 @@ module Perf_line = struct
   let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
 
   let line_re =
-    Re.Posix.re
-      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  call|tr end  return|tr end  syscall|tr end  sysret|tr end  iret|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    Re.Perl.re
+      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
     |> Re.compile
   ;;
 
