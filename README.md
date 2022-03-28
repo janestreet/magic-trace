@@ -117,4 +117,4 @@ Perfetto runs entirely in your browser and, as far as we can tell, also does not
 
 # Acknowledgements
 
-[Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), and they currently maintain it.
+[Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), who currently maintains it.
