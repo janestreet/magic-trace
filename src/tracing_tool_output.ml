@@ -116,7 +116,10 @@ type t =
 
 let param =
   let%map_open.Command store_path =
-    flag "output" (required string) ~doc:"FILE output file name"
+    flag
+      "output"
+      (optional_with_default "trace.ftf" string)
+      ~doc:"FILE output file name (default: 'trace.ftf')"
   and serve = flag "serve" no_arg ~doc:"also serve the trace"
   and serve_info = Serve.param in
   { serve_info; serve; store_path }
