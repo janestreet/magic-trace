@@ -27,6 +27,7 @@ module Event_arg : sig
   type value =
     | String of String_index.t
     | Int of int
+    | Int64 of int64
     | Float of float
   [@@deriving sexp_of, compare]
 
