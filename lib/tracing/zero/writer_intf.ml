@@ -32,6 +32,7 @@ module type Arg_writers = sig
   val int32 : t -> name:string_id -> int -> unit
   val int63 : t -> name:string_id -> int -> unit
   val int64 : t -> name:string_id -> int64 -> unit
+  val pointer : t -> name:string_id -> int64 -> unit
   val float : t -> name:string_id -> float -> unit
 end
 

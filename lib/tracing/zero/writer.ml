@@ -413,7 +413,7 @@ module Header_tag = struct
   let _uint64 = 4
   let float = 5
   let string = 6
-  let _pointer = 7
+  let pointer = 7
   let _kernel_object_id = 8
 end
 
@@ -453,6 +453,12 @@ module Write_arg_unchecked = struct
     write_int64_t t value
   ;;
 
+  let pointer t ~name value =
+    let asize = 2 in
+    write_int64 t (Header_tag.pointer lor (asize lsl 4) lor (name lsl 16));
+    write_int64_t t value
+  ;;
+
   let float t ~name value =
     let asize = 2 in
     write_int64 t (Header_tag.float lor (asize lsl 4) lor (name lsl 16));
@@ -479,6 +485,11 @@ module Write_arg = struct
   let int64 t ~name value =
     t.pending_args <- Header_template.remove_args t.pending_args ~int64s:1 ();
     Write_arg_unchecked.int64 t ~name value
+  ;;
+
+  let pointer t ~name value =
+    t.pending_args <- Header_template.remove_args t.pending_args ~int64s:1 ();
+    Write_arg_unchecked.pointer t ~name value
   ;;
 
   let float t ~name value =
