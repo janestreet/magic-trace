@@ -35,7 +35,7 @@ You can point magic-trace at a function such that when your application calls it
 # Demo
 
 <p align="center">
-  <img src="https://user-images.githubusercontent.com/128969/160422674-1e78724d-959c-49eb-bed1-a732e82c68b7.gif">
+  <img src="docs/assets/demo.gif"> <!-- ?raw=true -->
 </p>
 
 # Getting started
