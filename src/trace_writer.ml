@@ -155,18 +155,9 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
          that's alright, because we wouldn't have a symbol for it in the executable's
          [debug_info] anyway. *)
       match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
-      | None ->
-        [ ( "address"
-          , (* FIXME(tbrindus): this truncates kernel addresses, because [Tracing] doesn't
-             support int64 types yet. *)
-            Int (Int64.to_int_trunc addr) )
-        ; "symbol", Interned name
-        ]
+      | None -> [ "address", Pointer addr; "symbol", Interned name ]
       | Some (info : Elf.Location.t) ->
-        [ ( "address"
-          , (* FIXME(tbrindus): this truncates kernel addresses, because [Tracing] doesn't
-             support int64 types yet. *)
-            Int (Int64.to_int_trunc addr) )
+        [ "address", Pointer addr
         ; "line", Int info.line
         ; "col", Int info.col
         ; "symbol", Interned name
