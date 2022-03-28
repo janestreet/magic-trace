@@ -136,8 +136,15 @@ let maybe_serve t ~filename =
   else notify_trace ~store_path:t.store_path
 ;;
 
+let maybe_stash_old_trace ~filename =
+  (* Replicate [perf]'s behavior when the output file already exists. *)
+  try Core_unix.rename ~src:filename ~dst:(filename ^ ".old") with
+  | Core_unix.Unix_error (ENOENT, (_ : string), (_ : string)) -> ()
+;;
+
 let write_and_maybe_serve ?num_temp_strs t ~filename ~f =
   let open Deferred.Or_error.Let_syntax in
+  maybe_stash_old_trace ~filename;
   let w = Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:t.store_path () in
   let%bind res = f w in
   let%map () = maybe_serve t ~filename in
