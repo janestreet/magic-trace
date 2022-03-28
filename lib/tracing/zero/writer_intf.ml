@@ -12,7 +12,7 @@ module type Destination = sig
   (** Called mainly when there isn't enough buffer space left to write a message of
       [ensure_capacity] bytes and a new buffer is needed. May also be called in certain
       other situations even if there's enough space in the previous buffer.
-      Any older buffers will no longer be used after calling this function, so it's legal 
+      Any older buffers will no longer be used after calling this function, so it's legal
       for a [Destination] to re-use [Iobuf.t]s to avoid allocating. *)
   val next_buf : ensure_capacity:int -> (read_write, Iobuf.seek) Iobuf.t
 
@@ -30,7 +30,8 @@ module type Arg_writers = sig
 
   val string : t -> name:string_id -> string_id -> unit
   val int32 : t -> name:string_id -> int -> unit
-  val int64 : t -> name:string_id -> int -> unit
+  val int63 : t -> name:string_id -> int -> unit
+  val int64 : t -> name:string_id -> int64 -> unit
   val float : t -> name:string_id -> float -> unit
 end
 

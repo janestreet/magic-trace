@@ -405,41 +405,57 @@ let write_flow_end t ~thread ~ticks ~flow_id =
   write_int64 t flow_id
 ;;
 
+module Header_tag = struct
+  let _null = 0
+  let int32 = 1
+  let _uint32 = 2
+  let int64 = 3
+  let _uint64 = 4
+  let float = 5
+  let string = 6
+  let _pointer = 7
+  let _kernel_object_id = 8
+end
+
 module Write_arg_unchecked = struct
   (* None of the argument writers allocate capacity, the event does that. *)
 
   let string t ~name value =
-    let atype = 6 in
     let asize = 1 in
-    write_int64 t (atype lor (asize lsl 4) lor (name lsl 16) lor (value lsl 32))
+    write_int64
+      t
+      (Header_tag.string lor (asize lsl 4) lor (name lsl 16) lor (value lsl 32))
   ;;
 
   let int32 t ~name value =
-    let atype = 1L in
     let asize = 1L in
     (* int32 arguments can use the most significant bit, so we need to use Int64.t
        and we also need to be careful to truncate the int32 properly. *)
     write_int64_t
       t
       Int64.(
-        atype
+        of_int Header_tag.int32
         lor (asize lsl 4)
         lor (of_int name lsl 16)
         (* because we use Int64 this also truncates to 32 bits *)
         lor (of_int value lsl 32))
   ;;
 
-  let int64 t ~name value =
-    let atype = 3 in
+  let int63 t ~name value =
     let asize = 2 in
-    write_int64 t (atype lor (asize lsl 4) lor (name lsl 16));
+    write_int64 t (Header_tag.int64 lor (asize lsl 4) lor (name lsl 16));
     write_int64 t value
   ;;
 
-  let float t ~name value =
-    let atype = 5 in
+  let int64 t ~name value =
     let asize = 2 in
-    write_int64 t (atype lor (asize lsl 4) lor (name lsl 16));
+    write_int64 t (Header_tag.int64 lor (asize lsl 4) lor (name lsl 16));
+    write_int64_t t value
+  ;;
+
+  let float t ~name value =
+    let asize = 2 in
+    write_int64 t (Header_tag.float lor (asize lsl 4) lor (name lsl 16));
     write_int64_t t (Int64.bits_of_float value)
   ;;
 end
@@ -453,6 +469,11 @@ module Write_arg = struct
   let int32 t ~name value =
     t.pending_args <- Header_template.remove_args t.pending_args ~int32s:1 ();
     Write_arg_unchecked.int32 t ~name value
+  ;;
+
+  let int63 t ~name value =
+    t.pending_args <- Header_template.remove_args t.pending_args ~int64s:1 ();
+    Write_arg_unchecked.int63 t ~name value
   ;;
 
   let int64 t ~name value =

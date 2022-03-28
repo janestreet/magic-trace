@@ -14,6 +14,7 @@ module Event_arg = struct
   type value =
     | String of String_index.t
     | Int of int
+    | Int64 of int64
     | Float of float
   [@@deriving sexp_of, compare]
 
@@ -103,7 +104,7 @@ let consume_int32_exn iobuf =
 
 (* Many things don't use the most significant bit of their word so we can safely use a
    normal OCaml 63 bit int to parse them. *)
-let consume_int64_exn iobuf =
+let consume_int64_trunc_exn iobuf =
   if Iobuf.length iobuf < 8
   then raise Invalid_record
   else Iobuf.Consume.int64_le_trunc iobuf
@@ -196,7 +197,7 @@ let[@inline] extract_thread_index t word ~pos =
 ;;
 
 let[@inline] consume_tick t =
-  let ticks = consume_int64_exn t.cur_record in
+  let ticks = consume_int64_trunc_exn t.cur_record in
   (* We raise [Ticks_too_large] in case a bug (e.g. overflow) caused the ticks value to
      become negative when converted to a 63-bit OCaml int. *)
   if ticks < 0 then raise Ticks_too_large;
@@ -204,7 +205,7 @@ let[@inline] consume_tick t =
 ;;
 
 let parse_metadata_record t =
-  let header = consume_int64_exn t.cur_record in
+  let header = consume_int64_trunc_exn t.cur_record in
   let mtype = extract_field header ~pos:16 ~size:4 in
   match mtype with
   | 1 (* Provider info metadata *) ->
@@ -231,9 +232,9 @@ let parse_metadata_record t =
 ;;
 
 let parse_initialization_record t =
-  let header = consume_int64_exn t.cur_record in
+  let header = consume_int64_trunc_exn t.cur_record in
   let rsize = extract_field header ~pos:4 ~size:12 in
-  let ticks_per_second = consume_int64_exn t.cur_record in
+  let ticks_per_second = consume_int64_trunc_exn t.cur_record in
   if ticks_per_second <= 0 then raise Invalid_tick_rate;
   t.ticks_per_second <- ticks_per_second;
   (* By default, initialization records have size = 2. This checks for the extended
@@ -241,7 +242,7 @@ let parse_initialization_record t =
   if rsize = 4
   then (
     let base_tick = consume_tick t in
-    let base_time_in_ns = consume_int64_exn t.cur_record in
+    let base_time_in_ns = consume_int64_trunc_exn t.cur_record in
     let base_time =
       Time_ns.of_int_ns_since_epoch base_time_in_ns |> Time_ns.Option.some
     in
@@ -254,7 +255,7 @@ let parse_initialization_record t =
 (* Reads a zero-padded string and stores it at the associated 15-bit index (from 1 to
    32767) in the string table. *)
 let parse_string_record t =
-  let header = consume_int64_exn t.cur_record in
+  let header = consume_int64_trunc_exn t.cur_record in
   let string_index = extract_field header ~pos:16 ~size:15 in
   (* Index 0 is used to denote the empty string. The spec mandates that string records
      which attempt to define it anyways be ignored. *)
@@ -273,14 +274,14 @@ let parse_string_record t =
 (* Reads a PID and TID and stores them at the associated 8-bit index (from 1 to 255) in
    the thread table. *)
 let parse_thread_record t =
-  let header = consume_int64_exn t.cur_record in
+  let header = consume_int64_trunc_exn t.cur_record in
   let thread_index = extract_field header ~pos:16 ~size:8 in
   (* Index 0 is reserved for inline thread refs, sets to it must be ignored. *)
   if thread_index = 0
   then None
   else (
-    let process_koid = consume_int64_exn t.cur_record in
-    let thread_koid = consume_int64_exn t.cur_record in
+    let process_koid = consume_int64_trunc_exn t.cur_record in
+    let thread_koid = consume_int64_trunc_exn t.cur_record in
     let thread =
       { Thread.pid = process_koid
       ; tid = thread_koid
@@ -310,8 +311,13 @@ let rec parse_args ?(args = []) t ~num_args =
          collapse them into an Int with value zero. *)
       | 0 | 1 -> (arg_name, Int header_high_word) :: args
       | 3 ->
-        let value = consume_int64_exn t.cur_record in
-        (arg_name, Int value) :: args
+        let value = consume_int64_t_exn t.cur_record in
+        let arg =
+          match Int64.to_int value with
+          | Some value -> Event_arg.Int value
+          | None -> Int64 value
+        in
+        (arg_name, arg) :: args
       | 5 ->
         let value_as_int64 = consume_int64_t_exn t.cur_record in
         let value = Int64.float_of_bits value_as_int64 in
@@ -330,14 +336,14 @@ let rec parse_args ?(args = []) t ~num_args =
 ;;
 
 let parse_kernel_object_record t =
-  let header = consume_int64_exn t.cur_record in
+  let header = consume_int64_trunc_exn t.cur_record in
   let obj_type = extract_field header ~pos:16 ~size:8 in
   let name = extract_string_index t header ~pos:24 in
   let name_str = lookup_string_exn t ~index:name in
   let num_args = extract_field header ~pos:40 ~size:4 in
   match obj_type with
   | 1 (* process *) ->
-    let koid = consume_int64_exn t.cur_record in
+    let koid = consume_int64_trunc_exn t.cur_record in
     Int.Table.set t.process_names ~key:koid ~data:name_str;
     (* Update the name of any matching process in the process table. *)
     Int.Table.iter t.thread_table ~f:(fun thread ->
@@ -346,7 +352,7 @@ let parse_kernel_object_record t =
     then t.warnings.num_unparsed_args <- t.warnings.num_unparsed_args + num_args;
     Some (Record.Process_name_change { name; pid = koid })
   | 2 (* thread *) ->
-    let koid = consume_int64_exn t.cur_record in
+    let koid = consume_int64_trunc_exn t.cur_record in
     if num_args > 0
     then (
       (* We expect the first arg to be a koid argument named "process". *)
@@ -357,7 +363,7 @@ let parse_kernel_object_record t =
       if arg_type = 8 && String.( = ) arg_name "process"
       then (
         consume_int32_exn t.cur_record |> (ignore : int -> unit);
-        let process_koid = consume_int64_exn t.cur_record in
+        let process_koid = consume_int64_trunc_exn t.cur_record in
         Thread_kernel_object.Table.set
           t.thread_names
           ~key:(process_koid, koid)
@@ -397,21 +403,21 @@ let parse_event_record t =
     match ev_type with
     | 0 -> Some Instant
     | 1 ->
-      let counter_id = consume_int64_exn t.cur_record in
+      let counter_id = consume_int64_trunc_exn t.cur_record in
       Some (Counter { id = counter_id })
     | 2 -> Some Duration_begin
     | 3 -> Some Duration_end
     | 4 ->
-      let end_time_tick = consume_int64_exn t.cur_record in
+      let end_time_tick = consume_int64_trunc_exn t.cur_record in
       Some (Duration_complete { end_time = event_tick_to_span t end_time_tick })
     | 8 ->
-      let flow_correlation_id = consume_int64_exn t.cur_record in
+      let flow_correlation_id = consume_int64_trunc_exn t.cur_record in
       Some (Flow_begin { flow_correlation_id })
     | 9 ->
-      let flow_correlation_id = consume_int64_exn t.cur_record in
+      let flow_correlation_id = consume_int64_trunc_exn t.cur_record in
       Some (Flow_step { flow_correlation_id })
     | 10 ->
-      let flow_correlation_id = consume_int64_exn t.cur_record in
+      let flow_correlation_id = consume_int64_trunc_exn t.cur_record in
       Some (Flow_end { flow_correlation_id })
     (* Unsupported event type: Async begin, instant or end *)
     | _ -> None

@@ -66,7 +66,7 @@ let write_demo_trace t =
     ~category
     ~name
     ~ticks:40_000_000;
-  TW.Write_arg.int64 t ~name Int.min_value;
+  TW.Write_arg.int63 t ~name Int.min_value;
   TW.Write_arg.int32 t ~name:category (-1);
   TW.Write_arg.float t ~name:proc_name (-1.0);
   TW.write_flow_end t ~thread ~ticks:20_000_000 ~flow_id:1;
@@ -87,7 +87,16 @@ let write_demo_trace t =
     ~name
     ~ticks:20_000_000
     ~counter_id:1;
-  TW.Write_arg.float t ~name:category 2.5
+  TW.Write_arg.float t ~name:category 2.5;
+  TW.write_counter
+    t
+    ~arg_types:(TW.Arg_types.create ~int64s:1 ())
+    ~thread
+    ~category
+    ~name
+    ~ticks:20_000_000
+    ~counter_id:1;
+  TW.Write_arg.int64 t ~name:category Int64.max_value
 ;;
 
 (** This must be kept in sync with [write_demo_trace] and write a byte-identical trace *)
@@ -147,6 +156,13 @@ let write_demo_trace_high_level writer =
   Trace.write_counter
     trace
     ~args:Trace.Arg.[ "stuff", Float 2.5 ]
+    ~thread
+    ~category
+    ~name
+    ~time:(time_for_us 20_000);
+  Trace.write_counter
+    trace
+    ~args:Trace.Arg.[ "stuff", Int64 Int64.max_value ]
     ~thread
     ~category
     ~name
