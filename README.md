@@ -118,3 +118,9 @@ Perfetto runs entirely in your browser and, as far as we can tell, also does not
 # Acknowledgements
 
 [Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), who currently maintains it.
+
+Intel PT is the foundational technology upon which magic-trace rests. We'd like to thank the people at Intel for their years-long efforts to make it available, despite its slow uptake in the greater software community.
+
+magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, everyone who contributed.
+
+magic-trace doesn't do any visualization itself, it relies entirely on Perfetto. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
