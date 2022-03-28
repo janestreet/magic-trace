@@ -77,7 +77,7 @@ The way magic-trace works is that it continuously records control flow into a ri
 
 There are two ways to take a snapshot:
 
-You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates without already having taken a snapshot, it takes a snapshot.
+You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates without already having taken a snapshot, it takes a snapshot of the end of the program.
 
 You can also trigger snapshots when the application calls a function. To do so, pass magic-trace
 the `-trigger` flag.
