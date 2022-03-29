@@ -73,45 +73,42 @@ module Exn_info = struct
     t
   ;;
 
+  let address_get t i =
+    let addr, _ = t.(i) in
+    addr
+  ;;
+
   let first_index_greater_than_or_equal_to t x =
-    let i = ref 0 in
-    let v = ref None in
-    let break = ref false in
-    while !i < Array.length t && not !break do
-      let addr, _ = t.(!i) in
-      if Int64.(addr >= x)
-      then (
-        v := Some !i;
-        break := true)
-      else incr i
-    done;
-    !v
+    Binary_search.binary_search
+      t
+      ~length:Array.length
+      ~get:address_get
+      ~compare:Int64.compare
+      `First_greater_than_or_equal_to
+      x
   ;;
 
   let last_index_less_than_or_equal_to t x =
-    let i = ref 0 in
-    let v = ref None in
-    let break = ref false in
-    while !i < Array.length t && not !break do
-      let addr, _ = t.(!i) in
-      if Int64.(addr <= x)
-      then (
-        v := Some !i;
-        incr i)
-      else break := true
-    done;
-    !v
+    Binary_search.binary_search
+      t
+      ~length:Array.length
+      ~get:address_get
+      ~compare:Int64.compare
+      `Last_less_than_or_equal_to
+      x
   ;;
 
-  let classify_range ~from:from' ~to_:to_' t =
+  let classify_range ~from:from' ~to_:to_' ~f t =
     let from = first_index_greater_than_or_equal_to t from' in
     let to_ = last_index_less_than_or_equal_to t to_' in
     match from, to_ with
     | Some from, Some to_ ->
-      let classified = ref [] in
       for i = from to to_ do
-        classified := t.(i) :: !classified
-      done;
+        f t.(i)
+      done
+    (*
+   let classified = ref [] in
+   ...
       let range = !classified |> List.rev in
       if not (List.is_empty range)
       then (
@@ -123,7 +120,8 @@ module Exn_info = struct
               (to_' : Int64.Hex.t)
               (range : (Int64.Hex.t * Kind.t) list)]);
       range
-    | _, _ -> []
+*)
+    | _, _ -> ()
   ;;
 
   let%test_module _ =
@@ -131,7 +129,9 @@ module Exn_info = struct
       open Core
 
       let classify_range ~from ~to_ t =
-        let range = classify_range ~from ~to_ t in
+        let range = ref [] in
+        classify_range ~from ~to_ ~f:(fun r -> range := r :: !range) t;
+        let range = !range |> List.rev in
         Core.print_s
           [%message "" (from : int64) (to_ : int64) (range : (int64 * Kind.t) list)]
       ;;
@@ -144,29 +144,20 @@ module Exn_info = struct
             ~enter_traps:[| 50L |]
         in
         classify_range ~from:0L ~to_:1L t;
-        [%expect
-          {|
-          ((from' 0x0) (to_' 0x1) (range ((0x0 Push_trap))))
+        [%expect {|
           ((from 0) (to_ 1) (range ((0 Push_trap)))) |}];
         classify_range ~from:0L ~to_:4L t;
-        [%expect
-          {|
-          ((from' 0x0) (to_' 0x4) (range ((0x0 Push_trap) (0x2 Pop_trap))))
+        [%expect {|
           ((from 0) (to_ 4) (range ((0 Push_trap) (2 Pop_trap)))) |}];
         classify_range ~from:3L ~to_:7L t;
-        [%expect
-          {|
-          ((from' 0x3) (to_' 0x7) (range ((0x5 Push_trap))))
+        [%expect {|
           ((from 3) (to_ 7) (range ((5 Push_trap)))) |}];
         classify_range ~from:49L ~to_:100L t;
         [%expect
           {|
-          ((from' 0x31) (to_' 0x64) (range ((0x32 Enter_trap) (0x64 Pop_trap))))
           ((from 49) (to_ 100) (range ((50 Enter_trap) (100 Pop_trap)))) |}];
         classify_range ~from:75L ~to_:101L t;
-        [%expect
-          {|
-          ((from' 0x4b) (to_' 0x65) (range ((0x64 Pop_trap))))
+        [%expect {|
           ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}];
         classify_range ~from:75L ~to_:80L t;
         [%expect {| ((from 75) (to_ 80) (range ())) |}];
@@ -498,7 +489,32 @@ let write_event
             ~trace_mode:(t.trace_mode : Trace_mode.t)
             (event : Event.t)]
   in
-  (match kind with
+  let classify_range ~f =
+    let ret =
+      match thread_info.last_address with
+      | None -> ()
+      | Some from -> Exn_info.classify_range ~from ~to_:ip ~f t.exn_info
+    in
+    thread_info.last_address <- Some addr;
+    ret
+  in
+  classify_range ~f:(fun (addr, kind) ->
+      match kind with
+      | Push_trap ->
+        Core.print_s [%message "push trap" (event : Event.t)];
+        Stack.push inactive_callstacks thread_info.callstack;
+        thread_info.callstack <- new_callstack ();
+        call [%string "[push trap @ %{addr#Int64.Hex}]"]
+      | Pop_trap | Enter_trap ->
+        Core.print_s [%message "trap" (kind : Exn_info.Kind.t) (event : Event.t)];
+        clear_callstack ();
+        flush_all t;
+        (match Stack.pop inactive_callstacks with
+        | Some callstack -> thread_info.callstack <- callstack
+        | None ->
+          Core.print_s [%message "don't have a stack so creating one"];
+          thread_info.callstack <- new_callstack ()));
+  match kind with
   | Call | End Call -> call symbol
   | End None -> call "[untraced]"
   | End Syscall ->
@@ -588,38 +604,5 @@ let write_event
     flush_all t;
     thread_info.last_decode_error_time <- time;
     thread_info.callstack <- new_callstack ()
-  | Jump -> check_current_symbol ());
-  let classify_range () =
-    let ret =
-      match thread_info.last_address with
-      | None -> []
-      | Some from ->
-        if Int64.(from <= ip && from <> 0L)
-        then Exn_info.classify_range ~from ~to_:addr t.exn_info
-        else []
-    in
-    thread_info.last_address <- Some addr;
-    ret
-  in
-  List.iter (classify_range ()) ~f:(fun (_addr, kind) ->
-      match kind with
-      | Push_trap ->
-        Core.print_s [%message "push trap" (event : Event.t)];
-        Stack.push inactive_callstacks thread_info.callstack;
-        thread_info.callstack <- new_callstack ();
-        call "[push trap]"
-      | Pop_trap -> Core.print_s [%message "pop trap" (event : Event.t)]
-      (* Pop the [push trap] *)
-      (*         ret () *)
-      (*         check_current_symbol () *)
-      | Enter_trap ->
-        Core.print_s [%message "enter trap" (event : Event.t)];
-        clear_callstack ();
-        flush_all t;
-        (match Stack.pop inactive_callstacks with
-        | Some callstack -> thread_info.callstack <- callstack
-        | None ->
-          Core.print_s [%message "don't have a stack so creating one"];
-          thread_info.callstack <- new_callstack ());
-        ())
+  | Jump -> check_current_symbol ()
 ;;
