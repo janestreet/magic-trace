@@ -45,19 +45,24 @@ type section = {
     section table. *)
 val read_elf : Owee_buf.t -> header * section array
 
-(** [section_body elf section] returns a sub-buffer with the contents of the
-    [section] of the ELF image. *)
+(** From a buffer pointing to an ELF image, [section_body elf section] returns
+    a sub-buffer with the contents of the [section] of the ELF image. *)
 val section_body : Owee_buf.t -> section -> Owee_buf.t
 
 (** Convenience function to find a section in the section table given its name. *)
 val find_section : section array -> string -> section option
 
-(** Find the body of a section given its name. *)
+(** From a buffer pointing to an ELF image, find the body of a section given its name. *)
 val find_section_body
    : Owee_buf.t
   -> section array
   -> section_name:string
   -> Owee_buf.t option
+
+val debug_line_pointers
+  : Owee_buf.t
+  -> section array
+  -> Owee_debug_line.pointers_to_other_sections
 
 module String_table : sig
   type t
