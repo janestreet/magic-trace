@@ -1,4 +1,4 @@
-///usr/bin/env -S clang++ -gdwarf-4 "$0" -o /tmp/demo && exec /tmp/demo "$@"
+///usr/bin/env -S clang++ "$0" -o /tmp/demo && exec /tmp/demo "$@"
 #include <fstream>
 
 using namespace std;
