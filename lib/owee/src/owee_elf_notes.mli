@@ -14,6 +14,9 @@ val read_desc_size
   -> expected_type:int
   -> int
 
+(** Wrapper around [Owee_elf.find_section] that checks section type is SHT_NOTE. *)
+val find_notes_section : Owee_elf.section array -> string -> Owee_elf.section
+
 exception Section_not_found of string
 
 module Stapsdt : sig
@@ -34,6 +37,18 @@ module Stapsdt : sig
       for version 3 of probes.
       Raises if parsing of notes fails for other reasons. *)
   val iter : Owee_buf.t -> Owee_elf.section array -> f:(t -> unit) -> unit
+
+  (** Returns the start address of the .stapsdt.base
+      section in ELF file, or None if the section is not present. *)
+  val find_base_address : Owee_elf.section array -> int64 option
+
+  (** Adjust an address from a note for the prelink effect.
+      [actual_base] is the start address of the .stapsdt.base
+      section in ELF file, as returned by [find_base_address]
+      and [recorded_base] is the address of that section as it appears
+      in the note. They may be different if there is prelink,
+      because prelink does not adjust notes' content for address offsets. *)
+  val adjust : int64 -> actual_base:int64 -> recorded_base:int64 -> int64
 end
 
 (** [get_buildid buf sections]

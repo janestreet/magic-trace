@@ -105,10 +105,6 @@ module Stapsdt = struct
 
      CR-someday gyorsh: implement full parsing? *)
 
-  (* Adjust for the prelink effect.  [actual_base] is the start address of the .stapsdt.base
-     section in ELF file, and [recorded_base] is the address of that section as it appears
-     in the note. They may be different if there is prelink, because prelink does not adjust
-     notes' content for address offsets. *)
   let adjust addr ~actual_base ~recorded_base =
     Int64.add (Int64.sub actual_base recorded_base) addr
 
@@ -157,18 +153,23 @@ module Stapsdt = struct
     ; args
     }
 
+  let find_base_address sections =
+    match Owee_elf.find_section sections ".stapsdt.base" with
+    | None -> None
+    | Some base_section -> Some base_section.sh_addr
+
   let iter map sections ~f =
     let s = find_notes_section sections ".note.stapsdt" in
-    match Owee_elf.find_section sections ".stapsdt.base" with
+    match find_base_address sections with
     | None ->
       Owee_buf.invalid_format
         (Printf.sprintf
            "Found .note.stapsdt but not .stapsdt.base section\n")
-    | Some base_section ->
+    | Some actual_base ->
       let body = Owee_elf.section_body map s in
       let cursor = Owee_buf.cursor body in
       while not (Owee_buf.at_end cursor) do
-        let note = read cursor ~actual_base:base_section.sh_addr in
+        let note = read cursor ~actual_base in
         f note
       done
 end
