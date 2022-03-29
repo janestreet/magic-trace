@@ -61,7 +61,7 @@ module Exn_info = struct
 
   let addr_compare (addr, _) (addr', _) = Int64.compare addr addr'
 
-  let create ~push_traps ~pop_traps ~enter_traps =
+  let create ~push_traps ~pop_traps ~enter_traps : t =
     let t =
       [ Array.map ~f:(fun addr -> addr, Kind.Push_trap) push_traps
       ; Array.map ~f:(fun addr -> addr, Kind.Pop_trap) pop_traps
@@ -103,16 +103,26 @@ module Exn_info = struct
     !v
   ;;
 
-  let classify_range ~from ~to_ t =
-    let from = first_index_greater_than_or_equal_to t from in
-    let to_ = last_index_less_than_or_equal_to t to_ in
+  let classify_range ~from:from' ~to_:to_' t =
+    let from = first_index_greater_than_or_equal_to t from' in
+    let to_ = last_index_less_than_or_equal_to t to_' in
     match from, to_ with
     | Some from, Some to_ ->
       let classified = ref [] in
       for i = from to to_ do
         classified := t.(i) :: !classified
       done;
-      !classified |> List.rev
+      let range = !classified |> List.rev in
+      if not (List.is_empty range)
+      then (
+        Core.print_endline "";
+        Core.print_s
+          [%message
+            ""
+              (from' : Int64.Hex.t)
+              (to_' : Int64.Hex.t)
+              (range : (Int64.Hex.t * Kind.t) list)]);
+      range
     | _, _ -> []
   ;;
 
@@ -134,20 +144,30 @@ module Exn_info = struct
             ~enter_traps:[| 50L |]
         in
         classify_range ~from:0L ~to_:1L t;
-        [%expect {|
+        [%expect
+          {|
+          ((from' 0x0) (to_' 0x1) (range ((0x0 Push_trap))))
           ((from 0) (to_ 1) (range ((0 Push_trap)))) |}];
         classify_range ~from:0L ~to_:4L t;
-        [%expect {|
+        [%expect
+          {|
+          ((from' 0x0) (to_' 0x4) (range ((0x0 Push_trap) (0x2 Pop_trap))))
           ((from 0) (to_ 4) (range ((0 Push_trap) (2 Pop_trap)))) |}];
         classify_range ~from:3L ~to_:7L t;
-        [%expect {|
+        [%expect
+          {|
+          ((from' 0x3) (to_' 0x7) (range ((0x5 Push_trap))))
           ((from 3) (to_ 7) (range ((5 Push_trap)))) |}];
         classify_range ~from:49L ~to_:100L t;
         [%expect
           {|
+          ((from' 0x31) (to_' 0x64) (range ((0x32 Enter_trap) (0x64 Pop_trap))))
           ((from 49) (to_ 100) (range ((50 Enter_trap) (100 Pop_trap)))) |}];
         classify_range ~from:75L ~to_:101L t;
-        [%expect {| ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}];
+        [%expect
+          {|
+          ((from' 0x4b) (to_' 0x65) (range ((0x64 Pop_trap))))
+          ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}];
         classify_range ~from:75L ~to_:80L t;
         [%expect {| ((from 75) (to_ 80) (range ())) |}];
         classify_range ~from:150L ~to_:200L t;
@@ -216,7 +236,7 @@ let write_hits t hits =
           ~time_end:time))
 ;;
 
-let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
+let create ~trace_mode ~debug_info ~exn_info ~earliest_time ~hits trace =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
         Time_ns.Span.min acc (Time_ns.Span.of_int_ns hit.timestamp))
@@ -227,7 +247,10 @@ let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
     ; thread_info = Hashtbl.create (module Event.Thread)
     ; base_time
     ; trace_mode
-    ; exn_info = Exn_info.create ~push_traps:[||] ~pop_traps:[||] ~enter_traps:[||]
+    ; exn_info =
+        Option.value
+          exn_info
+          ~default:(Exn_info.create ~push_traps:[||] ~pop_traps:[||] ~enter_traps:[||])
     }
   in
   write_hits t hits;
@@ -383,16 +406,8 @@ let is_kernel_address addr = Int64.(addr < 0L)
     constants defined above. *)
 let write_event
     (t : t)
-    ({ Event.thread
-     ; time
-     ; symbol
-     ; kind
-     ; addr
-     ; offset
-     ; ip = _
-     ; ip_symbol = _
-     ; ip_offset = _
-     } as event)
+    ({ Event.thread; time; symbol; kind; addr; offset; ip; ip_symbol = _; ip_offset = _ }
+    as event)
   =
   let time = map_time t time in
   let ({ Thread_info.thread; inactive_callstacks; last_decode_error_time; _ } as
@@ -415,11 +430,6 @@ let write_event
         ; start_events = Deque.create ()
         ; last_address = None
         })
-  in
-  let classify_range () =
-    match thread_info.last_address with
-    | None -> []
-    | Some from -> Exn_info.classify_range ~from ~to_:addr t.exn_info
   in
   let call ?(time = time) name =
     let ev =
@@ -488,23 +498,6 @@ let write_event
             ~trace_mode:(t.trace_mode : Trace_mode.t)
             (event : Event.t)]
   in
-  List.iter (classify_range ()) ~f:(fun (_addr, kind) ->
-      match kind with
-      | Push_trap ->
-        Stack.push inactive_callstacks thread_info.callstack;
-        thread_info.callstack <- new_callstack ();
-        call "[push trap]"
-      | Pop_trap ->
-        (* Pop the [push trap] *)
-        ret ()
-      | Enter_trap ->
-        clear_callstack ();
-        flush_all t;
-        (match Stack.pop inactive_callstacks with
-        | Some callstack -> thread_info.callstack <- callstack
-        | None ->
-          thread_info.callstack <- new_callstack ();
-          check_current_symbol ()));
   (match kind with
   | Call | End Call -> call symbol
   | End None -> call "[untraced]"
@@ -596,5 +589,37 @@ let write_event
     thread_info.last_decode_error_time <- time;
     thread_info.callstack <- new_callstack ()
   | Jump -> check_current_symbol ());
-  thread_info.last_address <- Some addr
+  let classify_range () =
+    let ret =
+      match thread_info.last_address with
+      | None -> []
+      | Some from ->
+        if Int64.(from <= ip && from <> 0L)
+        then Exn_info.classify_range ~from ~to_:addr t.exn_info
+        else []
+    in
+    thread_info.last_address <- Some addr;
+    ret
+  in
+  List.iter (classify_range ()) ~f:(fun (_addr, kind) ->
+      match kind with
+      | Push_trap ->
+        Core.print_s [%message "push trap" (event : Event.t)];
+        Stack.push inactive_callstacks thread_info.callstack;
+        thread_info.callstack <- new_callstack ();
+        call "[push trap]"
+      | Pop_trap -> Core.print_s [%message "pop trap" (event : Event.t)]
+      (* Pop the [push trap] *)
+      (*         ret () *)
+      (*         check_current_symbol () *)
+      | Enter_trap ->
+        Core.print_s [%message "enter trap" (event : Event.t)];
+        clear_callstack ();
+        flush_all t;
+        (match Stack.pop inactive_callstacks with
+        | Some callstack -> thread_info.callstack <- callstack
+        | None ->
+          Core.print_s [%message "don't have a stack so creating one"];
+          thread_info.callstack <- new_callstack ());
+        ())
 ;;

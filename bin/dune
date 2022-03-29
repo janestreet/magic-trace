@@ -1,6 +1,6 @@
 (executables
- (names magic_trace_bin)
- (public_names magic-trace)
+ (names magic_trace_bin raise_test)
+ (public_names magic-trace raise_test)
  (libraries core magic_trace_lib core_unix.command_unix)
  (preprocess
   (pps ppx_jane)))

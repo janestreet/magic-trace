@@ -3,6 +3,7 @@ include module type of Elf_intf
 
 type t
 
+val filename : t -> string
 val create : Filename.t -> t option
 
 (** Returns name, address and filter string for using a symbol as a snapshot point.

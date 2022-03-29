@@ -46,6 +46,7 @@ let write_trace_from_events
     ~verbose
     ~trace_mode
     ?debug_info
+    ?exn_info
     trace
     hits
     (events : Event.t Pipe.Reader.t)
@@ -62,7 +63,9 @@ let write_trace_from_events
         if verbose then Core.print_s (Event.sexp_of_t event);
         { event with time = event.time })
   in
-  let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
+  let writer =
+    Trace_writer.create ~trace_mode ~debug_info ~exn_info ~earliest_time ~hits trace
+  in
   let process_event ev = Trace_writer.write_event writer ev in
   let%map () = Pipe.iter_without_pushback events ~f:process_event in
   Trace_writer.flush_all writer
@@ -83,6 +86,79 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let filename ~record_dir = record_dir ^/ "hits.sexp"
   end
 
+  module Aaaa = struct
+    type t =
+      { push_traps : int64 list
+      ; pop_traps : int64 list
+      ; enter_traps : int64 list
+      }
+
+    let read_note cursor ~actual_base =
+      let descsz =
+        Owee_elf_notes.read_desc_size ~expected_owner:"OCaml" ~expected_type:1 cursor
+      in
+      if descsz < 8 * 4
+      then Owee_buf.invalid_format (Printf.sprintf "Too small size of note %d\n" descsz);
+      let recorded_base = Owee_buf.Read.u64 cursor in
+      let rec loop acc =
+        let addr = Owee_buf.Read.u64 cursor in
+        if Int64.equal addr 0L
+        then acc
+        else (
+          let addr = Owee_elf_notes.Stapsdt.adjust addr ~actual_base ~recorded_base in
+          loop (addr :: acc))
+      in
+      (* order of field initializers matters!! keep in sync with Emit.mlp *)
+      let enter_traps = loop [] in
+      let push_traps = loop [] in
+      let pop_traps = loop [] in
+      { enter_traps; push_traps; pop_traps }
+    ;;
+
+    let print msg l =
+      Core.print_string msg;
+      List.iter ~f:(fun a -> Core.printf " 0x%Lx" a) l;
+      Core.print_endline ""
+    ;;
+
+    let print_traps t =
+      print "enter_traps:" t.enter_traps;
+      print "push_traps:" t.push_traps;
+      print "pop_traps:" t.pop_traps
+    ;;
+
+    let make elf =
+      let path = Elf.filename elf in
+      Core.print_s [%message "file" (path : string)];
+      let buffer = Owee_buf.map_binary path in
+      let _header, sections = Owee_elf.read_elf buffer in
+      try
+        let s = Owee_elf_notes.find_notes_section sections ".note.ocaml_eh" in
+        match Owee_elf_notes.Stapsdt.find_base_address sections with
+        | None -> raise_s [%message "Found .note.ocaml_eh but not .stapsdt.base section"]
+        | Some actual_base ->
+          let body = Owee_elf.section_body buffer s in
+          let cursor = Owee_buf.cursor body in
+          let enter_traps : int64 list ref = ref [] in
+          let push_traps : int64 list ref = ref [] in
+          let pop_traps : int64 list ref = ref [] in
+          while not (Owee_buf.at_end cursor) do
+            let t = read_note cursor ~actual_base in
+            print_traps t;
+            enter_traps := !enter_traps @ t.enter_traps;
+            push_traps := !push_traps @ t.push_traps;
+            pop_traps := !pop_traps @ t.pop_traps
+          done;
+          Trace_writer.Exn_info.create
+            ~push_traps:(Array.of_list !push_traps)
+            ~pop_traps:(Array.of_list !pop_traps)
+            ~enter_traps:(Array.of_list !enter_traps)
+      with
+      | Owee_elf_notes.Section_not_found s ->
+        raise_s [%message "section not found" ~in_:(s : string) (path : string)]
+    ;;
+  end
+
   let decode_to_trace
       ~elf
       ~trace_mode
@@ -99,10 +175,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
           |> [%of_sexp: Hits_file.t]
         in
         let debug_info = Option.map elf ~f:Elf.addr_table in
+        let exn_info = Option.map elf ~f:Aaaa.make in
         let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
         let%bind () =
           write_trace_from_events
             ?debug_info
+            ?exn_info
             ~trace_mode
             ~verbose
             trace_writer

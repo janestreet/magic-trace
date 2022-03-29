@@ -10,6 +10,8 @@ type t =
   ; statically_mappable : bool
   }
 
+let filename t = t.filename
+
 (** Elf files tend to have a "base offset" between where their sections end up in memory
     and where they are in the file, this function figures out that offset. *)
 let find_base_offset sections =
