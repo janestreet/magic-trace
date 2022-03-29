@@ -1,0 +1,7 @@
+(library
+ (name owee)
+ (public_name owee)
+ (wrapped false)
+ (c_names owee_stubs)
+ (libraries unix bigarray)
+ (synopsis "OCaml library to work with DWARF format"))

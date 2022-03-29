@@ -1,0 +1,8 @@
+Owee 0.4
+========
+Tue Dec 14 10:30:09 CET 2021
+
+- Support OCaml up to 4.13.
+- Parse Linux memory map files
+- Support elf notes (contributed by Greta Yorsh, @gretayjs)
+- Bug fixes (with contributions from Nandor Licker)  

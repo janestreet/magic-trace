@@ -1,0 +1,5 @@
+(library (name probes_lib) (public_name ocaml-probes.probes_lib)
+ (libraries unix str owee)
+ (c_flags (:standard \ -O0) -O3 -std=c11 -D_GNU_SOURCE -Wall -g
+  -Wno-implicit-fallthrough)
+ (c_names stubs) (preprocess no_preprocessing))
