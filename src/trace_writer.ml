@@ -52,8 +52,111 @@ module Thread_info = struct
     }
 end
 
+module Exn_info = struct
+  module Kind = struct
+    type t =
+      | Push_trap
+      | Pop_trap
+      | Enter_trap
+    [@@deriving sexp_of]
+  end
+
+  type t = (int64 * Kind.t) array [@@deriving sexp_of]
+
+  let addr_compare (addr, _) (addr', _) = Int64.compare addr addr'
+
+  let create ~push_traps ~pop_traps ~enter_traps =
+    let t =
+      [ Array.map ~f:(fun addr -> addr, Kind.Push_trap) push_traps
+      ; Array.map ~f:(fun addr -> addr, Kind.Pop_trap) pop_traps
+      ; Array.map ~f:(fun addr -> addr, Kind.Enter_trap) enter_traps
+      ]
+      |> Array.concat
+    in
+    Array.sort t ~compare:addr_compare;
+    t
+  ;;
+
+  let first_index_greater_than_or_equal_to t x =
+    let i = ref 0 in
+    let v = ref None in
+    let break = ref false in
+    while !i < Array.length t && not !break do
+      let addr, _ = t.(!i) in
+      if Int64.(addr >= x)
+      then (
+        v := Some !i;
+        break := true)
+      else incr i
+    done;
+    !v
+  ;;
+
+  let last_index_less_than_or_equal_to t x =
+    let i = ref 0 in
+    let v = ref None in
+    let break = ref false in
+    while !i < Array.length t && not !break do
+      let addr, _ = t.(!i) in
+      if Int64.(addr <= x)
+      then (
+        v := Some !i;
+        incr i)
+      else break := true
+    done;
+    !v
+  ;;
+
+  let classify_range ~from ~to_ t =
+    let from = first_index_greater_than_or_equal_to t from in
+    let to_ = last_index_less_than_or_equal_to t to_ in
+    let classified = ref [] in
+    for i = Option.value_exn from to Option.value_exn to_ do
+      classified := t.(i) :: !classified
+    done;
+    !classified |> List.rev
+  ;;
+
+  let%test_module _ =
+    (module struct
+      open Core
+
+      let classify_range ~from ~to_ t =
+        let range = classify_range ~from ~to_ t in
+        Core.print_s
+          [%message "" (from : int64) (to_ : int64) (range : (int64 * Kind.t) list)]
+      ;;
+
+      let%expect_test "basic range classification tests" =
+        let t =
+          create
+            ~push_traps:[| 0L; 5L; 10L |]
+            ~pop_traps:[| 2L; 100L |]
+            ~enter_traps:[| 50L |]
+        in
+        classify_range ~from:0L ~to_:1L t;
+        [%expect {|
+          ((from 0) (to_ 1) (range ((0 Push_trap)))) |}];
+        classify_range ~from:0L ~to_:4L t;
+        [%expect {|
+          ((from 0) (to_ 4) (range ((0 Push_trap) (2 Pop_trap)))) |}];
+        classify_range ~from:3L ~to_:7L t;
+        [%expect {|
+          ((from 3) (to_ 7) (range ((5 Push_trap)))) |}];
+        classify_range ~from:49L ~to_:100L t;
+        [%expect
+          {|
+          ((from 49) (to_ 100) (range ((50 Enter_trap) (100 Pop_trap)))) |}];
+        classify_range ~from:75L ~to_:101L t;
+        [%expect {| ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}]
+      ;;
+    end)
+  ;;
+end
+
 type t =
   { debug_info : Elf.Addr_table.t
+  ; exn_info : Exn_info.t
   ; trace : Tracing.Trace.t
   ; thread_info : Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
@@ -121,6 +224,7 @@ let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
     ; thread_info = Hashtbl.create (module Event.Thread)
     ; base_time
     ; trace_mode
+    ; exn_info = Exn_info.create ~push_traps:[||] ~pop_traps:[||] ~enter_traps:[||]
     }
   in
   write_hits t hits;
