@@ -41,14 +41,10 @@ module Thread_info = struct
       mutable callstack : Callstack.t
     ; inactive_callstacks : Callstack.t Stack.t
     ; mutable last_decode_error_time : Time_ns.Span.t
-    ; (* Currently keeping track of the number of frames to unwind during an exception by
-       counting the number of calls to next_frame_descriptor (called during backtrace
-       collection) since the last raise. This fails on raise_notrace but that can be fixed
-       soon. *)
-      frames_to_unwind : int ref
     ; mutable pending_events : Pending_event.t list
     ; mutable pending_time : Time_ns.Span.t
     ; start_events : (Time_ns.Span.t * Pending_event.t) Deque.t
+    ; mutable last_address : Int64.t option
     }
 end
 
@@ -110,11 +106,14 @@ module Exn_info = struct
   let classify_range ~from ~to_ t =
     let from = first_index_greater_than_or_equal_to t from in
     let to_ = last_index_less_than_or_equal_to t to_ in
-    let classified = ref [] in
-    for i = Option.value_exn from to Option.value_exn to_ do
-      classified := t.(i) :: !classified
-    done;
-    !classified |> List.rev
+    match from, to_ with
+    | Some from, Some to_ ->
+      let classified = ref [] in
+      for i = from to to_ do
+        classified := t.(i) :: !classified
+      done;
+      !classified |> List.rev
+    | _, _ -> []
   ;;
 
   let%test_module _ =
@@ -148,7 +147,11 @@ module Exn_info = struct
           {|
           ((from 49) (to_ 100) (range ((50 Enter_trap) (100 Pop_trap)))) |}];
         classify_range ~from:75L ~to_:101L t;
-        [%expect {| ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}]
+        [%expect {| ((from 75) (to_ 101) (range ((100 Pop_trap)))) |}];
+        classify_range ~from:75L ~to_:80L t;
+        [%expect {| ((from 75) (to_ 80) (range ())) |}];
+        classify_range ~from:150L ~to_:200L t;
+        [%expect {| ((from 150) (to_ 200) (range ())) |}]
       ;;
     end)
   ;;
@@ -392,12 +395,8 @@ let write_event
      } as event)
   =
   let time = map_time t time in
-  let ({ Thread_info.thread
-       ; inactive_callstacks
-       ; last_decode_error_time
-       ; frames_to_unwind
-       ; _
-       } as thread_info)
+  let ({ Thread_info.thread; inactive_callstacks; last_decode_error_time; _ } as
+      thread_info)
     =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
         let trace_pid =
@@ -411,11 +410,16 @@ let write_event
         ; callstack = Callstack.create ~create_time:time
         ; inactive_callstacks = Stack.create ()
         ; last_decode_error_time = time
-        ; frames_to_unwind = ref 0
         ; pending_events = []
         ; pending_time = Time_ns.Span.zero
         ; start_events = Deque.create ()
+        ; last_address = None
         })
+  in
+  let classify_range () =
+    match thread_info.last_address with
+    | None -> []
+    | Some from -> Exn_info.classify_range ~from ~to_:addr t.exn_info
   in
   let call ?(time = time) name =
     let ev =
@@ -464,20 +468,6 @@ let write_event
       write_pending_event t thread_info thread_info.callstack.create_time ev;
       Callstack.push thread_info.callstack symbol
   in
-  let unwind_stack diff =
-    for _ = 0 to !frames_to_unwind + diff do
-      ret ()
-    done;
-    frames_to_unwind := 0
-  in
-  let ret_track_exn_data () =
-    (match Callstack.top thread_info.callstack with
-    | Some "caml_next_frame_descriptor" -> incr frames_to_unwind
-    | Some "caml_raise_exn" -> unwind_stack (-2)
-    | Some "caml_raise_exception" -> unwind_stack 1
-    | _ -> ());
-    ret ()
-  in
   let rec clear_callstack () =
     match Callstack.top thread_info.callstack with
     | Some _ ->
@@ -498,7 +488,24 @@ let write_event
             ~trace_mode:(t.trace_mode : Trace_mode.t)
             (event : Event.t)]
   in
-  match kind with
+  List.iter (classify_range ()) ~f:(fun (_addr, kind) ->
+      match kind with
+      | Push_trap ->
+        Stack.push inactive_callstacks thread_info.callstack;
+        thread_info.callstack <- new_callstack ();
+        call "[push trap]"
+      | Pop_trap ->
+        (* Pop the [push trap] *)
+        ret ()
+      | Enter_trap ->
+        clear_callstack ();
+        flush_all t;
+        (match Stack.pop inactive_callstacks with
+        | Some callstack -> thread_info.callstack <- callstack
+        | None ->
+          thread_info.callstack <- new_callstack ();
+          check_current_symbol ()));
+  (match kind with
   | Call | End Call -> call symbol
   | End None -> call "[untraced]"
   | End Syscall ->
@@ -507,7 +514,7 @@ let write_event
     call "[syscall]"
   | End Return -> call "[returned]"
   | Return ->
-    ret_track_exn_data ();
+    ret ();
     check_current_symbol ()
   | Start ->
     (* Might get this under /u, /k, and /uk, but we need to handle them all
@@ -532,7 +539,7 @@ let write_event
          the program location in most cases, and when a call to a symbol page
          faults, the restart after the page fault at the new location would get
          treated as a tail call if we did call [check_current_symbol]. *)
-      ret_track_exn_data ()
+      ret ()
   | Syscall | Hardware_interrupt ->
     (* We should only be getting [Syscall] these under /uk, but we can get
        [Hardware_interrupt] under /uk, /k. *)
@@ -588,5 +595,6 @@ let write_event
     flush_all t;
     thread_info.last_decode_error_time <- time;
     thread_info.callstack <- new_callstack ()
-  | Jump -> check_current_symbol ()
+  | Jump -> check_current_symbol ());
+  thread_info.last_address <- Some addr
 ;;
