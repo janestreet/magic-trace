@@ -3,12 +3,12 @@ type t
 external extract : (_ -> _) -> t =
   "ml_owee_code_pointer" "ml_owee_code_pointer" "noalloc"
 
-let count_rows body =
+let count_rows body ~pointers_to_other_sections =
   let open Owee_debug_line in
   let cursor = Owee_buf.cursor body in
   let count = ref 0 in
   let rec aux () =
-    match read_chunk cursor with
+    match read_chunk cursor ~pointers_to_other_sections with
     | None -> !count
     | Some line_program ->
       let check _header state address =
@@ -31,7 +31,7 @@ type 'a map_entry = {
 
 type location = string * int * int
 
-let store_rows body array =
+let store_rows body array ~pointers_to_other_sections =
   let open Owee_debug_line in
   let cursor = Owee_buf.cursor body in
   let index = ref 0 in
@@ -39,7 +39,7 @@ let store_rows body array =
   let prev_col  = ref 0 in
   let prev_file = ref None in
   let rec aux () =
-    match read_chunk cursor with
+    match read_chunk cursor ~pointers_to_other_sections with
     | None -> ()
     | Some (header, chunk) ->
       let check _header state address =
@@ -75,10 +75,11 @@ let extract_debug_info buffer =
   | Some section ->
     (*Printf.eprintf "Looking for 0x%X\n" t;*)
     let body = Owee_elf.section_body buffer section in
-    let count = count_rows body in
+    let pointers_to_other_sections = Owee_elf.debug_line_pointers buffer sections in
+    let count = count_rows body ~pointers_to_other_sections in
     let debug_entries = Array.make count
         {addr_lo = max_int; addr_hi = max_int; payload = None} in
-    store_rows body debug_entries;
+    store_rows body debug_entries ~pointers_to_other_sections;
     debug_entries, (Owee_elf.find_section sections ".text")
 
 let memory_map = lazy begin try

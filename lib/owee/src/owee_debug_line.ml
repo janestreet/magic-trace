@@ -4,6 +4,7 @@ type header = {
   is_64bit                   : bool;
   total_length               : u64;
   version                    : u16;
+  address_size               : u8 option; (* only available in DWARF >= 5 *)
   prologue_length            : u32;
   minimum_instruction_length : u8;
   default_is_stmt            : u8;
@@ -14,7 +15,12 @@ type header = {
   filenames                  : string array;
 }
 
-let read_filename t =
+type pointers_to_other_sections = {
+  debug_line_str : t option;
+  debug_str      : t option;
+}
+
+let read_filename_version_lt_5 t =
   match Read.zero_string t () with
   | None -> invalid_format "Unterminated filename"
   | Some s ->
@@ -26,7 +32,7 @@ let read_filename t =
       let _len  = Read.uleb128 t in
       fname
 
-let rec skip_directories t =
+let rec skip_directories_version_lt_5 t =
   match Read.zero_string t () with
   | None -> invalid_format "Unterminated directory list"
   | Some s ->
@@ -34,30 +40,167 @@ let rec skip_directories t =
     | "" -> ()
     | _dir ->
       (*print_endline _dir;*)
-      skip_directories t
+      skip_directories_version_lt_5 t
 
-let rec read_filenames acc t = match read_filename t with
-  | "" -> Array.of_list (List.rev acc)
-  | fname ->
-    (*Printf.eprintf "%S\n%!" fname;*)
-    read_filenames (fname :: acc) t
+let rec read_filename_version_gte_5
+    t
+    ~pointers_to_other_sections
+    ~is_64bit
+    ~address_size
+  = function
+  | `string ->
+    (match Read.zero_string t () with
+     | None -> invalid_format "Unterminated filename"
+     | Some x -> Some x)
+  | `indirect ->
+    (* I have no idea if this can actually be hit; the spec doesn't explicitly mention
+       [indirect] in this context. Let's handle it anyway, just in case. *)
+    let form = Owee_form.read t in
+    read_filename_version_gte_5
+      t
+      ~pointers_to_other_sections
+      ~is_64bit
+      ~address_size
+      form
+  | (`line_strp | `strp) as form ->
+    let buf =
+      match form with
+      | `line_strp -> pointers_to_other_sections.debug_line_str
+      | `strp -> pointers_to_other_sections.debug_str
+    in
+    (match buf with
+    | None -> None
+    | Some buf ->
+      let offset = if is_64bit then Int64.to_int (Read.u64 t) else Read.u32 t in
+      let cursor = cursor buf ~at:offset in
+      Read.zero_string cursor ())
+  | unknown_form ->
+    Owee_form.skip unknown_form t ~is_64bit ~address_size;
+    None
 
+let unwrap_address_size_v5_only = function
+  | Some address_size -> address_size
+  | None ->
+    failwith "Expected address size in v5"
 
-let read_header t =
+let skip_directories_version_gte_5 t ~is_64bit ~address_size =
+  let format_count = Read.u8 t in
+  let descriptors =
+    Array.init format_count (fun _ ->
+      let content_type_code : u128 = Read.uleb128 t in
+      let form = Owee_form.read t in
+      (content_type_code, form))
+  in
+  let directory_entry_count = Read.uleb128 t in
+  for _ = 1 to directory_entry_count do
+    Array.iter
+    (fun (_, form) -> Owee_form.skip form t ~is_64bit ~address_size)
+    descriptors
+  done
+
+let skip_directories t ~is_64bit ~version ~address_size =
+  if version < 5 then
+    skip_directories_version_lt_5 t
+  else begin
+    let address_size = unwrap_address_size_v5_only address_size in
+    skip_directories_version_gte_5 t ~is_64bit ~address_size
+  end
+
+let read_filenames_version_lt_5 t =
+  let rec loop acc =
+    match read_filename_version_lt_5 t with
+    | "" -> acc 
+    | fname ->
+      (*Printf.eprintf "%S\n%!" fname;*)
+      loop (fname :: acc)
+  in
+  loop [] |> List.rev |> Array.of_list
+
+let read_filenames_version_gte_5
+    t
+    ~pointers_to_other_sections
+    ~is_64bit
+    ~address_size
+  =
+  let format_count = Read.u8 t in
+  let descriptors =
+    Array.init format_count (fun _ ->
+      let content_type_code : u128 = Read.uleb128 t in
+      let form = Owee_form.read t in
+      (content_type_code, form))
+  in
+  let directory_entry_count = Read.uleb128 t in
+  let filenames = ref [] in
+  for _ = 1 to directory_entry_count do
+    Array.iter
+      (fun (content_type_code, form) ->
+        if content_type_code = 0x01 (* DW_LNCT_path *) then begin
+          match
+            read_filename_version_gte_5
+              t
+              ~pointers_to_other_sections
+              ~is_64bit
+              ~address_size
+              form
+          with
+          | None -> ()
+          | Some filename ->
+            (*Printf.eprintf "%S\n%!" filename;*)
+            filenames := filename :: !filenames
+        end else
+          Owee_form.skip form t ~is_64bit ~address_size
+      )
+      descriptors
+  done;
+  !filenames |> List.rev |> Array.of_list
+
+(* Returns the list in the other direction. *)
+let read_filenames
+    t
+    ~pointers_to_other_sections
+    ~version
+    ~is_64bit
+    ~address_size
+  =
+  if version < 5 then
+    read_filenames_version_lt_5 t
+  else begin
+    let address_size = unwrap_address_size_v5_only address_size in
+    read_filenames_version_gte_5
+      t
+      ~pointers_to_other_sections 
+      ~is_64bit
+      ~address_size
+  end
+
+let read_prologue_length t ~is_64bit =
+  if is_64bit then Int64.to_int (Read.u64 t) else Read.u32 t
+
+let read_header t ~pointers_to_other_sections =
   ensure t 24 ".debug_line header truncated";
   let total_length = Read.u32 t in
   let is_64bit     = total_length = 0xFFFF_FFFF in
   let total_length =
-    if is_64bit then Read.u64 t else Int64.of_int (total_length) in
+    if is_64bit then Read.u64 t else Int64.of_int total_length
+  in
   let chunk = sub t (Int64.to_int total_length) in
   let version = Read.u16 chunk in
-  assert_format (version >= 2 && version <= 4)
+  assert_format (version >= 2 && version <= 5)
     "unknown .debug_line version";
-  let prologue_length = Read.u32 chunk in
-  ensure chunk prologue_length "prologue length too big";
+  let address_size, segment_selector_size =
+    if version >= 5 then begin
+      let address_size          = Read.u8 chunk in
+      let segment_selector_size = Read.u8 chunk in
+      (Some address_size, Some segment_selector_size)
+    end
+    else None, None
+  in
+  ignore (segment_selector_size : u8 option);
+  let prologue_length = read_prologue_length chunk ~is_64bit in
+  ensure chunk prologue_length "prologue_length too big";
   let prologue = sub chunk prologue_length in
   let minimum_instruction_length = Read.u8 prologue in
-  if version = 4 then begin
+  if version >= 4 then begin
     let max_ops_per_instruction = Read.u8 prologue in
     assert_format (max_ops_per_instruction = 1)
       "VLIW not supported"
@@ -69,17 +212,27 @@ let read_header t =
   assert_format (opcode_base > 0)
     "invalid opcode_base";
   let standard_opcode_lengths = Read.fixed_string prologue (opcode_base - 1) in
-  skip_directories prologue;
-  let filenames = read_filenames [] prologue in
-  { is_64bit; total_length; version; prologue_length;
-    minimum_instruction_length; default_is_stmt;
-    line_base; line_range; opcode_base;
-    standard_opcode_lengths; filenames }, chunk
+  skip_directories prologue ~is_64bit ~version ~address_size;
+  let filenames =
+    read_filenames
+      prologue
+      ~pointers_to_other_sections
+      ~is_64bit
+      ~version
+      ~address_size
+  in
+  let header =
+    { is_64bit; total_length; version;
+      address_size; prologue_length; minimum_instruction_length;
+      default_is_stmt; line_base; line_range; opcode_base;
+      standard_opcode_lengths; filenames }
+  in
+  (header, chunk)
 
-let read_chunk t =
+let read_chunk t ~pointers_to_other_sections =
   if at_end t
   then None
-  else Some (read_header t)
+  else Some (read_header t ~pointers_to_other_sections)
 
 type state = {
   mutable address        : int;
@@ -211,7 +364,9 @@ let step header section state f acc =
         state.address <- Int64.to_int (Read.u64 section);
         acc
       | 3 (* DW_LNE_define_file *) ->
-        state.filename <- read_filename section;
+        (* DW_LNE_define_file was deprecated in DWARF 5. *)
+        assert (header.version < 5);
+        state.filename <- read_filename_version_lt_5 section;
         acc
       | 4 (* DW_LNE_set_discriminator *) ->
         state.discriminator <- Read.uleb128 section;

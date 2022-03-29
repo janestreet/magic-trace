@@ -4,6 +4,8 @@ include Elf_intf
 type t =
   { symbol : Owee_elf.Symbol_table.t
   ; string : Owee_elf.String_table.t
+  ; all_elf : Owee_buf.t
+  ; sections : Owee_elf.section array
   ; debug : Owee_buf.t option
   ; base_offset : int
   ; filename : string
@@ -40,7 +42,16 @@ let create filename =
       in
       let statically_mappable = is_non_pie_executable header in
       let debug = Owee_elf.find_section_body buf sections ~section_name:".debug_line" in
-      Some { string; symbol; debug; base_offset; filename; statically_mappable }
+      Some
+        { string
+        ; symbol
+        ; debug
+        ; all_elf = buf
+        ; sections
+        ; base_offset
+        ; filename
+        ; statically_mappable
+        }
     | _, _ -> None
   with
   | Owee_buf.Invalid_format _ ->
@@ -133,8 +144,11 @@ let addr_table t =
               symbol_starts
               (Owee_elf.Symbol_table.Symbol.value symbol |> Int64.to_int_exn));
       let cursor = Owee_buf.cursor body in
+      let pointers_to_other_sections =
+        Owee_elf.debug_line_pointers t.all_elf t.sections
+      in
       let rec load_table_next () =
-        match Owee_debug_line.read_chunk cursor with
+        match Owee_debug_line.read_chunk cursor ~pointers_to_other_sections with
         | None -> ()
         | Some (header, chunk) ->
           let process header (state : Owee_debug_line.state) () =

@@ -2,13 +2,24 @@ open Owee_buf
 
 type header
 
-(** [read_chunk cursor] expects cursor to be pointing to the beginning of a
-    DWARF linenumber program.  Those are usually put in ".debug_line" section
-    of an ELF binary.
+type pointers_to_other_sections = {
+  debug_line_str : t option;
+  debug_str      : t option;
+}
+
+(** [read_chunk cursor ~pointers_to_other_sections] expects the [cursor] to be
+    pointing to the beginning of a DWARF linenumber program. Those are usually
+    put in ".debug_line" section of an ELF binary.
+
     Iff such a program is found, the [cursor] is advanced to the next one (or
     to the end) and [Some (header, cursor')] is returned.
-*)
-val read_chunk : cursor -> (header * cursor) option
+
+    [pointers_to_other_sections] are needed in DWARF 5 because filenames can be
+    pointers to strings in entirely separate sections of DWARF. *)
+val read_chunk
+  :  cursor
+  -> pointers_to_other_sections:pointers_to_other_sections
+  -> (header * cursor) option
 
 (** State of the linenumber automaton.
     IMPORTANT: this state is mutable!

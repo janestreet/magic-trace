@@ -173,6 +173,20 @@ end
 let find_string_table buf sections =
   find_section_body buf sections ~section_name:".strtab"
 
+let debug_line_pointers buf sections =
+  { Owee_debug_line.
+     debug_line_str =
+       find_section_body
+         buf
+         sections
+         ~section_name:".debug_line_str";
+     debug_str =
+       find_section_body
+         buf
+         sections
+         ~section_name:".debug_str";
+   }
+
 module Symbol_table = struct
   module Symbol = struct
     type t = {
