@@ -1,0 +1,5 @@
+(executables (names probes)
+ (libraries probes_lib core_unix.command_unix core_unix.filename_unix core)
+ (preprocess (pps ppx_jane)))
+
+(alias (name DEFAULT) (deps probes.ml.pp))
