@@ -15,6 +15,8 @@
   </a>
 </p>
 
+# Overview
+
 magic-trace collects and displays high-resolution traces of what a process is doing. People have used it to:
 
 - figure out why an application running in production handles some requests slowly while simultaneously handling a sea of uninteresting requests,
@@ -36,6 +38,19 @@ You can point magic-trace at a function such that when your application calls it
 [^1]: Less than `perf -g`, more than `perf -glbr`.
 
 [^2]: `perf` can do this too, but that's not how most people use it. In fact, if you peek under the hood you'll discover that magic-trace uses `perf` for exactly this.
+
+# Testimonials
+
+> "Magic-trace is one of the simplest command-line debugging tools I have ever used."
+- Francis Ricci, Jane Street
+
+> "Magic-trace is not just for performance. The tool gives insight directly into what happens in your program, when, and why. Consider using it for all your introspective goals!"
+- Andrew Hunter, Jane Street
+
+> "I can't believe you open-sourced that."
+- Anonymous, Jump Trading
+
+[more testimonials...](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews)
 
 # Demo
 
