@@ -11,7 +11,8 @@ override_dh_clean:
 	dh_clean
 
 override_dh_auto_build:
-	opam init -y --compiler=4.13.1
+	opam init -y --bare
+	opam switch create -y 4.13.1-flambda --packages=ocaml-variants.4.13.1+options,ocaml-option-flambda
 	opam exec -- opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
 	opam exec -- opam install -y ./magic-trace.opam --deps-only
 	opam exec -- dh_auto_build
