@@ -47,7 +47,7 @@ You can point magic-trace at a function such that when your application calls it
 > "Magic-trace is not just for performance. The tool gives insight directly into what happens in your program, when, and why. Consider using it for all your introspective goals!"
 - Andrew Hunter, Jane Street
 
-> "I can't believe you open-sourced that."
+> "I can't believe you open sourced that."
 - Anonymous, Jump Trading
 
 [more testimonials...](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews)
