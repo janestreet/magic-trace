@@ -112,13 +112,16 @@ let dump_using_file events =
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
-  let trace = Tracing.Trace.Expert.create ~base_time:None writer in
-  let%bind () = write_trace_from_events ~trace_mode:Userspace trace [] events in
-  Tracing.Trace.close trace;
+  let%bind () = write_trace_from_events ~trace_mode:Userspace writer [] events in
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
   while%bind_open.Result Ok true do
     let%bind.Result cur = Tracing.Parser.parse_next parser in
-    Result.return (print_s [%sexp (cur : Tracing.Parser.Record.t)])
+    (match cur with
+    | Tick_initialization { ticks_per_second; base_time = _ } ->
+      (* Elide [base_time], since it isn't stable. *)
+      print_s [%message "Tick_initialization" (ticks_per_second : int)]
+    | _ -> print_s [%sexp (cur : Tracing.Parser.Record.t)]);
+    Result.return ()
   done
   |> [%sexp_of: (unit, Tracing.Parser.Parse_error.t) Result.t]
   |> print_s;
@@ -146,6 +149,7 @@ let%expect_test "random perfs" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
     (Interned_string (index 102) (value 1234/456))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
@@ -186,6 +190,7 @@ let%expect_test "random perfs" =
   [%expect
     {|
 (Interned_string (index 1) (value process))
+(Tick_initialization (ticks_per_second 1000000000))
 (Interned_string (index 102) (value 1234/456))
 (Process_name_change (name 102) (pid 1))
 (Interned_string (index 103) (value main))
@@ -205,6 +210,7 @@ let%expect_test "random perfs" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
     (Interned_string (index 102) (value 1234/456))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
@@ -240,6 +246,7 @@ let%expect_test "random perfs" =
   [%expect
     {|
 (Interned_string (index 1) (value process))
+(Tick_initialization (ticks_per_second 1000000000))
 (Interned_string (index 102) (value 1234/456))
 (Process_name_change (name 102) (pid 1))
 (Interned_string (index 103) (value main))
@@ -313,6 +320,7 @@ let%expect_test "with initial returns" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
     (Interned_string (index 102) (value 1234/456))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
@@ -443,6 +451,7 @@ let%expect_test "time batch spreading" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
     (Interned_string (index 102) (value 1234/456))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
@@ -517,6 +526,7 @@ let%expect_test "enqueing events at start" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
     (Interned_string (index 102) (value 1234/456))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
