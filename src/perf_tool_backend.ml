@@ -12,9 +12,22 @@ module Record_opts = struct
 
   let param =
     let%map_open.Command multi_thread =
-      flag "-multi-thread" no_arg ~doc:"record multiple threads"
+      flag
+        "-multi-thread"
+        no_arg
+        ~doc:
+          "Records every thread of an executable, instead of only the thread whose TID \
+           is equal to the process' PID.\n\
+           Warning: this flag decreases the trace's lookback period because the kernel \
+           divides snapshot buffer resources equally across all threads."
     and full_execution =
-      flag "-full-execution" no_arg ~doc:"record full program execution"
+      flag
+        "-full-execution"
+        no_arg
+        ~doc:
+          "Record a program's full execution instead of using a snapshot ring buffer.\n\
+           Warning: The trace grows at a rate of hundreds of megabytes per second. \
+           Traces larger than 100 MiB are likely to crash the trace viewer."
     in
     { multi_thread; full_execution }
   ;;

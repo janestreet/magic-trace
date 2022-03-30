@@ -7,9 +7,12 @@ type t =
 [@@deriving sexp_of, compare, equal]
 
 let commands_and_docs =
-  [ Userspace, "trace-userspace", "trace userspace only"
-  ; Userspace_and_kernel, "trace-include-kernel", "trace userspace and kernel"
-  ; Kernel, "trace-kernel-only", "trace kernel only"
+  [ ( Userspace_and_kernel
+    , "trace-include-kernel"
+    , "Trace userspace and the kernel. Requires root." )
+  ; ( Kernel
+    , "trace-kernel-only"
+    , "Trace the kernel and do not trace userspace. Requires root." )
   ]
 ;;
 
