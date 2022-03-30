@@ -175,8 +175,10 @@ let%expect_test "random perfs" =
      ((timestamp 0s) (thread 1) (category 107) (name 110) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
     (Interned_string (index 111) (value "\025J\015\018\023\018"))
+    (Interned_string (index 112)
+     (value "\025J\015\018\023\018 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 107) (name 111)
+     ((timestamp 0s) (thread 1) (category 107) (name 112)
       (arguments ((104 (Pointer 0x47ba6d8d9b8e)) (106 (String 111))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
@@ -227,8 +229,10 @@ let%expect_test "random perfs" =
      ((timestamp 0s) (thread 1) (category 107) (name 109) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
     (Interned_string (index 110) (value "\025J\015\018\023\018"))
+    (Interned_string (index 111)
+     (value "\025J\015\018\023\018 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 107) (name 110)
+     ((timestamp 0s) (thread 1) (category 107) (name 111)
       (arguments ((104 (Pointer 0x47ba6d8d9b8e)) (106 (String 110))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
@@ -274,8 +278,10 @@ let%expect_test "random perfs" =
  ((timestamp 274ns) (thread 1) (category 107) (name 110)
   (arguments ((104 (Pointer 0x6fac947219c8)) (106 (String 110))))
   (event_type Duration_begin)))
+(Interned_string (index 111)
+ (value "\025J\015\018\023\018 [inferred start time]"))
 (Event
- ((timestamp 0s) (thread 1) (category 107) (name 108)
+ ((timestamp 0s) (thread 1) (category 107) (name 111)
   (arguments ((104 (Pointer 0x6e7dfeaf8b46)) (106 (String 108))))
   (event_type Duration_begin)))
 (Event
@@ -379,28 +385,35 @@ let%expect_test "with initial returns" =
      ((timestamp 562ns) (thread 1) (category 105) (name 114) (arguments ())
       (event_type Duration_end)))
     (Interned_string (index 115) (value ";|\025K?\029A\025"))
+    (Interned_string (index 116)
+     (value ";|\025K?\029A\025 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 115)
+     ((timestamp 0s) (thread 1) (category 105) (name 116)
       (arguments ((108 (Pointer 0x1cb54f7e14b)) (110 (String 115))))
       (event_type Duration_begin)))
+    (Interned_string (index 117) (value "_\025dd;?\\ [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 113)
+     ((timestamp 0s) (thread 1) (category 105) (name 117)
       (arguments ((108 (Pointer 0x789d16853605)) (110 (String 113))))
       (event_type Duration_begin)))
+    (Interned_string (index 118) (value "+d8;mv5\026j [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 107)
+     ((timestamp 0s) (thread 1) (category 105) (name 118)
       (arguments ((108 (Pointer 0x106c2377b9f7)) (110 (String 107))))
       (event_type Duration_begin)))
+    (Interned_string (index 119) (value "S [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 106)
+     ((timestamp 0s) (thread 1) (category 105) (name 119)
       (arguments ((108 (Pointer 0x6b0a940e99c1)) (110 (String 106))))
       (event_type Duration_begin)))
-    (Interned_string (index 116) (value [unknown]))
+    (Interned_string (index 120) (value [unknown]))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 116) (arguments ())
+     ((timestamp 0s) (thread 1) (category 105) (name 120) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
+    (Interned_string (index 121)
+     (value "\025J\015\018\023\018 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 104)
+     ((timestamp 0s) (thread 1) (category 105) (name 121)
       (arguments ((108 (Pointer 0x47ba6d8d9b8e)) (110 (String 104))))
       (event_type Duration_begin)))
     (Error No_more_words) |}];
@@ -526,16 +539,18 @@ let%expect_test "enqueing events at start" =
     (Interned_string (index 108) (value address))
     (Interned_string (index 109) (value fn0))
     (Interned_string (index 110) (value symbol))
+    (Interned_string (index 111) (value "fn0 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 109)
+     ((timestamp 0s) (thread 1) (category 105) (name 111)
       (arguments ((108 (Pointer 0x0)) (110 (String 109))))
       (event_type Duration_begin)))
-    (Interned_string (index 111) (value [unknown]))
+    (Interned_string (index 112) (value [unknown]))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 111) (arguments ())
+     ((timestamp 0s) (thread 1) (category 105) (name 112) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
+    (Interned_string (index 113) (value "fn1 [inferred start time]"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 107)
+     ((timestamp 0s) (thread 1) (category 105) (name 113)
       (arguments ((108 (Pointer 0x0)) (110 (String 107))))
       (event_type Duration_begin)))
     (Event

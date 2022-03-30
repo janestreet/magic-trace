@@ -135,7 +135,7 @@ let demangle_symbol name =
 
 let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; kind } =
   match kind with
-  | Call { addr; offset; from_untraced = _ } ->
+  | Call { addr; offset; from_untraced } ->
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
@@ -167,10 +167,14 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.name; k
         | Some x -> [ "file", Interned x ]
         | None -> [])
     in
+    let name =
+      let name = demangle_symbol name in
+      if from_untraced then name ^ " [inferred start time]" else name
+    in
     Tracing.Trace.write_duration_begin
       t.trace
       ~thread:thread.thread
-      ~name:(demangle_symbol name)
+      ~name
       ~time
       ~args
       ~category:""
