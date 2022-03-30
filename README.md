@@ -131,10 +131,6 @@ If you'd like to contribute:
 
 More documentation is available on [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
 
-# Testimonials
-
-If you're on the fence about trying this out, we've collected some [testimonials](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews) from other users.
-
 # Privacy policy
 
 magic-trace does not send your code or derivatives of your code (including traces) anywhere.
