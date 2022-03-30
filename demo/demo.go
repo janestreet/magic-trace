@@ -1,4 +1,4 @@
-///usr/bin/true; exec /usr/bin/env go run -ldflags=-compressdwarf=false -gcflags "-N -l" "$0" "$@"
+///usr/bin/true; go build -ldflags=-compressdwarf=false -gcflags=-dwarflocationlists=true -o /tmp/demo demo.go; exec /tmp/demo
 package main
 
 import (
