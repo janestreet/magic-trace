@@ -90,7 +90,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { Decode_opts.output_config; decode_opts; verbose }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
-    Tracing_tool_output.write_and_view output_config ~f:(fun w ->
+    Tracing_tool_output.write_and_maybe_view output_config ~f:(fun w ->
         let open Deferred.Or_error.Let_syntax in
         let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
         let hits =
@@ -245,9 +245,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Backend.Recording.finish_recording recording
   ;;
 
-  let run_and_record ~elf ~command record_opts =
+  let run_and_record ~elf ~command_with_args record_opts =
     let open Deferred.Or_error.Let_syntax in
-    let argv = Array.of_list command in
+    let argv = Array.of_list command_with_args in
     let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
     let%bind attachment = attach ~elf record_opts pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
@@ -272,31 +272,34 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let record_dir_flag mode =
     let open Command.Param in
     flag
-      "-record-dir"
+      "-working-directory"
       (mode Filename_unix.arg_type)
-      ~doc:"DIR create this directory if necessary and put raw trace data in it"
+      ~doc:
+        "DIR Where to store intermediate files (including raw perf.data files). If not \
+         provided, magic-trace stores them in a subdirectory of $TMPDIR and deletes them \
+         when it's done. If provided, files will be stored in the given directory, \
+         creating the directory if necessary, and magic-trace will not delete the \
+         directory when it's done."
   ;;
 
   let record_flags =
     let%map_open.Command record_dir = record_dir_flag optional
-    and executable_override =
-      flag
-        "-executable-override"
-        (optional Filename_unix.arg_type)
-        ~doc:
-          "FILE executable to extract information from, default is to use the first part \
-           of COMMAND"
     and when_to_snapshot = When_to_snapshot.param
     and multi_snapshot =
-      flag "-multi-snapshot" no_arg ~doc:"allow taking multiple snapshots if possible"
+      flag
+        "-multi-snapshot"
+        no_arg
+        ~doc:
+          "Take a snapshot every time the trigger is hit, instead of only the first \
+           time. This flag has two caveats:\n\
+           (1) There's an ~8us performance hit every time the trigger symbol is hit. If \
+           snapshots trigger frequently, your application's performance may be \
+           materially impacted.\n\
+           (2) Each snapshot linearly increases the size of the trace file. Large trace \
+           files may crash the trace viewer."
     and trace_mode = Trace_mode.param
     and backend_opts = Backend.Record_opts.param in
-    fun ~default_executable ~f ->
-      let executable =
-        match executable_override with
-        | Some path -> path
-        | None -> default_executable ()
-      in
+    fun ~executable ~f ->
       let record_dir, cleanup =
         match record_dir with
         | Some dir ->
@@ -326,31 +329,26 @@ module Make_commands (Backend : Backend_intf.S) = struct
     { Decode_opts.output_config; decode_opts; verbose }
   ;;
 
-  let trace_command =
+  let run_command =
     Command.async_or_error
-      ~summary:
-        "Generate a trace for a command, and convert the results to a viewable Fuchsia \
-         trace."
+      ~summary:"Runs a command and traces it."
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and command = anon ("COMMAND" %: string |> non_empty_sequence_as_list)
-       and command_extra = flag "--" escape ~doc:"ARGS additional arguments" in
+       and command = anon ("COMMAND" %: string)
+       and args =
+         flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
+       in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let command =
-           match command_extra with
-           | None -> command
-           | Some l -> command @ l
-         in
-         let default_executable () =
-           let cmd = List.hd_exn command in
-           match Shell.which cmd with
+         let command_with_args = command :: List.concat (Option.to_list args) in
+         let executable =
+           match Shell.which command with
            | Some path -> path
-           | None -> failwithf "Can't find executable for %s" cmd ()
+           | None -> failwithf "Can't find executable for %s" command ()
          in
-         record_opt_fn ~default_executable ~f:(fun opts ->
+         record_opt_fn ~executable ~f:(fun opts ->
              let elf = Elf.create opts.executable in
-             let%bind () = run_and_record ~elf ~command opts in
+             let%bind () = run_and_record ~elf ~command_with_args opts in
              decode_to_trace
                ~elf
                ~trace_mode:opts.trace_mode
@@ -394,9 +392,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let attach_command =
     Command.async_or_error
-      ~summary:
-        "Attach to a process and record it until Ctrl-C, then convert the results to a \
-         viewable Fuchsia trace."
+      ~summary:"Traces a running process."
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and pid =
@@ -411,13 +407,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
          let open Deferred.Or_error.Let_syntax in
          let%bind pid =
            match pid with
-           | Some pid -> Pid.of_int pid |> Deferred.Or_error.return
+           | Some pid -> return (Pid.of_int pid)
            | None -> select_pid ()
          in
-         let default_executable () =
-           Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
-         in
-         record_opt_fn ~default_executable ~f:(fun opts ->
+         let executable = Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"] in
+         record_opt_fn ~executable ~f:(fun opts ->
              let { Record_opts.executable; when_to_snapshot; _ } = opts in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind () = attach_and_record ?elf opts pid in
@@ -430,8 +424,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let decode_command =
     Command.async_or_error
-      ~summary:
-        "Decode processor trace data and convert the results to a viewable Fuchsia trace."
+      ~summary:"Converts perf-script output to a trace. (expert)"
       (let%map_open.Command record_dir = record_dir_flag required
        and trace_mode = Trace_mode.param
        and decode_opts = decode_flags
@@ -439,7 +432,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          flag
            "-executable"
            (required Filename_unix.arg_type)
-           ~doc:"FILE executable to extract information from"
+           ~doc:"FILE Executable to extract debug symbols from."
        in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
@@ -449,7 +442,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   let commands =
-    [ "trace", trace_command; "attach", attach_command; "decode", decode_command ]
+    [ "run", run_command; "attach", attach_command; "decode", decode_command ]
   ;;
 end
 

@@ -2,21 +2,35 @@ open! Core
 open! Async
 
 module Serve = struct
-  type t =
+  type enabled =
     { port : int
-    ; perfetto_ui_base_directory : string option
+    ; perfetto_ui_base_directory : string
     }
 
+  type t =
+    | Disabled
+    | Enabled of enabled
+
+  (* Points to a filesystem path will a copy of Perfetto. If provided, magic-trace will automatically
+    start a local HTTP server for you to view the trace. You can use this "hidden" feature to serve
+    a local copy of Perfetto if you don't want to copy trace files around. *)
+  let perfetto_ui_base_directory_env_var = Unix.getenv "MAGIC_TRACE_PERFETTO_DIR"
+
   let param =
-    let%map_open.Command port =
-      flag "http-port" (optional_with_default 8080 int) ~doc:"PORT http server port"
-    and perfetto_ui_base_directory =
-      flag
-        "perfetto-ui-base-directory"
-        (optional string)
-        ~doc:"PATH path to Perfetto in filesystem"
-    in
-    { port; perfetto_ui_base_directory }
+    match perfetto_ui_base_directory_env_var with
+    | None -> Command.Param.return Disabled
+    | Some perfetto_ui_base_directory ->
+      let%map_open.Command port =
+        let default = 8080 in
+        flag
+          "serve"
+          (optional_with_default default int)
+          ~doc:
+            [%string
+              "PORT Chooses the port that the local copy of Perfetto will be served on. \
+               (default: %{default#Int})"]
+      in
+      Enabled { port; perfetto_ui_base_directory }
   ;;
 
   let url t =
@@ -69,9 +83,7 @@ module Serve = struct
 
   let serve_trace_file t ~filename ~store_path =
     let static_handler =
-      Cohttp_static_handler.directory_handler
-        ~directory:(Option.value_exn t.perfetto_ui_base_directory)
-        ()
+      Cohttp_static_handler.directory_handler ~directory:t.perfetto_ui_base_directory ()
     in
     let handler ~body addr request =
       let path = request_path request in
@@ -101,28 +113,22 @@ module Serve = struct
     Core.eprintf "Open %s to view the %s in Perfetto!\n%!" (url t) filename;
     stop |> Deferred.ok
   ;;
-
-  let serve_file t ~path =
-    let filename = Filename.basename path in
-    serve_trace_file t ~filename ~store_path:path
-  ;;
 end
 
 type t =
-  { serve_info : Serve.t
-  ; serve : bool
+  { serve : Serve.t
   ; store_path : string
   }
 
 let param =
   let%map_open.Command store_path =
+    let default = "trace.ftf" in
     flag
       "output"
-      (optional_with_default "trace.ftf" string)
-      ~doc:"FILE output file name (default: 'trace.ftf')"
-  and serve = flag "serve" no_arg ~doc:"also serve the trace"
-  and serve_info = Serve.param in
-  { serve_info; serve; store_path }
+      (optional_with_default default string)
+      ~doc:[%string "FILE Where to output the trace. (default: '%{default}')"]
+  and serve = Serve.param in
+  { serve; store_path }
 ;;
 
 let notify_trace ~store_path =
@@ -131,9 +137,9 @@ let notify_trace ~store_path =
 ;;
 
 let maybe_serve t ~filename =
-  if t.serve && Option.is_some t.serve_info.perfetto_ui_base_directory
-  then Serve.serve_trace_file t.serve_info ~filename ~store_path:t.store_path
-  else notify_trace ~store_path:t.store_path
+  match t.serve with
+  | Disabled -> notify_trace ~store_path:t.store_path
+  | Enabled serve -> Serve.serve_trace_file serve ~filename ~store_path:t.store_path
 ;;
 
 let maybe_stash_old_trace ~filename =
@@ -151,7 +157,7 @@ let write_and_maybe_serve ?num_temp_strs t ~filename ~f =
   res
 ;;
 
-let write_and_view ?num_temp_strs t ~f =
+let write_and_maybe_view ?num_temp_strs t ~f =
   let filename = Filename.basename t.store_path in
   write_and_maybe_serve ?num_temp_strs t ~filename ~f
 ;;
