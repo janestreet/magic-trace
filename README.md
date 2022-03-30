@@ -105,6 +105,8 @@ If you'd like to contribute:
 1. [take a quick tour through the codebase](https://github.com/janestreet/magic-trace/wiki/A-quick-tour-of-the-codebase), then
 1. [hit up the issue tracker](https://github.com/janestreet/magic-trace/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for a good starter project.
 
+More documentation is available on [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
+
 # Testimonials
 
 If you're on the fence about trying this out, we've collected some [testimonials](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews) from other users.
@@ -125,6 +127,3 @@ magic-trace would not be possible without `perf`s extensive support for Intel PT
 
 magic-trace doesn't do any visualization itself, it relies entirely on Perfetto. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
 
-# For more information
-
-Check out [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
