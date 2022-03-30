@@ -21,16 +21,24 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}
-          restore-keys: |
-            ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-v2
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
-        uses: ocaml/setup-ocaml@v1
-        with:
-          ocaml-version: ${{ matrix.ocaml-version }}
+        run: |
+          sudo apt install bubblewrap musl-tools
+          sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.1.2/opam-2.1.2-x86_64-linux
+          sudo chmod a+x /usr/local/bin/opam
 
-      - run: opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
+          export OPAMYES=1
+          export OPAMJOBS=$(($(nproc) + 2))
+          echo "OPAMYES=1" >> "$GITHUB_ENV"
+          echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
+
+          opam init --bare -yav https://github.com/ocaml/opam-repository.git
+          opam switch set ${{ matrix.ocaml-version }}-flambda 2>/dev/null || \
+            opam switch create ${{ matrix.ocaml-version }}-flambda \
+              --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda
+          opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
 
       - run: opam install ./magic-trace.opam --deps-only
 
