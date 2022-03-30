@@ -124,3 +124,7 @@ Intel PT is the foundational technology upon which magic-trace rests. We'd like 
 magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, everyone who contributed.
 
 magic-trace doesn't do any visualization itself, it relies entirely on Perfetto. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
+
+# For more information
+
+Check out [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
