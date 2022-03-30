@@ -15,9 +15,14 @@
   </a>
 </p>
 
-magic-trace collects and displays high-resolution traces of what a process is doing.
+magic-trace collects and displays high-resolution traces of what a process is doing. People have used it to:
 
-It:
+- figure out why an application running in production handles some requests slowly while simultaneously handling a sea of uninteresting requests,
+- look at what their code is *actually* doing instead of what they *think* it's doing,
+- get a history of what their application was doing before it crashed, instead of a mere stacktrace at that final instant,
+- ...and much more!
+
+magic-trace:
 
 - has low overhead[^1],
 - doesn't require application changes to use,
@@ -35,7 +40,7 @@ You can point magic-trace at a function such that when your application calls it
 # Demo
 
 <p align="center">
-  <img src="docs/assets/demo.gif"> <!-- ?raw=true -->
+  <img src="docs/assets/demo.gif">
 </p>
 
 # Getting started
@@ -49,7 +54,7 @@ You can point magic-trace at a function such that when your application calls it
 
    Then, test it by running `magic-trace -help`, which should bring up some help text.
 
-3. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`.
+3. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
 
 4. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.ftf` in your working directory.
 
@@ -73,7 +78,11 @@ You can point magic-trace at a function such that when your application calls it
 
 Congratulations, you just magically traced your first program!
 
-The way magic-trace works is that it continuously records control flow into a ring buffer. Upon some sort of trigger, it takes a snapshot of that buffer and reconstructs call stacks.
+In contrast to traditional `perf` workflows, magic-trace excels at hypothesis generation. For example, you might notice that taking 3us to run `cos` is a really long time! If you zoom in even more, you'll see that there's actually 4 pink "\[untraced\]" cells in there. If you re-run magic-trace with root and pass it `-include-kernel`, you'll see stacktraces for those. They're page fault handlers! If you change the demo program to call `cos` twice in a row and retrace it, you'll see that the second call takes far less time and does not page fault.
+
+# How to use it
+
+magic-trace continuously records control flow into a ring buffer. Upon some sort of trigger, it takes a snapshot of that buffer and reconstructs call stacks.
 
 There are two ways to take a snapshot:
 
@@ -125,5 +134,4 @@ Intel PT is the foundational technology upon which magic-trace rests. We'd like 
 
 magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, everyone who contributed.
 
-magic-trace doesn't do any visualization itself, it relies entirely on Perfetto. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
-
+magic-trace doesn't do any visualization itself, it relies on [Perfetto](https://perfetto.dev). We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
