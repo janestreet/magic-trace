@@ -46,7 +46,7 @@ let write_trace_from_events
     ~verbose
     ~trace_mode
     ?debug_info
-    trace
+    writer
     hits
     (events : Event.t Pipe.Reader.t)
   =
@@ -57,6 +57,12 @@ let write_trace_from_events
     | Some earliest -> earliest.time
     | None -> Time_ns.Span.zero
   in
+  let trace =
+    let base_time =
+      Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
+    in
+    Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
+  in
   let events =
     Pipe.map events ~f:(fun (event : Event.t) ->
         if verbose then Core.print_s (Event.sexp_of_t event);
@@ -65,7 +71,8 @@ let write_trace_from_events
   let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
   let%map () = Pipe.iter_without_pushback events ~f:process_event in
-  Trace_writer.flush_all writer
+  Trace_writer.flush_all writer;
+  Tracing.Trace.close trace
 ;;
 
 module Make_commands (Backend : Backend_intf.S) = struct
@@ -90,9 +97,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { Decode_opts.output_config; decode_opts; verbose }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
-    Tracing_tool_output.write_and_maybe_view output_config ~f:(fun w ->
+    Tracing_tool_output.write_and_maybe_view output_config ~f:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
-        let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
         let hits =
           In_channel.read_all (Hits_file.filename ~record_dir)
           |> Sexp.of_string
@@ -101,16 +107,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let debug_info = Option.map elf ~f:Elf.addr_table in
         let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
         let%bind () =
-          write_trace_from_events
-            ?debug_info
-            ~trace_mode
-            ~verbose
-            trace_writer
-            hits
-            event_pipe
+          write_trace_from_events ?debug_info ~trace_mode ~verbose writer hits event_pipe
           |> Deferred.ok
         in
-        Tracing.Trace.close trace_writer;
         return ())
   ;;
 
