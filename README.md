@@ -120,6 +120,10 @@ Stop indicators are powerful. Here are some ideas for where you might want to pl
 
 You may leave the stop indicator in production code. It doesn't need to do anything in particular, magic-trace just needs the name. It is just an empty, but not inlined, function. It will cost ~10us to call, but *only when magic-trace actually uses it to take a snapshot*.
 
+# Documentation
+
+More documentation is available on [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
+
 # Contributing
 
 If you'd like to contribute:
@@ -128,8 +132,6 @@ If you'd like to contribute:
 1. [set up your editor](https://ocaml.org/learn/tutorials/up_and_running.html#Editor-support-for-OCaml),
 1. [take a quick tour through the codebase](https://github.com/janestreet/magic-trace/wiki/A-quick-tour-of-the-codebase), then
 1. [hit up the issue tracker](https://github.com/janestreet/magic-trace/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for a good starter project.
-
-More documentation is available on [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
 
 # Privacy policy
 
