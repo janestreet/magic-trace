@@ -45,7 +45,6 @@ jobs:
           opam switch set ${{ matrix.ocaml-version }}-flambda-musl 2>/dev/null || \
             opam switch create ${{ matrix.ocaml-version }}-flambda-musl \
               --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda,ocaml-option-musl
-          opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
 
       - run: opam install ./magic-trace.opam --deps-only
 
