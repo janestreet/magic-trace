@@ -21,7 +21,14 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-v2
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-musl
+
+      - name: Install musl-compatible kernel headers
+        run: |
+          mkdir musl-kernel
+          curl -L https://github.com/sabotage-linux/kernel-headers/archive/refs/tags/v4.19.88-1.tar.gz | \
+            tar -xz -C musl-kernel --strip-components=1
+          echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
@@ -35,9 +42,9 @@ jobs:
           echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
 
           opam init --bare -yav https://github.com/ocaml/opam-repository.git
-          opam switch set ${{ matrix.ocaml-version }}-flambda 2>/dev/null || \
-            opam switch create ${{ matrix.ocaml-version }}-flambda \
-              --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda
+          opam switch set ${{ matrix.ocaml-version }}-flambda-musl 2>/dev/null || \
+            opam switch create ${{ matrix.ocaml-version }}-flambda-musl \
+              --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda,ocaml-option-musl
           opam repo add janestreet-bleeding https://ocaml.janestreet.com/opam-repository
 
       - run: opam install ./magic-trace.opam --deps-only
@@ -45,7 +52,7 @@ jobs:
       - run: opam install ocamlformat
       - run: opam exec -- dune build @fmt
 
-      - run: opam exec -- make
+      - run: opam exec -- make PROFILE=static
 
       - run: opam exec -- dune runtest
 
