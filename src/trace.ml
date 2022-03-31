@@ -396,6 +396,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let select_pid () =
     if force supports_fzf
     then (
+      let deselect_pid_args pid =
+        let pid = Pid.to_string pid in
+        [ "--ppid"; pid; "-p"; pid; "--deselect" ]
+      in
       (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
        running processes. The [ps] command uses the /proc/ filesystem and is much easier
        than walking the /proc/ system and filtering ourselves. *)
@@ -403,8 +407,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
         [ [ "x"; "-w"; "--no-headers" ]
         ; [ "-o"; "pid,args" ]
           (* If running as root, allow tracing all processes, including those owned
-         by non-root users. *)
-        ; (if Core_unix.geteuid () = 0 then [ "-e" ] else [])
+             by non-root users.
+
+             Hide kernel threads (PID 2 and children), since though we can trace them in
+             theory, in practice they don't have their image under /proc/$pid/exe, which
+             we currently rely on. *)
+        ; (if Core_unix.geteuid () = 0 then deselect_pid_args (Pid.of_int 2) else [])
         ]
         |> List.concat
         |> Shell.run_lines "ps"
