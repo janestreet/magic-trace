@@ -65,9 +65,3 @@ error_mmap:
 error_perf_event_open:
   uerror("failed to get perf time", Nothing);
 }
-
-CAMLprim value magic_clock_gettime_realtime_ns() {
-  struct timespec ts;
-  clock_gettime(CLOCK_REALTIME, &ts);
-  return Val_long(((int64_t)ts.tv_sec * 1000 * 1000 * 1000) + ts.tv_nsec);
-}
