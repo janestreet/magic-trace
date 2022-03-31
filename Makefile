@@ -1,7 +1,8 @@
 INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
+BUILD_ARGS := $(if $(PROFILE),--profile $(PROFILE),)
 
 default:
-	dune build
+	dune build $(BUILD_ARGS)
 
 install:
 	dune install $(INSTALL_ARGS)
