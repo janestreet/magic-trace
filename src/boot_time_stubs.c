@@ -21,7 +21,7 @@ static int sys_perf_event_open(struct perf_event_attr *attr, pid_t pid, int cpu,
   return syscall(SYS_perf_event_open, attr, pid, cpu, group_fd, flags);
 }
 
-CAMLprim value magic_clock_gettime_perf_ns() {
+CAMLprim value magic_clock_gettime_perf_ns(void) {
   /*
    * It should be stated that despite any appearances to the contrary, I have no idea what
    * I'm doing here.
