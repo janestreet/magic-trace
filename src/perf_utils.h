@@ -12,7 +12,7 @@ perf_time_of_tsc(volatile struct perf_event_mmap_page *perf_mmap,
   uint64_t quot = tsc >> perf_mmap->time_shift;
   uint64_t rem = tsc & (((uint64_t)1 << perf_mmap->time_shift) - 1);
   return perf_mmap->time_zero + quot * perf_mmap->time_mult +
-    ((rem * perf_mmap->time_mult) >> perf_mmap->time_shift);
+         ((rem * perf_mmap->time_mult) >> perf_mmap->time_shift);
 }
 
 #endif

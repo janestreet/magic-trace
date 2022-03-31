@@ -20,16 +20,16 @@ static uint64_t rdtsc(void) {
 
 CAMLprim value magic_clock_gettime_perf_ns(void) {
   /*
-   * It should be stated that despite any appearances to the contrary, I have no idea what
-   * I'm doing here.
+   * It should be stated that despite any appearances to the contrary, I have no
+   * idea what I'm doing here.
    *
-   * We need to get the "current time in [perf] units" to line up events with absolute
-   * time. Here, we create a fake software event with bogus information, just so we can
-   * get a reference to the [perf_event_mmap_page] containing the time_{zero,shift,mult}
-   * fields we need to scale [rdtsc] by.
+   * We need to get the "current time in [perf] units" to line up events with
+   * absolute time. Here, we create a fake software event with bogus
+   * information, just so we can get a reference to the [perf_event_mmap_page]
+   * containing the time_{zero,shift,mult} fields we need to scale [rdtsc] by.
    *
-   * I *think* creating a [PERF_TYPE_SOFTWARE] event handle should have no side-effects,
-   * but I'm not 100% sure on that.
+   * I *think* creating a [PERF_TYPE_SOFTWARE] event handle should have no
+   * side-effects, but I'm not 100% sure on that.
    */
   struct perf_event_attr attr = {0};
   attr.size = sizeof(attr);
