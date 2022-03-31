@@ -11,6 +11,7 @@ val breakpoint_fd : Pid.t -> addr:int -> single_hit:bool -> t Or_error.t
 val destroy : t -> unit
 
 module Hit : sig
+  (* CR-someday tbrindus: change the type of [timestamp] to [Time_ns.Span.t]. *)
   type t =
     { timestamp : int
     ; passed_timestamp : int

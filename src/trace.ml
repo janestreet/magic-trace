@@ -68,6 +68,26 @@ let write_trace_from_events
         if verbose then Core.print_s (Event.sexp_of_t event);
         { event with time = event.time })
   in
+  let events =
+    if List.is_empty hits
+    then events
+    else (
+      let last_hit_time =
+        List.fold
+          hits
+          ~init:Time_ns.Span.zero
+          ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
+            Time_ns.Span.max acc (Time_ns.Span.of_int_ns hit.timestamp))
+      in
+      Pipe.filter events ~f:(fun (event : Event.t) ->
+          if Time_ns.Span.(event.time < last_hit_time)
+          then true
+          else (
+            Core.print_s
+              [%message
+                "dropping event, it occurred past snapshot time" (event : Event.t)];
+            false)))
+  in
   let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
   let%map () = Pipe.iter_without_pushback events ~f:process_event in
