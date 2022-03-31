@@ -30,6 +30,12 @@ jobs:
             tar -xz -C musl-kernel --strip-components=1
           echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
 
+      - name: Install upx
+        run: |
+          # The version that comes with focal is broken for musl binaries, pulling 3.96 from hirsute.
+          wget http://azure.archive.ubuntu.com/ubuntu/pool/universe/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
+          sudo dpkg -i upx-ucl_3.96-2_amd64.deb
+
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
           sudo apt install bubblewrap musl-tools
@@ -56,10 +62,17 @@ jobs:
 
       - run: opam exec -- dune runtest
 
+      - name: Compress magic-trace executable
+        run: |
+          cp _build/install/default/bin/magic-trace .
+          ls -l magic-trace
+          strip magic-trace
+          upx -9 magic-trace
+
       - uses: actions/upload-artifact@v3
         with:
           name: magic-trace
-          path: _build/install/default/bin/magic-trace
+          path: magic-trace
           if-no-files-found: error
 
       - name: Upload to GitHub releases
@@ -67,7 +80,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: _build/install/default/bin/magic-trace
+          file: magic-trace
           asset_name: magic-trace
           tag: ${{ github.ref }}
           overwrite: true
