@@ -139,7 +139,7 @@ If you'd like to contribute:
 
 magic-trace does not send your code or derivatives of your code (including traces) anywhere.
 
-Perfetto runs entirely in your browser and, as far as we can tell, also does not send your trace anywhere. If you're worried about that changing one day, [build your own local copy of the perfetto UI](https://github.com/google/perfetto/tree/master/ui) and use that instead.
+Perfetto runs entirely in your browser and, as far as we can tell, also does not send your trace anywhere. If you're worried about that changing one day, [build your own local copy of the Perfetto UI](https://github.com/google/perfetto/tree/master/ui) and use that instead.
 
 # Acknowledgements
 
