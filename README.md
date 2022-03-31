@@ -60,16 +60,17 @@ You can point magic-trace at a function such that when your application calls it
 
 # Getting started
 
-1. Make sure the system you want to trace is [supported](https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes). The constraints that most commonly trip people up are: VMs are mostly not supported, Intel only (Skylake or later), Linux only.
+1. Make sure the system you want to trace is [supported](https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes). The constraints that most commonly trip people up are: VMs are mostly not supported, Intel only (Skylake[^3] or later), Linux only.
 
 2. Grab a release binary from the [latest release page](https://github.com/janestreet/magic-trace/releases/latest).
 
-   1. If downloading the prebuilt binary (not package), `chmod +x magic-trace`[^3]
+   1. If downloading the prebuilt binary (not package), `chmod +x magic-trace`[^4]
    1. If downloading the package, run `sudo dpkg -i magic-trace*.deb`
 
    Then, test it by running `magic-trace -help`, which should bring up some help text.
-   
-[^3]: https://github.com/actions/upload-artifact/issues/38
+
+[^3]: Strictly speaking, anything newer than Broadwell, but this is not a platform we regularly test on, and timing resolution is worse (~1us).
+[^4]: https://github.com/actions/upload-artifact/issues/38
 
 3. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
 
