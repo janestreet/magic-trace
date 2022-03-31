@@ -18,11 +18,7 @@
 #include <caml/memory.h>
 #include <caml/alloc.h>
 
-
-static int sys_perf_event_open(struct perf_event_attr *attr, pid_t pid,
-                               int cpu, int group_fd, unsigned long flags) {
-  return syscall(SYS_perf_event_open, attr, pid, cpu, group_fd, flags);
-}
+#include "perf_utils.h"
 
 // See [lib/pmc/src/msr_stubs.c:187] for an explanation
 #define rmb() asm volatile("" ::: "memory")
@@ -149,15 +145,8 @@ CAMLprim value magic_breakpoint_next_stub(value state) {
       uint64_t tsc = Long_val(samp->regs[1]);
       uint64_t val = Long_val(samp->regs[0]);
 
-      uint64_t quot, rem, timestamp;
-      if(tsc != 0) {
-        quot = tsc >> s->mmap->time_shift;
-        rem  = tsc & (((uint64_t)1 << s->mmap->time_shift) - 1);
-        timestamp = s->mmap->time_zero + quot * s->mmap->time_mult +
-                    ((rem * s->mmap->time_mult) >> s->mmap->time_shift);
-      } else {
-        timestamp = 0;
-      }
+      uint64_t timestamp = tsc != 0 ? perf_time_of_tsc(s->mmap, tsc) : 0;
+
       /* Keep in sync with Breakpoint.Hit.t */
       info = caml_alloc_tuple(5);
       Field(info, 0) = Val_long(samp->time);

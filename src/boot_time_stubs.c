@@ -10,15 +10,12 @@
 #include <caml/mlvalues.h>
 #include <caml/unixsupport.h>
 
+#include "perf_utils.h"
+
 static uint64_t rdtsc(void) {
   uint32_t hi, lo;
   __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
   return ((uint64_t)lo) | (((uint64_t)hi) << 32);
-}
-
-static int sys_perf_event_open(struct perf_event_attr *attr, pid_t pid, int cpu,
-                               int group_fd, unsigned long flags) {
-  return syscall(SYS_perf_event_open, attr, pid, cpu, group_fd, flags);
 }
 
 CAMLprim value magic_clock_gettime_perf_ns(void) {
@@ -51,11 +48,7 @@ CAMLprim value magic_clock_gettime_perf_ns(void) {
     goto error_mmap;
   }
 
-  uint64_t tsc = rdtsc();
-  uint64_t quot = tsc >> perf_mmap->time_shift;
-  uint64_t rem = tsc & (((uint64_t)1 << perf_mmap->time_shift) - 1);
-  uint64_t timestamp = perf_mmap->time_zero + quot * perf_mmap->time_mult +
-                       ((rem * perf_mmap->time_mult) >> perf_mmap->time_shift);
+  uint64_t timestamp = perf_time_of_tsc(perf_mmap, rdtsc());
 
   munmap(mmap, mmap_size);
   close(fd);
