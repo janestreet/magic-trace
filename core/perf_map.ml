@@ -141,6 +141,11 @@ let%test_module _ =
 
 let default_filename ~pid = [%string "/tmp/perf-%{pid#Pid}.map"]
 
+let map_of_sequence_prefer_later sequence =
+  Sequence.fold sequence ~init:Int64.Map.empty ~f:(fun map (key, data) ->
+      Map.set map ~key ~data)
+;;
+
 let load file_location =
   let%map lines =
     Monitor.try_with_or_error ~rest:`Log (fun () -> Reader.file_lines file_location)
@@ -152,7 +157,9 @@ let load file_location =
   | Ok lines ->
     Sequence.of_list lines
     |> Sequence.filter_map ~f:parse_line
-    |> Int64.Map.of_sequence_exn
+    (* There can be duplicate entries in these files as JITs reuse code that is no longer useful
+       in favor of newly compiled code. (e.g. V8 does this). *)
+    |> map_of_sequence_prefer_later
     |> Some
 ;;
 
