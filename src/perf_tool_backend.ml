@@ -4,6 +4,11 @@ open! Import
 
 let debug_perf_commands = false
 
+(* PAGER=cat because perf spawns [less] if you get the arguments wrong, and that keeps the
+   parent process alive even though it just failed. That, in turn, makes magic-trace stop
+   responding to Ctrl+C. *)
+let perf_env = `Extend [ "PAGER", "cat" ]
+
 module Record_opts = struct
   type t =
     { multi_thread : bool
@@ -33,16 +38,16 @@ module Record_opts = struct
   ;;
 end
 
+let perf_exit_to_or_error = function
+  | Ok () | Error (`Signal _) -> Ok ()
+  | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
+;;
+
 module Recording = struct
   type t =
     { can_snapshot : bool
     ; pid : Pid.t
     }
-
-  let perf_exit_to_or_error = function
-    | Ok () | Error (`Signal _) -> Ok ()
-    | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
-  ;;
 
   let perf_selector_of_trace_mode : Trace_mode.t -> string = function
     | Userspace -> "u"
@@ -110,7 +115,7 @@ module Recording = struct
     in
     if debug_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
-    let perf_pid = Core_unix.fork_exec ~prog:"perf" ~argv () in
+    let perf_pid = Core_unix.fork_exec ~env:perf_env ~prog:"perf" ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
      makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
      session, it doesn't also send SIGINT to the perf process, allowing us to send it a
@@ -384,15 +389,23 @@ let decode_events () ~record_dir ~perf_map =
   in
   if debug_perf_commands then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
   let%map perf_script_proc =
-    Process.create_exn ~prog:"perf" ~working_dir:record_dir ~args ()
+    Process.create_exn ~env:perf_env ~prog:"perf" ~working_dir:record_dir ~args ()
   in
   let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
-  let event_pipe =
+  don't_wait_for
+    (Reader.transfer
+       (Process.stderr perf_script_proc)
+       (Writer.pipe (force Writer.stderr)));
+  let events =
     (* Every route of filtering on streams in an async way seems to be deprecated,
        including converting to pipes which says that the stream creation should be
        switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
        can't see a reason why filter_map would lead to memory leaks. *)
     Pipe.map line_pipe ~f:(Perf_line.to_event ~perf_map)
   in
-  Ok event_pipe
+  let close_result =
+    let%map exit_or_signal = Process.wait perf_script_proc in
+    perf_exit_to_or_error exit_or_signal
+  in
+  Ok { Decode_result.events; close_result }
 ;;

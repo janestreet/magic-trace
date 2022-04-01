@@ -35,5 +35,5 @@ module type S = sig
     :  Decode_opts.t
     -> record_dir:string
     -> perf_map:Perf_map.t option
-    -> Event.t Pipe.Reader.t Deferred.Or_error.t
+    -> Decode_result.t Deferred.Or_error.t
 end

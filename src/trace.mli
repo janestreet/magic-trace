@@ -10,6 +10,6 @@ module For_testing : sig
     -> ?debug_info:Elf.Addr_table.t
     -> Tracing_zero.Writer.t
     -> (string * Breakpoint.Hit.t) list
-    -> Event.t Pipe.Reader.t
-    -> unit Deferred.t
+    -> Decode_result.t
+    -> unit Deferred.Or_error.t
 end

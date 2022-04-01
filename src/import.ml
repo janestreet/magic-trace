@@ -1,6 +1,7 @@
 include struct
   open Magic_trace_core
   module Backend_intf = Backend_intf
+  module Decode_result = Decode_result
   module Elf = Elf
   module Errno = Errno
   module Event = Event

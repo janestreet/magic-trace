@@ -42,14 +42,8 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
-let write_trace_from_events
-    ~verbose
-    ~trace_mode
-    ?debug_info
-    writer
-    hits
-    (events : Event.t Pipe.Reader.t)
-  =
+let write_trace_from_events ~verbose ~trace_mode ?debug_info writer hits decode_result =
+  let { Decode_result.events; close_result } = decode_result in
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
     let%map.Deferred _wait_for_first = Pipe.values_available events in
@@ -70,9 +64,10 @@ let write_trace_from_events
   in
   let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
-  let%map () = Pipe.iter_without_pushback events ~f:process_event in
+  let%bind () = Pipe.iter_without_pushback events ~f:process_event in
   Trace_writer.flush_all writer;
-  Tracing.Trace.close trace
+  Tracing.Trace.close trace;
+  close_result
 ;;
 
 module Make_commands (Backend : Backend_intf.S) = struct
@@ -106,10 +101,17 @@ module Make_commands (Backend : Backend_intf.S) = struct
           |> [%of_sexp: Hits_file.t]
         in
         let debug_info = Option.map elf ~f:Elf.addr_table in
-        let%bind event_pipe = Backend.decode_events decode_opts ~record_dir ~perf_map in
+        let%bind decode_result =
+          Backend.decode_events decode_opts ~record_dir ~perf_map
+        in
         let%bind () =
-          write_trace_from_events ?debug_info ~trace_mode ~verbose writer hits event_pipe
-          |> Deferred.ok
+          write_trace_from_events
+            ?debug_info
+            ~trace_mode
+            ~verbose
+            writer
+            hits
+            decode_result
         in
         return ())
   ;;

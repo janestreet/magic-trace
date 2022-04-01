@@ -1,8 +1,13 @@
 open! Core
 open! Async
 open! Magic_trace_lib.Trace.For_testing
-module Symbol = Magic_trace_core.Symbol
-module Event = Magic_trace_core.Event
+
+include struct
+  open Magic_trace_core
+  module Decode_result = Decode_result
+  module Event = Event
+  module Symbol = Symbol
+end
 
 module Trace_helpers : sig
   val events : unit -> Event.t list
@@ -111,10 +116,14 @@ module With = struct
 end
 
 let dump_using_file events =
+  let decode_result = { Decode_result.events; close_result = return (Ok ()) } in
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
-  let%bind () = write_trace_from_events ~trace_mode:Userspace writer [] events in
+  let%bind or_error =
+    write_trace_from_events ~trace_mode:Userspace writer [] decode_result
+  in
+  ok_exn or_error;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
   while%bind_open.Result Ok true do
     let%bind.Result cur = Tracing.Parser.parse_next parser in
