@@ -42,7 +42,22 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
-let write_trace_from_events ~verbose ~trace_mode ?debug_info writer hits decode_result =
+let debug_print_perf_commands =
+  let open Command.Param in
+  flag
+    "-z-print-perf-commands"
+    no_arg
+    ~doc:"For debugging magic-trace, prints perf commands."
+;;
+
+let write_trace_from_events
+    ~print_events
+    ~trace_mode
+    ?debug_info
+    writer
+    hits
+    decode_result
+  =
   let { Decode_result.events; close_result } = decode_result in
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
@@ -59,7 +74,7 @@ let write_trace_from_events ~verbose ~trace_mode ?debug_info writer hits decode_
   in
   let events =
     Pipe.map events ~f:(fun (event : Event.t) ->
-        if verbose then Core.print_s (Event.sexp_of_t event);
+        if print_events then Core.print_s ~mach:() (Event.sexp_of_t event);
         { event with time = event.time })
   in
   let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
@@ -75,7 +90,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     type t =
       { output_config : Tracing_tool_output.t
       ; decode_opts : Backend.Decode_opts.t
-      ; verbose : bool
+      ; print_events : bool
       }
   end
 
@@ -88,9 +103,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let decode_to_trace
       ~elf
       ~trace_mode
+      ~debug_print_perf_commands
       ~record_dir
       ~perf_map
-      { Decode_opts.output_config; decode_opts; verbose }
+      { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
     Tracing_tool_output.write_and_maybe_view output_config ~f:(fun writer ->
@@ -102,13 +118,17 @@ module Make_commands (Backend : Backend_intf.S) = struct
         in
         let debug_info = Option.map elf ~f:Elf.addr_table in
         let%bind decode_result =
-          Backend.decode_events decode_opts ~record_dir ~perf_map
+          Backend.decode_events
+            decode_opts
+            ~debug_print_perf_commands
+            ~record_dir
+            ~perf_map
         in
         let%bind () =
           write_trace_from_events
             ?debug_info
             ~trace_mode
-            ~verbose
+            ~print_events
             writer
             hits
             decode_result
@@ -136,7 +156,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       }
   end
 
-  let attach ~elf (opts : Record_opts.t) pid =
+  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands pid =
     let%bind.Deferred.Or_error () =
       check_for_processor_trace_support () |> Deferred.return
     in
@@ -172,6 +192,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%map.Deferred.Or_error recording =
       Backend.Recording.attach_and_record
         opts.backend_opts
+        ~debug_print_perf_commands
         ~trace_mode:opts.trace_mode
         ~record_dir:opts.record_dir
         pid
@@ -247,11 +268,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Backend.Recording.finish_recording recording
   ;;
 
-  let run_and_record ~elf ~command_with_args record_opts =
+  let run_and_record record_opts ~elf ~debug_print_perf_commands ~command_with_args =
     let open Deferred.Or_error.Let_syntax in
     let argv = Array.of_list command_with_args in
     let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
-    let%bind attachment = attach ~elf record_opts pid in
+    let%bind attachment = attach record_opts ~elf ~debug_print_perf_commands pid in
     Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
         UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
@@ -260,8 +281,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return pid
   ;;
 
-  let attach_and_record ?elf record_opts pid =
-    let%bind.Deferred.Or_error attachment = attach ~elf record_opts pid in
+  let attach_and_record record_opts ~elf ~debug_print_perf_commands pid =
+    let%bind.Deferred.Or_error attachment =
+      attach record_opts ~elf ~debug_print_perf_commands pid
+    in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
@@ -327,9 +350,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let decode_flags =
     let%map_open.Command output_config = Tracing_tool_output.param
-    and verbose = flag "-verbose" no_arg ~doc:"print decoded events"
+    and print_events =
+      flag
+        "-z-print-events"
+        no_arg
+        ~doc:"For debugging magic-trace, prints decoded events."
     and decode_opts = Backend.Decode_opts.param in
-    { Decode_opts.output_config; decode_opts; verbose }
+    { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
   let run_command =
@@ -337,6 +364,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~summary:"Runs a command and traces it."
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
+       and debug_print_perf_commands = debug_print_perf_commands
        and command = anon ("COMMAND" %: string)
        and args =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
@@ -351,13 +379,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
          in
          record_opt_fn ~executable ~f:(fun opts ->
              let elf = Elf.create opts.executable in
-             let%bind pid = run_and_record ~elf ~command_with_args opts in
+             let%bind pid =
+               run_and_record opts ~elf ~debug_print_perf_commands ~command_with_args
+             in
              let%bind.Deferred perf_map =
                Perf_map.load (Perf_map.default_filename ~pid)
              in
              decode_to_trace
                ~elf
                ~trace_mode:opts.trace_mode
+               ~debug_print_perf_commands
                ~record_dir:opts.record_dir
                ~perf_map
                decode_opts))
@@ -402,6 +433,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~summary:"Traces a running process."
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
+       and debug_print_perf_commands = debug_print_perf_commands
        and pid =
          flag
            "-pid"
@@ -421,13 +453,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
          record_opt_fn ~executable ~f:(fun opts ->
              let { Record_opts.executable; when_to_snapshot; _ } = opts in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
-             let%bind () = attach_and_record ?elf opts pid in
+             let%bind () = attach_and_record opts ~elf ~debug_print_perf_commands pid in
              let%bind.Deferred perf_map =
                Perf_map.load (Perf_map.default_filename ~pid)
              in
              decode_to_trace
                ~elf
                ~trace_mode:opts.trace_mode
+               ~debug_print_perf_commands
                ~record_dir:opts.record_dir
                ~perf_map
                decode_opts))
@@ -449,7 +482,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            "-perf-map-file"
            (optional Filename_unix.arg_type)
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
-       in
+       and debug_print_perf_commands = debug_print_perf_commands in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
@@ -459,7 +492,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> return None
            | Some file -> Perf_map.load file
          in
-         decode_to_trace ~elf ~trace_mode ~record_dir ~perf_map decode_opts)
+         decode_to_trace
+           ~elf
+           ~trace_mode
+           ~debug_print_perf_commands
+           ~record_dir
+           ~perf_map
+           decode_opts)
   ;;
 
   let commands =
@@ -475,5 +514,5 @@ let command =
 ;;
 
 module For_testing = struct
-  let write_trace_from_events = write_trace_from_events ~verbose:false
+  let write_trace_from_events = write_trace_from_events ~print_events:false
 end

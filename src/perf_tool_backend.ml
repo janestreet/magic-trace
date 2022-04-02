@@ -2,8 +2,6 @@ open! Core
 open! Async
 open! Import
 
-let debug_perf_commands = false
-
 (* PAGER=cat because perf spawns [less] if you get the arguments wrong, and that keeps the
    parent process alive even though it just failed. That, in turn, makes magic-trace stop
    responding to Ctrl+C. *)
@@ -57,6 +55,7 @@ module Recording = struct
 
   let attach_and_record
       { Record_opts.multi_thread; full_execution }
+      ~debug_print_perf_commands
       ~(trace_mode : Trace_mode.t)
       ~record_dir
       pid
@@ -113,7 +112,7 @@ module Recording = struct
       @ (if full_execution then [] else [ "--snapshot" ])
       @ kcore_opts
     in
-    if debug_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
+    if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
     let perf_pid = Core_unix.fork_exec ~env:perf_env ~prog:"perf" ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
@@ -378,7 +377,7 @@ module Perf_line = struct
   ;;
 end
 
-let decode_events () ~record_dir ~perf_map =
+let decode_events () ~debug_print_perf_commands ~record_dir ~perf_map =
   let args =
     [ "script"
     ; "-i"
@@ -389,7 +388,8 @@ let decode_events () ~record_dir ~perf_map =
     ; Perf_line.report_fields
     ]
   in
-  if debug_perf_commands then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
+  if debug_print_perf_commands
+  then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
   let%map perf_script_proc =
     Process.create_exn ~env:perf_env ~prog:"perf" ~working_dir:record_dir ~args ()
   in
