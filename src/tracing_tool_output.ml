@@ -11,13 +11,8 @@ module Serve = struct
     | Disabled
     | Enabled of enabled
 
-  (* Points to a filesystem path will a copy of Perfetto. If provided, magic-trace will automatically
-    start a local HTTP server for you to view the trace. You can use this "hidden" feature to serve
-    a local copy of Perfetto if you don't want to copy trace files around. *)
-  let perfetto_ui_base_directory_env_var = Unix.getenv "MAGIC_TRACE_PERFETTO_DIR"
-
   let param =
-    match perfetto_ui_base_directory_env_var with
+    match Env_vars.perfetto_ui_base_directory with
     | None -> Command.Param.return Disabled
     | Some perfetto_ui_base_directory ->
       let%map_open.Command port =
