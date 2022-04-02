@@ -42,12 +42,14 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
+let debug_flag flag =
+  if Env_vars.enable_debug_options then flag else Command.Param.return false
+;;
+
 let debug_print_perf_commands =
   let open Command.Param in
-  flag
-    "-z-print-perf-commands"
-    no_arg
-    ~doc:"For debugging magic-trace, prints perf commands."
+  flag "-z-print-perf-commands" no_arg ~doc:"Prints perf commands when they're executed."
+  |> debug_flag
 ;;
 
 let write_trace_from_events
@@ -351,10 +353,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let decode_flags =
     let%map_open.Command output_config = Tracing_tool_output.param
     and print_events =
-      flag
-        "-z-print-events"
-        no_arg
-        ~doc:"For debugging magic-trace, prints decoded events."
+      flag "-z-print-events" no_arg ~doc:"Prints decoded [Event.t]s." |> debug_flag
     and decode_opts = Backend.Decode_opts.param in
     { Decode_opts.output_config; decode_opts; print_events }
   ;;
