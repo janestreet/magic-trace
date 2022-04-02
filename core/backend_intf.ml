@@ -16,6 +16,7 @@ module type S = sig
 
     val attach_and_record
       :  Record_opts.t
+      -> debug_print_perf_commands:bool
       -> trace_mode:Trace_mode.t
       -> record_dir:string
       -> Pid.t
@@ -33,6 +34,7 @@ module type S = sig
 
   val decode_events
     :  Decode_opts.t
+    -> debug_print_perf_commands:bool
     -> record_dir:string
     -> perf_map:Perf_map.t option
     -> Decode_result.t Deferred.Or_error.t
