@@ -11,6 +11,7 @@ module Record_opts = struct
   type t =
     { multi_thread : bool
     ; full_execution : bool
+    ; snapshot_size : Pow2_pages.t option
     }
 
   let param =
@@ -29,10 +30,17 @@ module Record_opts = struct
         no_arg
         ~doc:
           "Record a program's full execution instead of using a snapshot ring buffer.\n\
-           Warning: The trace grows at a rate of hundreds of megabytes per second. \
-           Traces larger than 100 MiB are likely to crash the trace viewer."
+           Warning: The trace grows at a rate of hundreds of megabytes per second. The \
+           trace viewer may fail to load traces larger than 100M."
+    and snapshot_size =
+      Pow2_pages.optional_flag
+        "-snapshot-size"
+        ~doc:
+          " Tunes the amount of data captured in a trace. By default, 4M for root or if \
+           perf_event_paranoid = -1, 256K otherwise. The trace viewer may fail to load \
+           large traces."
     in
-    { multi_thread; full_execution }
+    { multi_thread; full_execution; snapshot_size }
   ;;
 end
 
@@ -54,7 +62,7 @@ module Recording = struct
   ;;
 
   let attach_and_record
-      { Record_opts.multi_thread; full_execution }
+      { Record_opts.multi_thread; full_execution; snapshot_size }
       ~debug_print_perf_commands
       ~(trace_mode : Trace_mode.t)
       ~record_dir
@@ -105,12 +113,18 @@ module Recording = struct
            %!";
         []
     in
+    let snapshot_size_opt =
+      match snapshot_size with
+      | None -> []
+      | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
+    in
     let argv =
       [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
       @ thread_opts
       @ [ Pid.to_int pid |> Int.to_string ]
       @ (if full_execution then [] else [ "--snapshot" ])
       @ kcore_opts
+      @ snapshot_size_opt
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
