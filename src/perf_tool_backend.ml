@@ -254,16 +254,16 @@ module Perf_line = struct
                crashing here. *)
             | "tr strt tr end" -> Jump
             | kind -> raise_s [%message "unrecognized perf event" (kind : string)])
-            (* CR-someday wduff: These names make a lot more sense to me than the names that were here
-           before, but maybe I'm missing some context. We should either change the names in
-           [Event.t], or change them here, or something in between. That said, it seems best to
-           separate figuring out the names from the present improvements. *)
-        ; addr = dst_instruction_pointer
-        ; symbol = dst_symbol
-        ; offset = dst_symbol_offset
-        ; ip = src_instruction_pointer
-        ; ip_symbol = src_symbol
-        ; ip_offset = src_symbol_offset
+        ; src =
+            { instruction_pointer = src_instruction_pointer
+            ; symbol = src_symbol
+            ; symbol_offset = src_symbol_offset
+            }
+        ; dst =
+            { instruction_pointer = dst_instruction_pointer
+            ; symbol = dst_symbol
+            ; symbol_offset = dst_symbol_offset
+            }
         }
       | results ->
         raise_s
@@ -291,9 +291,13 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-           (addr 0x7ffd193838e0) (kind Call) (symbol (From_perf __vdso_clock_gettime))
-           (offset 0x0) (ip 0x7f6fce0b71f4) (ip_symbol (From_perf __clock_gettime))
-           (ip_offset 0x24)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x7f6fce0b71f4) (symbol (From_perf __clock_gettime))
+             (symbol_offset 0x24)))
+           (dst
+            ((instruction_pointer 0x7ffd193838e0)
+             (symbol (From_perf __vdso_clock_gettime)) (symbol_offset 0x0)))) |}]
       ;;
 
       let%expect_test "C symbol trace start" =
@@ -302,8 +306,11 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-           (addr 0x7f6fce0b71d0) (kind Start) (symbol (From_perf __clock_gettime))
-           (offset 0x0) (ip 0x0) (ip_symbol Unknown) (ip_offset 0x0)) |}]
+           (kind Start)
+           (src ((instruction_pointer 0x0) (symbol Unknown) (symbol_offset 0x0)))
+           (dst
+            ((instruction_pointer 0x7f6fce0b71d0) (symbol (From_perf __clock_gettime))
+             (symbol_offset 0x0)))) |}]
       ;;
 
       let%expect_test "C++ symbol" =
@@ -312,11 +319,14 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
-           (addr 0x9f68b0) (kind Call) (symbol (From_perf "J::K<int, std::string>"))
-           (offset 0x0) (ip 0x9bc6db)
-           (ip_symbol
-            (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
-           (ip_offset 0x1eb)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x9bc6db)
+             (symbol (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
+             (symbol_offset 0x1eb)))
+           (dst
+            ((instruction_pointer 0x9f68b0)
+             (symbol (From_perf "J::K<int, std::string>")) (symbol_offset 0x0)))) |}]
       ;;
 
       let%expect_test "OCaml symbol" =
@@ -325,9 +335,13 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
-           (offset 0x0) (ip 0x56234f77576b)
-           (ip_symbol (From_perf Base.Comparable.=_2352)) (ip_offset 0xb)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x56234f77576b)
+             (symbol (From_perf Base.Comparable.=_2352)) (symbol_offset 0xb)))
+           (dst
+            ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+             (symbol_offset 0x0)))) |}]
       ;;
 
       (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
@@ -348,9 +362,13 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
-           (offset 0x0) (ip 0x56234f77576b) (ip_symbol (From_perf "x => "))
-           (ip_offset 0xb)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+             (symbol_offset 0xb)))
+           (dst
+            ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+             (symbol_offset 0x0)))) |}]
       ;;
 
       let%expect_test "manufactured example 2" =
@@ -359,8 +377,13 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf "=> ")) (offset 0x0)
-           (ip 0x56234f77576b) (ip_symbol (From_perf "x => ")) (ip_offset 0xb)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+             (symbol_offset 0xb)))
+           (dst
+            ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf "=> "))
+             (symbol_offset 0x0)))) |}]
       ;;
 
       let%expect_test "manufactured example 3" =
@@ -369,9 +392,13 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-           (addr 0x56234f4bc7a0) (kind Call) (symbol (From_perf caml_apply2))
-           (offset 0x0) (ip 0x56234f77576b) (ip_symbol (From_perf "+ "))
-           (ip_offset 0xb)) |}]
+           (kind Call)
+           (src
+            ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
+             (symbol_offset 0xb)))
+           (dst
+            ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+             (symbol_offset 0x0)))) |}]
       ;;
     end)
   ;;
