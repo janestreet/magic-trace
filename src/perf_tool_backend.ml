@@ -249,10 +249,12 @@ module Perf_line = struct
             | "tr end  syscall" -> End Syscall
             | "tr end  iret" -> End Iret
             | "tr end  sysret" -> End Sysret
-            (* CR-someday wduff: I saw "tr strt tr end" in practice, but I'm not sure what we want
-               to do with it. Calling it out redundantly here for now. *)
-            | ("tr strt tr end" as kind) | kind ->
-              raise_s [%message "unrecognized perf event" (kind : string)])
+            (* "tr strt tr end" happens when someone `go run`s ./demo/demo.go. But that trace is
+               pretty broken for other reasons, so it's hard to say if this is truly necessary.
+               Regardless, it's slightly more user friendly to show a broken trace instead of
+               crashing here. *)
+            | "tr strt tr end" -> Jump
+            | kind -> raise_s [%message "unrecognized perf event" (kind : string)])
             (* CR-someday wduff: These names make a lot more sense to me than the names that were here
            before, but maybe I'm missing some context. We should either change the names in
            [Event.t], or change them here, or something in between. That said, it seems best to
