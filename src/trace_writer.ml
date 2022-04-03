@@ -278,19 +278,16 @@ let is_kernel_address addr = Int64.(addr < 0L)
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
     constants defined above. *)
-let write_event
-    (t : t)
-    ({ Event.thread
-     ; time
-     ; symbol
-     ; kind
-     ; addr
-     ; offset
-     ; ip = _
-     ; ip_symbol = _
-     ; ip_offset = _
-     } as event)
-  =
+let write_event (t : t) event =
+  let { Event.thread
+      ; time
+      ; kind
+      ; src = _
+      ; dst = { instruction_pointer = addr; symbol; symbol_offset = offset }
+      }
+    =
+    event
+  in
   let time = map_time t time in
   let ({ Thread_info.thread
        ; inactive_callstacks

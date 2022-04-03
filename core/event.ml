@@ -34,15 +34,20 @@ module Thread = struct
   [@@deriving sexp, compare, hash]
 end
 
+module Location = struct
+  type t =
+    { instruction_pointer : Int64.Hex.t
+    ; symbol : Symbol.t
+    ; symbol_offset : Int.Hex.t
+    }
+  [@@deriving sexp]
+end
+
 type t =
   { thread : Thread.t
   ; time : Time_ns.Span.t
-  ; addr : Int64.Hex.t
   ; kind : Kind.t
-  ; symbol : Symbol.t
-  ; offset : Int.Hex.t
-  ; ip : Int64.Hex.t
-  ; ip_symbol : Symbol.t
-  ; ip_offset : Int.Hex.t
+  ; src : Location.t
+  ; dst : Location.t
   }
 [@@deriving sexp]

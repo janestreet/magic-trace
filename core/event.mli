@@ -34,15 +34,20 @@ module Thread : sig
   [@@deriving sexp, compare, hash]
 end
 
+module Location : sig
+  type t =
+    { instruction_pointer : int64
+    ; symbol : Symbol.t
+    ; symbol_offset : int
+    }
+  [@@deriving sexp]
+end
+
 type t =
   { thread : Thread.t
   ; time : Time_ns.Span.t
-  ; addr : int64
   ; kind : Kind.t
-  ; symbol : Symbol.t
-  ; offset : int
-  ; ip : int64
-  ; ip_symbol : Symbol.t
-  ; ip_offset : int
+  ; src : Location.t
+  ; dst : Location.t
   }
 [@@deriving sexp]
