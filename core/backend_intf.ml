@@ -18,6 +18,7 @@ module type S = sig
       :  Record_opts.t
       -> debug_print_perf_commands:bool
       -> trace_mode:Trace_mode.t
+      -> timer_resolution:Timer_resolution.t
       -> record_dir:string
       -> Pid.t
       -> t Deferred.Or_error.t
