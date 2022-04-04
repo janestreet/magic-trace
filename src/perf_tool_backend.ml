@@ -228,7 +228,7 @@ module Perf_line = struct
         in
         { thread =
             { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-            ; tid = (if tid = 0 then None else Some tid)
+            ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
             }
         ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
         ; kind =
