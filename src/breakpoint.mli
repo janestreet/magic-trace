@@ -12,8 +12,8 @@ val destroy : t -> unit
 
 module Hit : sig
   type t =
-    { timestamp : int
-    ; passed_timestamp : int
+    { timestamp : Time_ns.Span.t
+    ; passed_timestamp : Time_ns.Span.t
     ; passed_val : int
     ; tid : int
     ; ip : int

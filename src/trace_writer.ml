@@ -70,10 +70,13 @@ let write_hits t hits =
     List.iter hits ~f:(fun (sym, (hit : Breakpoint.Hit.t)) ->
         let is_default_symbol = String.( = ) sym Magic_trace.Private.stop_symbol in
         let name = [%string "hit %{sym}"] in
-        let time = map_time t (Time_ns.Span.of_int_ns hit.timestamp) in
+        let time = map_time t hit.timestamp in
         let args =
           Tracing.Trace.Arg.
-            [ "timestamp", Int hit.timestamp; "tid", Int hit.tid; "ip", Int hit.ip ]
+            [ "timestamp", Int (Time_ns.Span.to_int_ns hit.timestamp)
+            ; "tid", Int hit.tid
+            ; "ip", Int hit.ip
+            ]
         in
         (* Args that are computed from captured registers are only meaningful on our
          special stop symbol, we still capture them regardless, but on other symbols
@@ -82,7 +85,9 @@ let write_hits t hits =
           if is_default_symbol
           then
             Tracing.Trace.Arg.
-              [ "timestamp_passed", Int hit.passed_timestamp; "arg", Int hit.passed_val ]
+              [ "timestamp_passed", Int (Time_ns.Span.to_int_ns hit.passed_timestamp)
+              ; "arg", Int hit.passed_val
+              ]
             @ args
           else args
         in
@@ -92,12 +97,12 @@ let write_hits t hits =
          We check it for validity since it's possible someone uses an older version of
          [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
         let valid_timestamp =
-          hit.passed_timestamp > Time_ns.Span.to_int_ns t.base_time
-          && hit.passed_timestamp < hit.timestamp
+          Time_ns.Span.(
+            hit.passed_timestamp > t.base_time && hit.passed_timestamp < hit.timestamp)
         in
         let start =
           if is_default_symbol && valid_timestamp
-          then map_time t (Time_ns.Span.of_int_ns hit.passed_timestamp)
+          then map_time t hit.passed_timestamp
           else time
         in
         Tracing.Trace.write_duration_complete
@@ -113,7 +118,7 @@ let write_hits t hits =
 let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
-        Time_ns.Span.min acc (Time_ns.Span.of_int_ns hit.timestamp))
+        Time_ns.Span.min acc hit.timestamp)
   in
   let t =
     { debug_info = Option.value debug_info ~default:(Int.Table.create ())
