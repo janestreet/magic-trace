@@ -139,6 +139,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   module Record_opts = struct
+    module Trace_scope = struct
+      type t =
+        | Single_thread
+        | Thread_group
+        | Specific_cpus of int list
+        | All_cpus
+    end
+
     type t =
       { backend_opts : Backend.Record_opts.t
       ; multi_snapshot : bool
@@ -146,8 +154,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; record_dir : string
       ; executable : string
       ; trace_mode : Trace_mode.t
+      ; trace_scope : Trace_scope.t
       ; timer_resolution : Timer_resolution.t
-      ; multi_thread : bool
       }
   end
 
@@ -194,7 +202,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
           return (Ok (Some snap_loc)))
     in
     let trace_scope : Trace_scope.t =
-      if opts.multi_thread then Thread_group pid else Single_thread pid
+      match opts.trace_scope with
+      | Thread_group -> Thread_group pid
+      | Single_thread -> Single_thread pid
+      | Specific_cpus cpus -> Specific_cpus cpus
+      | All_cpus -> All_cpus
     in
     let%map.Deferred.Or_error recording =
       Backend.Recording.attach_and_record
@@ -333,15 +345,30 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (2) Each snapshot linearly increases the size of the trace file. Large trace \
            files may crash the trace viewer."
     and trace_mode = Trace_mode.param
-    and multi_thread =
-      flag
-        "-multi-thread"
-        no_arg
-        ~doc:
-          "Records every thread of an executable, instead of only the thread whose TID \
-           is equal to the process' PID.\n\
-           Warning: this flag decreases the trace's lookback period because the kernel \
-           divides snapshot buffer resources equally across all threads."
+    and trace_scope =
+      choose_one
+        ~if_nothing_chosen:(Default_to Record_opts.Trace_scope.Single_thread)
+        [ flag
+            "-multi-thread"
+            no_arg
+            ~doc:
+              "Records every thread of an executable, instead of only the thread whose \
+               TID is equal to the process' PID.\n\
+               Warning: this flag decreases the trace's lookback period because the \
+               kernel divides snapshot buffer resources equally across all threads."
+          |> map ~f:(function
+                 | true -> Some Record_opts.Trace_scope.Thread_group
+                 | false -> None)
+        ; flag
+            "-cpus"
+            (optional
+               (Command.Arg_type.create (function
+                   | "all" -> Record_opts.Trace_scope.All_cpus
+                   | cpulist -> Specific_cpus (Linux_ext.cpu_list_of_string_exn cpulist))))
+            ~doc:
+              "CPULIST List of CPUs to trace activity on. Accepts a kernel-style CPU \
+               list, e.g. '0,2,4-16', as well as the string 'all' to trace all CPUs."
+        ]
     and timer_resolution = Timer_resolution.param
     and backend_opts = Backend.Record_opts.param in
     fun ~executable ~f ->
@@ -364,8 +391,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; record_dir
             ; executable
             ; trace_mode
+            ; trace_scope
             ; timer_resolution
-            ; multi_thread
             })
   ;;
 

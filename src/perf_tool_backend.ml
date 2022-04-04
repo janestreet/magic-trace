@@ -105,6 +105,9 @@ module Recording = struct
       match trace_scope with
       | Single_thread tid -> [ "--per-thread"; "-t"; Pid.to_string tid ]
       | Thread_group pid -> [ "-p"; Pid.to_string pid ]
+      | Specific_cpus cpus ->
+        [ "--cpu"; List.map cpus ~f:Int.to_string |> String.concat ~sep:"," ]
+      | All_cpus -> [ "--all-cpus" ]
     in
     let ev_arg =
       let timer_resolution : Timer_resolution.t =
