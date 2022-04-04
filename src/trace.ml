@@ -146,6 +146,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; record_dir : string
       ; executable : string
       ; trace_mode : Trace_mode.t
+      ; timer_resolution : Timer_resolution.t
       }
   end
 
@@ -196,6 +197,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         opts.backend_opts
         ~debug_print_perf_commands
         ~trace_mode:opts.trace_mode
+        ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir
         pid
     in
@@ -326,6 +328,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (2) Each snapshot linearly increases the size of the trace file. Large trace \
            files may crash the trace viewer."
     and trace_mode = Trace_mode.param
+    and timer_resolution = Timer_resolution.param
     and backend_opts = Backend.Record_opts.param in
     fun ~executable ~f ->
       let record_dir, cleanup =
@@ -347,6 +350,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; record_dir
             ; executable
             ; trace_mode
+            ; timer_resolution
             })
   ;;
 

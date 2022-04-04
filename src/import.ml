@@ -8,5 +8,6 @@ include struct
   module Perf_map = Perf_map
   module Perf_map_location = Perf_map_location
   module Symbol = Symbol
+  module Timer_resolution = Timer_resolution
   module Trace_mode = Trace_mode
 end

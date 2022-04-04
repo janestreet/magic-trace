@@ -61,10 +61,31 @@ module Recording = struct
     | Userspace_and_kernel -> "uk"
   ;;
 
+  let perf_intel_pt_config_of_timer_resolution : Timer_resolution.t -> string = function
+    | Low -> ""
+    | Normal -> "cyc=1,cyc_thresh=1,mtc_period=0"
+    | High -> "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
+    | Custom { cyc; cyc_thresh; mtc; mtc_period; noretcomp; psb_period } ->
+      let make_config key = function
+        | None -> None
+        | Some value -> Some [%string "%{key}=%{value#Int}"]
+      in
+      [ make_config "cyc" (Option.map ~f:Bool.to_int cyc)
+      ; make_config "cyc_thresh" cyc_thresh
+      ; make_config "mtc" (Option.map ~f:Bool.to_int mtc)
+      ; make_config "mtc_period" mtc_period
+      ; make_config "noretcomp" (Option.map ~f:Bool.to_int noretcomp)
+      ; make_config "psb_period" psb_period
+      ]
+      |> List.filter_opt
+      |> String.concat ~sep:","
+  ;;
+
   let attach_and_record
       { Record_opts.multi_thread; full_execution; snapshot_size }
       ~debug_print_perf_commands
       ~(trace_mode : Trace_mode.t)
+      ~(timer_resolution : Timer_resolution.t)
       ~record_dir
       pid
     =
@@ -82,18 +103,22 @@ module Recording = struct
       | true -> [ "-p" ]
     in
     let ev_arg =
-      if Perf_capabilities.(do_intersect capabilities configurable_psb_period)
-      then
-        (* Using Intel Processor Trace with the highest possible granularity. *)
-        [%string
-          "--event=intel_pt/cyc=1,cyc_thresh=1,mtc_period=0/%{perf_selector_of_trace_mode \
-           trace_mode}"]
-      else (
-        Core.eprintf
-          "[Warning: This machine has an older generation processor, timing granularity \
-           will be ~1us instead of ~10ns. Consider using a newer machine.]\n\
-           %!";
-        [%string "--event=intel_pt//%{perf_selector_of_trace_mode trace_mode}"])
+      let timer_resolution : Timer_resolution.t =
+        match
+          ( timer_resolution
+          , Perf_capabilities.(do_intersect capabilities configurable_psb_period) )
+        with
+        | (Normal | High), false ->
+          Core.eprintf
+            "[Warning: This machine has an older generation processor, timing \
+             granularity will be ~1us instead of ~10ns. Consider using a newer machine.]\n\
+             %!";
+          Low
+        | _, _ -> timer_resolution
+      in
+      let intel_pt_config = perf_intel_pt_config_of_timer_resolution timer_resolution in
+      let selector = perf_selector_of_trace_mode trace_mode in
+      [%string "--event=intel_pt/%{intel_pt_config}/%{selector}"]
     in
     let kcore_opts =
       match trace_mode, Perf_capabilities.(do_intersect capabilities kcore) with
