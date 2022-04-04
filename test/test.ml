@@ -18,7 +18,11 @@ module Trace_helpers : sig
   val jmp : unit -> unit
 end = struct
   let start_time = Time_ns.Span.of_int_ns 12345
-  let thread : Event.Thread.t = { pid = Some (Pid.of_int 1234); tid = Some 456 }
+
+  let thread : Event.Thread.t =
+    { pid = Some (Pid.of_int 1234); tid = Some (Pid.of_int 456) }
+  ;;
+
   let stack = Stack.create ()
   let events = Queue.create ()
   let cur_time = ref start_time

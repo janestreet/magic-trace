@@ -272,12 +272,6 @@ let opt_pid_to_string opt_pid =
   | Some pid -> Pid.to_string pid
 ;;
 
-let opt_int_to_string opt_int =
-  match opt_int with
-  | None -> "?"
-  | Some int -> Int.to_string int
-;;
-
 let is_kernel_address addr = Int64.(addr < 0L)
 
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
@@ -306,7 +300,7 @@ let write_event (t : t) event =
           Tracing.Trace.allocate_pid
             t.trace
             ~name:
-              [%string "%{opt_pid_to_string thread.pid}/%{opt_int_to_string thread.tid}"]
+              [%string "%{opt_pid_to_string thread.pid}/%{opt_pid_to_string thread.tid}"]
         in
         let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
         { thread

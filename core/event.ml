@@ -29,7 +29,7 @@ end
 module Thread = struct
   type t =
     { pid : Pid.t option
-    ; tid : int option
+    ; tid : Pid.t option
     }
   [@@deriving sexp, compare, hash]
 end
