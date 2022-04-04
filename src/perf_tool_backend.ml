@@ -9,22 +9,12 @@ let perf_env = `Extend [ "PAGER", "cat" ]
 
 module Record_opts = struct
   type t =
-    { multi_thread : bool
-    ; full_execution : bool
+    { full_execution : bool
     ; snapshot_size : Pow2_pages.t option
     }
 
   let param =
-    let%map_open.Command multi_thread =
-      flag
-        "-multi-thread"
-        no_arg
-        ~doc:
-          "Records every thread of an executable, instead of only the thread whose TID \
-           is equal to the process' PID.\n\
-           Warning: this flag decreases the trace's lookback period because the kernel \
-           divides snapshot buffer resources equally across all threads."
-    and full_execution =
+    let%map_open.Command full_execution =
       flag
         "-full-execution"
         no_arg
@@ -39,7 +29,7 @@ module Record_opts = struct
           " Tunes the amount of data captured in a trace. Default: 4M if root or \
            perf_event_paranoid < 0, 256K otherwise. More info: magic-trace.org/w/s"
     in
-    { multi_thread; full_execution; snapshot_size }
+    { full_execution; snapshot_size }
   ;;
 end
 
@@ -95,13 +85,13 @@ module Recording = struct
   ;;
 
   let attach_and_record
-      { Record_opts.multi_thread; full_execution; snapshot_size }
+      { Record_opts.full_execution; snapshot_size }
       ~debug_print_perf_commands
       ~(when_to_snapshot : When_to_snapshot.t)
       ~(trace_mode : Trace_mode.t)
+      ~(trace_scope : Trace_scope.t)
       ~(timer_resolution : Timer_resolution.t)
       ~record_dir
-      pid
     =
     let%bind capabilities = Perf_capabilities.detect_exn () in
     let%bind.Deferred.Or_error () =
@@ -111,10 +101,10 @@ module Recording = struct
         Deferred.Or_error.error_string
           "magic-trace must be run as root in order to trace the kernel"
     in
-    let thread_opts =
-      match multi_thread with
-      | false -> [ "--per-thread"; "-t" ]
-      | true -> [ "-p" ]
+    let scope_opts =
+      match trace_scope with
+      | Single_thread tid -> [ "--per-thread"; "-t"; Pid.to_string tid ]
+      | Thread_group pid -> [ "-p"; Pid.to_string pid ]
     in
     let ev_arg =
       let timer_resolution : Timer_resolution.t =
@@ -157,7 +147,6 @@ module Recording = struct
       | None -> []
       | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
     in
-    let pid_opt = [ Pid.to_int pid |> Int.to_string ] in
     let snapshot_opt =
       if full_execution
       then []
@@ -169,7 +158,7 @@ module Recording = struct
     let argv =
       List.concat
         [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
-        ; thread_opts
+        ; scope_opts
         ; pid_opt
         ; snapshot_opt
         ; kcore_opts

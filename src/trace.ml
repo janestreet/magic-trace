@@ -147,6 +147,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; executable : string
       ; trace_mode : Trace_mode.t
       ; timer_resolution : Timer_resolution.t
+      ; multi_thread : bool
       }
   end
 
@@ -192,15 +193,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
           let snap_loc = Elf.symbol_stop_info elf pid snap_sym in
           return (Ok (Some snap_loc)))
     in
+    let trace_scope : Trace_scope.t =
+      if opts.multi_thread then Thread_group pid else Single_thread pid
+    in
     let%map.Deferred.Or_error recording =
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
         ~when_to_snapshot:opts.when_to_snapshot
         ~trace_mode:opts.trace_mode
+        ~trace_scope
         ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir
-        pid
     in
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
@@ -329,6 +333,15 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (2) Each snapshot linearly increases the size of the trace file. Large trace \
            files may crash the trace viewer."
     and trace_mode = Trace_mode.param
+    and multi_thread =
+      flag
+        "-multi-thread"
+        no_arg
+        ~doc:
+          "Records every thread of an executable, instead of only the thread whose TID \
+           is equal to the process' PID.\n\
+           Warning: this flag decreases the trace's lookback period because the kernel \
+           divides snapshot buffer resources equally across all threads."
     and timer_resolution = Timer_resolution.param
     and backend_opts = Backend.Record_opts.param in
     fun ~executable ~f ->
@@ -352,6 +365,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; executable
             ; trace_mode
             ; timer_resolution
+            ; multi_thread
             })
   ;;
 
