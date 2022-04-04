@@ -18,12 +18,12 @@ depends: [
   "core_unix"
   "expect_test_helpers_async"
   # "fzf" vendored in lib/ for now
-  # "ocaml-probes" vendored in lib/ for now
+  "ocaml-probes"
   "ppx_jane"
   "shell"
   # "tracing" vendored in lib/ for now
   "dune"         {>= "2.0.0"}
-  # "owee" vendored in lib/ for now
+  "owee"         {>= "0.5"}
   "re"           {>= "1.8.0"}
 ]
 synopsis: "Easy Intel Processor Trace Visualizer"

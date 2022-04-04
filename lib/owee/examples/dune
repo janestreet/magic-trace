@@ -1,9 +1,0 @@
-(executables
- (names decodedline_elf decodedline_macho functions locate read_buildid read_stapsdt_probes)
- (libraries owee unix))
-
-(alias
- (name examples)
- (deps decodedline_elf.exe decodedline_macho.exe 
-       functions.exe locate.exe
-       read_buildid.exe read_stapsdt_probes.exe))

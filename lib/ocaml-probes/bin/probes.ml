@@ -1,1 +1,0 @@
-let () = Cli.run ()
