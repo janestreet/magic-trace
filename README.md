@@ -76,7 +76,7 @@ You can point magic-trace at a function such that when your application calls it
 
 4. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.ftf` in your working directory.
 
-5. Open [Perfetto](https://ui.perfetto.dev/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step.
+5. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step.
 
 6. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
 
@@ -140,7 +140,9 @@ If you'd like to contribute:
 
 magic-trace does not send your code or derivatives of your code (including traces) anywhere.
 
-Perfetto runs entirely in your browser and, as far as we can tell, also does not send your trace anywhere. If you're worried about that changing one day, [set up your own local copy of the Perfetto UI](https://github.com/janestreet/magic-trace/wiki/Setting-up-a-local-copy-of-the-UI) and use that instead.
+The magic-trace UI is based on Perfetto, and runs entirely in your browser. As far as we can tell,
+that UI does not send your trace anywhere. If you're worried about that changing one day,
+[set up your own local copy of the Perfetto UI](https://github.com/janestreet/magic-trace/wiki/Setting-up-a-local-copy-of-the-UI) and use that instead.
 
 # Acknowledgements
 
@@ -150,4 +152,4 @@ Intel PT is the foundational technology upon which magic-trace rests. We'd like 
 
 magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, everyone who contributed.
 
-magic-trace doesn't do any visualization itself, it relies on [Perfetto](https://perfetto.dev). We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
+magic-trace's UI is a fork of [Perfetto](https://github.com/janestreet/magic-trace/wiki/About-the-UI), with minor modifications. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
