@@ -23,8 +23,5 @@ let param =
        (Command.Arg_type.create (fun str -> t_of_sexp (Sexp.of_string str))))
     ~doc:
       "RESOLUTION How granular timing information should be, one of Low, Normal, High, \
-       or Custom (default: Normal). Higher resolutions have higher overhead, and \
-       therefore use up more snapshot buffer space. Custom can be used to specify ad-hoc \
-       configurations, e.g. '(Custom (cyc true) (cyc_thresh 1))' (see `man 1 \
-       perf-intel-pt` for all available configuration options)."
+       or Custom (default: Normal). More info: magic-trace.org/w/t"
 ;;

@@ -36,9 +36,8 @@ module Record_opts = struct
       Pow2_pages.optional_flag
         "-snapshot-size"
         ~doc:
-          " Tunes the amount of data captured in a trace. By default, 4M for root or if \
-           perf_event_paranoid = -1, 256K otherwise. The trace viewer may fail to load \
-           large traces."
+          " Tunes the amount of data captured in a trace. Default: 4M if root or \
+           perf_event_paranoid < 0, 256K otherwise. More info: magic-trace.org/w/s"
     in
     { multi_thread; full_execution; snapshot_size }
   ;;
