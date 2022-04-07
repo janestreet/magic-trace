@@ -53,7 +53,7 @@ module Serve = struct
   <html lang="en">
   <head>
     <meta charset="UTF-8">
-    <title>%{filename} - Perfetto UI</title>
+    <title>%{filename} - magic-trace</title>
     <link rel="shortcut icon" href="/ui/favicon.png">
   </head>
   <body>
@@ -127,7 +127,7 @@ let param =
 ;;
 
 let notify_trace ~store_path =
-  Core.eprintf "Visit https://ui.perfetto.dev/ and open %s to view trace.\n%!" store_path;
+  Core.eprintf "Visit https://magic-trace.org/ and open %s to view trace.\n%!" store_path;
   Deferred.Or_error.ok_unit
 ;;
 
