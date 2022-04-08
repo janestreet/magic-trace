@@ -10,4 +10,5 @@ include struct
   module Symbol = Symbol
   module Timer_resolution = Timer_resolution
   module Trace_mode = Trace_mode
+  module When_to_snapshot = When_to_snapshot
 end

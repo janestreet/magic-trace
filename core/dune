@@ -1,7 +1,7 @@
 (library
  (name magic_trace_core)
  (public_name magic-trace.magic_trace_core)
- (libraries core async core_unix.filename_unix owee re)
+ (libraries core async core_unix.filename_unix magic_trace owee re)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))
