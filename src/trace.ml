@@ -196,6 +196,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
+        ~when_to_snapshot:opts.when_to_snapshot
         ~trace_mode:opts.trace_mode
         ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir

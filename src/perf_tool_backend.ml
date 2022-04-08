@@ -97,6 +97,7 @@ module Recording = struct
   let attach_and_record
       { Record_opts.multi_thread; full_execution; snapshot_size }
       ~debug_print_perf_commands
+      ~(when_to_snapshot : When_to_snapshot.t)
       ~(trace_mode : Trace_mode.t)
       ~(timer_resolution : Timer_resolution.t)
       ~record_dir
@@ -156,13 +157,24 @@ module Recording = struct
       | None -> []
       | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
     in
+    let pid_opt = [ Pid.to_int pid |> Int.to_string ] in
+    let snapshot_opt =
+      if full_execution
+      then []
+      else (
+        match when_to_snapshot with
+        | Magic_trace_or_the_application_terminates -> [ "--snapshot=e" ]
+        | Application_calls_a_function _ -> [ "--snapshot" ])
+    in
     let argv =
-      [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
-      @ thread_opts
-      @ [ Pid.to_int pid |> Int.to_string ]
-      @ (if full_execution then [] else [ "--snapshot" ])
-      @ kcore_opts
-      @ snapshot_size_opt
+      List.concat
+        [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
+        ; thread_opts
+        ; pid_opt
+        ; snapshot_opt
+        ; kcore_opts
+        ; snapshot_size_opt
+        ]
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
@@ -186,7 +198,7 @@ module Recording = struct
 
   let take_snapshot { pid; can_snapshot } =
     if can_snapshot
-    then Signal_unix.send_i Signal.usr2 (`Pid pid)
+    then Signal_unix.send_i Signal.int (`Pid pid)
     else Core.eprintf "[Warning: Snapshotting during a full-execution tracing]\n%!";
     Or_error.return ()
   ;;
