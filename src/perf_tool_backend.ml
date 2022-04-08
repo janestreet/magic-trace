@@ -49,6 +49,20 @@ let perf_exit_to_or_error = function
   | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
 ;;
 
+(* Same as [Caml.exit] but does not run at_exit handlers *)
+external sys_exit : int -> 'a = "caml_sys_exit"
+
+let perf_fork_exec ?env ~prog ~argv () =
+  let pr_set_pdeathsig = Or_error.ok_exn Linux_ext.pr_set_pdeathsig in
+  match Core_unix.fork () with
+  | `In_the_child ->
+    pr_set_pdeathsig Signal.kill;
+    never_returns
+      (try Core_unix.exec ?env ~prog ~argv () with
+      | _ -> sys_exit 127)
+  | `In_the_parent pid -> pid
+;;
+
 module Recording = struct
   type t =
     { can_snapshot : bool
@@ -153,7 +167,7 @@ module Recording = struct
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
-    let perf_pid = Core_unix.fork_exec ~env:perf_env ~prog:"perf" ~argv () in
+    let perf_pid = perf_fork_exec ~env:perf_env ~prog:"perf" ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
      makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
      session, it doesn't also send SIGINT to the perf process, allowing us to send it a
@@ -456,6 +470,8 @@ let decode_events () ~debug_print_perf_commands ~record_dir ~perf_map =
   in
   if debug_print_perf_commands
   then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
+  (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
+     the [perf script] process from outliving the parent. *)
   let%map perf_script_proc =
     Process.create_exn ~env:perf_env ~prog:"perf" ~working_dir:record_dir ~args ()
   in
