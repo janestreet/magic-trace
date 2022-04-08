@@ -449,6 +449,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          flag
            "-pid"
            (optional int)
+           ~aliases:[ "-p" ]
            ~doc:
              "PID Process to attach to. Required if you don't have the \"fzf\" \
               application available in your PATH."

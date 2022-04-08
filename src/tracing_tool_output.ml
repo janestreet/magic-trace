@@ -121,6 +121,7 @@ let param =
     flag
       "output"
       (optional_with_default default string)
+      ~aliases:[ "o" ]
       ~doc:[%string "FILE Where to output the trace. (default: '%{default}')"]
   and serve = Serve.param in
   { serve; store_path }
