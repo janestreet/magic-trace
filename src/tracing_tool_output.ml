@@ -2,30 +2,21 @@ open! Core
 open! Async
 
 module Serve = struct
-  type enabled =
+  type t =
     { port : int
     ; perfetto_ui_base_directory : string
     }
 
-  type t =
-    | Disabled
-    | Enabled of enabled
-
-  let param =
-    match Env_vars.perfetto_ui_base_directory with
-    | None -> Command.Param.return Disabled
-    | Some perfetto_ui_base_directory ->
-      let%map_open.Command port =
-        let default = 8080 in
-        flag
-          "serve"
-          (optional_with_default default int)
-          ~doc:
-            [%string
-              "PORT Chooses the port that the local copy of Perfetto will be served on. \
-               (default: %{default#Int})"]
-      in
-      Enabled { port; perfetto_ui_base_directory }
+  let maybe_param =
+    Option.map Env_vars.perfetto_ui_base_directory ~f:(fun perfetto_ui_base_directory ->
+        let port = 8080 in
+        let%map_open.Command serve =
+          flag
+            "serve"
+            no_arg
+            ~doc:[%string " Serves the magic-trace UI on port %{port#Int})"]
+        in
+        if serve then Some { port; perfetto_ui_base_directory } else None)
   ;;
 
   let url t =
@@ -110,8 +101,35 @@ module Serve = struct
   ;;
 end
 
+module Share = struct
+  type t = { share_command_filename : string }
+
+  let maybe_param =
+    Option.map Env_vars.share_command_filename ~f:(fun share_command_filename ->
+        let%map_open.Command share = flag "share" no_arg ~doc:"Share trace." in
+        if share then Some { share_command_filename } else None)
+  ;;
+
+  let share_trace_file { share_command_filename } ~store_path =
+    let%map.Deferred.Or_error output =
+      Process.run
+        ~prog:share_command_filename
+        ~args:[ Filename_unix.realpath store_path ]
+        ()
+    in
+    Core.printf "%s%!" output
+  ;;
+end
+
+module Display_mode = struct
+  type t =
+    | Serve of Serve.t
+    | Share of Share.t
+    | Disabled
+end
+
 type t =
-  { serve : Serve.t
+  { display_mode : Display_mode.t
   ; store_path : string
   }
 
@@ -121,9 +139,18 @@ let param =
     flag
       "output"
       (optional_with_default default string)
+      ~aliases:[ "o" ]
       ~doc:[%string "FILE Where to output the trace. (default: '%{default}')"]
-  and serve = Serve.param in
-  { serve; store_path }
+  and display_mode =
+    [ Serve.maybe_param
+      |> Option.map ~f:(map ~f:(Option.map ~f:(fun serve -> Display_mode.Serve serve)))
+    ; Share.maybe_param
+      |> Option.map ~f:(map ~f:(Option.map ~f:(fun share -> Display_mode.Share share)))
+    ]
+    |> List.filter_opt
+    |> choose_one ~if_nothing_chosen:(Default_to Display_mode.Disabled)
+  in
+  { display_mode; store_path }
 ;;
 
 let notify_trace ~store_path =
@@ -132,9 +159,10 @@ let notify_trace ~store_path =
 ;;
 
 let maybe_serve t ~filename =
-  match t.serve with
+  match t.display_mode with
   | Disabled -> notify_trace ~store_path:t.store_path
-  | Enabled serve -> Serve.serve_trace_file serve ~filename ~store_path:t.store_path
+  | Serve serve -> Serve.serve_trace_file serve ~filename ~store_path:t.store_path
+  | Share share -> Share.share_trace_file share ~store_path:t.store_path
 ;;
 
 let maybe_stash_old_trace ~filename =
