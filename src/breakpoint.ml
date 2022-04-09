@@ -5,7 +5,7 @@ type t
 
 external create
   :  pid:int
-  -> addr:int
+  -> addr:int64
   -> single_hit:bool
   -> (t, int) result
   = "magic_breakpoint_create_stub"
@@ -17,7 +17,7 @@ module Hit = struct
     ; passed_timestamp : Time_ns.Span.t
     ; passed_val : int
     ; tid : int
-    ; ip : int
+    ; ip : Int64.Hex.t
     }
   [@@deriving sexp]
 end
