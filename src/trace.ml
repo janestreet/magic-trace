@@ -273,12 +273,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Backend.Recording.finish_recording recording
   ;;
 
-  let run_and_record record_opts ~elf ~debug_print_perf_commands ~command_with_args =
+  let run_and_record record_opts ~elf ~debug_print_perf_commands ~prog ~argv =
     let open Deferred.Or_error.Let_syntax in
-    let argv = Array.of_list command_with_args in
-    let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
+    let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
     let%bind attachment = attach record_opts ~elf ~debug_print_perf_commands pid in
-    Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
+    Ptrace.resume pid;
     Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
         UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
@@ -369,22 +368,22 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
-       and command = anon ("COMMAND" %: string)
-       and args =
+       and prog = anon ("COMMAND" %: string)
+       and argv =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let command_with_args = command :: List.concat (Option.to_list args) in
          let executable =
-           match Shell.which command with
+           match Shell.which prog with
            | Some path -> path
-           | None -> failwithf "Can't find executable for %s" command ()
+           | None -> failwithf "Can't find executable for %s" prog ()
          in
          record_opt_fn ~executable ~f:(fun opts ->
              let elf = Elf.create opts.executable in
              let%bind pid =
-               run_and_record opts ~elf ~debug_print_perf_commands ~command_with_args
+               let argv = prog :: List.concat (Option.to_list argv) in
+               run_and_record opts ~elf ~debug_print_perf_commands ~prog ~argv
              in
              let%bind.Deferred perf_map =
                Perf_map.load (Perf_map.default_filename ~pid)

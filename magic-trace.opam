@@ -18,7 +18,6 @@ depends: [
   "core_unix"
   "expect_test_helpers_async"
   # "fzf" vendored in lib/ for now
-  "ocaml-probes"
   "ppx_jane"
   "shell"
   # "tracing" vendored in lib/ for now
