@@ -66,6 +66,7 @@ module Recording = struct
   type t =
     { can_snapshot : bool
     ; pid : Pid.t
+    ; capabilities : Perf_capabilities.t
     }
 
   let perf_selector_of_trace_mode : Trace_mode.t -> string = function
@@ -97,6 +98,7 @@ module Recording = struct
   let attach_and_record
       { Record_opts.multi_thread; full_execution; snapshot_size }
       ~debug_print_perf_commands
+      ~(subcommand : Subcommand.t)
       ~(when_to_snapshot : When_to_snapshot.t)
       ~(trace_mode : Trace_mode.t)
       ~(timer_resolution : Timer_resolution.t)
@@ -111,6 +113,22 @@ module Recording = struct
         Deferred.Or_error.error_string
           "magic-trace must be run as root in order to trace the kernel"
     in
+    let perf_supports_snapshot_on_exit =
+      Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
+    in
+    (match when_to_snapshot, subcommand with
+    | Magic_trace_or_the_application_terminates, Run ->
+      if not perf_supports_snapshot_on_exit
+      then
+        printf
+          "Warning: magic-trace will only be able to snapshot when magic-trace is \
+           Ctrl+C'd, not when the application it's running ends. If that application \
+           ends before magic-trace can snapshot it, the resulting trace will be empty. \
+           The ability to snapshot when an application teminates was added to perf's \
+           userspace tools in version 5.4. For more information, see:\n\
+           https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
+           %!"
+    | Application_calls_a_function _, _ | _, Attach -> ());
     let thread_opts =
       match multi_thread with
       | false -> [ "--per-thread"; "-t" ]
@@ -162,9 +180,12 @@ module Recording = struct
       if full_execution
       then []
       else (
-        match when_to_snapshot with
-        | Magic_trace_or_the_application_terminates -> [ "--snapshot=e" ]
-        | Application_calls_a_function _ -> [ "--snapshot" ])
+        let snapshot_on_exit =
+          match when_to_snapshot with
+          | Magic_trace_or_the_application_terminates -> perf_supports_snapshot_on_exit
+          | Application_calls_a_function _ -> false
+        in
+        if snapshot_on_exit then [ "--snapshot=e" ] else [ "--snapshot" ])
     in
     let argv =
       List.concat
@@ -193,14 +214,20 @@ module Recording = struct
       | Some (_, exit) -> perf_exit_to_or_error exit
       | _ -> Ok ()
     in
-    { can_snapshot = not full_execution; pid = perf_pid }
+    { can_snapshot = not full_execution; pid = perf_pid; capabilities }
   ;;
 
-  let take_snapshot { pid; can_snapshot } =
+  let take_snapshot { pid; can_snapshot; capabilities } =
     if can_snapshot
-    then Signal_unix.send_i Signal.int (`Pid pid)
-    else Core.eprintf "[Warning: Snapshotting during a full-execution tracing]\n%!";
-    Or_error.return ()
+    then (
+      let signal =
+        if Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
+        then Signal.int
+        else Signal.usr2
+      in
+      Signal_unix.send_i signal (`Pid pid))
+    else Core.eprintf "Warning: Ignoring snapshot during a full-execution trace\n%!";
+    Ok ()
   ;;
 
   let finish_recording { pid; _ } =
