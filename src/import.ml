@@ -7,6 +7,7 @@ include struct
   module Event = Event
   module Perf_map = Perf_map
   module Perf_map_location = Perf_map_location
+  module Subcommand = Subcommand
   module Symbol = Symbol
   module Timer_resolution = Timer_resolution
   module Trace_mode = Trace_mode

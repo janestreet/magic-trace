@@ -159,7 +159,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       }
   end
 
-  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands pid =
+  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pid =
     let%bind.Deferred.Or_error () =
       check_for_processor_trace_support () |> Deferred.return
     in
@@ -196,6 +196,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
+        ~subcommand
         ~when_to_snapshot:opts.when_to_snapshot
         ~trace_mode:opts.trace_mode
         ~timer_resolution:opts.timer_resolution
@@ -276,7 +277,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let run_and_record record_opts ~elf ~debug_print_perf_commands ~prog ~argv =
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
-    let%bind attachment = attach record_opts ~elf ~debug_print_perf_commands pid in
+    let%bind attachment =
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Run pid
+    in
     Ptrace.resume pid;
     (* Forward ^C to the child, unless it has already exited. *)
     let exited_ivar = Ivar.create () in
@@ -299,7 +302,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let attach_and_record record_opts ~elf ~debug_print_perf_commands pid =
     let%bind.Deferred.Or_error attachment =
-      attach record_opts ~elf ~debug_print_perf_commands pid
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Attach pid
     in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in

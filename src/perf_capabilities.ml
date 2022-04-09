@@ -5,6 +5,7 @@ let bit n = Int63.of_int (1 lsl n)
 let configurable_psb_period = bit 0
 let kernel_tracing = bit 1
 let kcore = bit 2
+let snapshot_on_exit = bit 3
 
 include Flags.Make (struct
   let allow_intersecting = false
@@ -56,26 +57,24 @@ let supports_tracing_kernel () =
   Int.(Core_unix.geteuid () = 0)
 ;;
 
-let supports_kcore version =
-  (* Added in kernel commit eeb399b, which made it in 5.5. *)
-  Int.(Version.compare version (Version.create ~major:5 ~minor:5) >= 0)
+let kernel_version_at_least ~major ~minor version =
+  Int.(Version.compare version (Version.create ~major ~minor) >= 0)
 ;;
+
+(* Added in kernel commit eeb399b, which made it into 5.5. *)
+let supports_kcore = kernel_version_at_least ~major:5 ~minor:5
+
+(* Added in kernel commit ce7b0e4, which made it into 5.4. *)
+let supports_snapshot_on_exit = kernel_version_at_least ~major:5 ~minor:4
 
 let detect_exn () =
   let%bind perf_version_proc = Process.create_exn ~prog:"perf" ~args:[ "--version" ] () in
   let%map version_string = Reader.contents (Process.stdout perf_version_proc) in
   let version = Version.of_perf_version_string_exn version_string in
-  let capabilities = empty in
-  let capabilities =
-    if supports_configurable_psb_period ()
-    then capabilities + configurable_psb_period
-    else capabilities
-  in
-  let capabilities =
-    if supports_tracing_kernel () then capabilities + kernel_tracing else capabilities
-  in
-  let capabilities =
-    if supports_kcore version then capabilities + kcore else capabilities
-  in
-  capabilities
+  let set_if bool flag cap = cap + if bool then flag else empty in
+  empty
+  |> set_if (supports_configurable_psb_period ()) configurable_psb_period
+  |> set_if (supports_tracing_kernel ()) kernel_tracing
+  |> set_if (supports_kcore version) kcore
+  |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
 ;;
