@@ -3,7 +3,7 @@
  (public_name magic-trace.magic_trace_lib)
  (foreign_stubs
   (language c)
-  (names breakpoint_stubs boot_time_stubs))
+  (names breakpoint_stubs boot_time_stubs ptrace_stubs))
  (libraries core async core_unix.filename_unix fzf re shell
    core_unix.sys_unix cohttp cohttp_static_handler core_unix.signal_unix
    tracing ocaml-probes.probes_lib magic_trace magic_trace_core)
