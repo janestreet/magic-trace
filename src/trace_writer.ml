@@ -75,7 +75,7 @@ let write_hits t hits =
           Tracing.Trace.Arg.
             [ "timestamp", Int (Time_ns.Span.to_int_ns hit.timestamp)
             ; "tid", Int hit.tid
-            ; "ip", Int hit.ip
+            ; "ip", Pointer hit.ip
             ]
         in
         (* Args that are computed from captured registers are only meaningful on our

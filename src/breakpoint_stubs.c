@@ -76,7 +76,7 @@ CAMLprim value magic_breakpoint_create_stub(value pid, value addr,
   attr.size = sizeof(attr);
   attr.type = PERF_TYPE_BREAKPOINT;
   attr.bp_type = HW_BREAKPOINT_X;
-  attr.bp_addr = Long_val(addr);
+  attr.bp_addr = Int64_val(addr);
   attr.bp_len = sizeof(long);
   attr.sample_period = 1;
   attr.sample_type = PERF_SAMPLE_TIME | PERF_SAMPLE_IP | PERF_SAMPLE_REGS_USER |

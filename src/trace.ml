@@ -234,7 +234,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
         let single_hit = not opts.multi_snapshot in
-        let bp = Breakpoint.breakpoint_fd pid ~addr:(Int.of_int64_exn addr) ~single_hit in
+        let bp = Breakpoint.breakpoint_fd pid ~addr ~single_hit in
         let bp = Or_error.ok_exn bp in
         let fd =
           Async_unix.Fd.create
