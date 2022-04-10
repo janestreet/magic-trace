@@ -278,9 +278,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
     let%bind attachment = attach record_opts ~elf ~debug_print_perf_commands pid in
     Ptrace.resume pid;
-    Async_unix.Signal.handle Async_unix.Signal.terminating ~f:(fun signal ->
+    (* Forward ^C to the child, unless it has already exited. *)
+    let exited_ivar = Ivar.create () in
+    Async_unix.Signal.handle
+      ~stop:(Ivar.read exited_ivar)
+      Async_unix.Signal.terminating
+      ~f:(fun signal ->
         UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
+    (* This is still a little racey, but it's the best we can do without pidfds. *)
+    Ivar.fill exited_ivar ();
     let%bind () = detach attachment in
     return pid
   ;;
