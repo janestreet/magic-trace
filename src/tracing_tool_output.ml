@@ -132,12 +132,6 @@ let notify_trace ~store_path =
   Deferred.Or_error.ok_unit
 ;;
 
-let maybe_serve t ~filename =
-  match t.serve with
-  | Disabled -> notify_trace ~store_path:t.store_path
-  | Enabled serve -> Serve.serve_trace_file serve ~filename ~store_path:t.store_path
-;;
-
 let maybe_stash_old_trace ~filename =
   (* Replicate [perf]'s behavior when the output file already exists. *)
   try Core_unix.rename ~src:filename ~dst:(filename ^ ".old") with
@@ -147,9 +141,24 @@ let maybe_stash_old_trace ~filename =
 let write_and_maybe_serve ?num_temp_strs t ~filename ~f =
   let open Deferred.Or_error.Let_syntax in
   maybe_stash_old_trace ~filename;
-  let w = Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:t.store_path () in
+  let fd = Core_unix.openfile t.store_path ~mode:[ O_RDWR; O_CREAT; O_CLOEXEC ] in
+  (* Write to and serve from an indirect reference to [t.store_path], through our process'
+     fd table. This is a little grotesque, but avoids a race where the user runs
+     magic-trace twice with the same [-output], such that the filename changes under
+     [-serve] -- without this hack, the earlier magic-trace serving instance would start
+     serving the new trace, which is unlikely to be what the user expected. *)
+  let indirect_store_path = [%string "/proc/self/fd/%{fd#Core_unix.File_descr}"] in
+  let w =
+    Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:indirect_store_path ()
+  in
   let%bind res = f w in
-  let%map () = maybe_serve t ~filename in
+  let%map () =
+    match t.serve with
+    | Disabled -> notify_trace ~store_path:t.store_path
+    | Enabled serve ->
+      Serve.serve_trace_file serve ~filename ~store_path:indirect_store_path
+  in
+  Core_unix.close fd;
   res
 ;;
 
