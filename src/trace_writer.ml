@@ -74,7 +74,7 @@ let write_hits t hits =
         let args =
           Tracing.Trace.Arg.
             [ "timestamp", Int (Time_ns.Span.to_int_ns hit.timestamp)
-            ; "tid", Int hit.tid
+            ; "tid", Int (Pid.to_int hit.tid)
             ; "ip", Pointer hit.ip
             ]
         in
