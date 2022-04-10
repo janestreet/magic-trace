@@ -284,7 +284,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~stop:(Ivar.read exited_ivar)
       Async_unix.Signal.terminating
       ~f:(fun signal ->
-        UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal));
+        try
+          UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
+        with
+        | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
+          (* We raced, but it's OK because the child still exited. *)
+          ());
     let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
     (* This is still a little racey, but it's the best we can do without pidfds. *)
     Ivar.fill exited_ivar ();
