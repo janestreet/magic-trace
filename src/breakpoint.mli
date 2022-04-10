@@ -15,7 +15,7 @@ module Hit : sig
     { timestamp : Time_ns.Span.t
     ; passed_timestamp : Time_ns.Span.t
     ; passed_val : int
-    ; tid : int
+    ; tid : Pid.t
     ; ip : int64
     }
   [@@deriving sexp]
