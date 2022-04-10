@@ -317,34 +317,49 @@ module Perf_line = struct
         let dst_symbol, dst_symbol_offset =
           parse_symbol_and_offset dst_symbol_and_offset ~addr:dst_instruction_pointer
         in
+        let starts_trace, kind =
+          match String.chop_prefix kind ~prefix:"tr strt" with
+          | None -> false, kind
+          | Some rest -> true, String.lstrip ~drop:Char.is_whitespace rest
+        in
+        let ends_trace, kind =
+          match String.chop_prefix kind ~prefix:"tr end" with
+          | None -> false, kind
+          | Some rest -> true, String.lstrip ~drop:Char.is_whitespace rest
+        in
+        let trace_state_change : Event.Trace_state_change.t option =
+          match starts_trace, ends_trace with
+          | true, false -> Some Start
+          | false, true -> Some End
+          | false, false
+          (* "tr strt tr end" happens when someone `go run`s ./demo/demo.go. But that trace is
+               pretty broken for other reasons, so it's hard to say if this is truly necessary.
+               Regardless, it's slightly more user friendly to show a broken trace instead of
+               crashing here. *)
+          | true, true -> None
+        in
+        let kind : Event.Kind.t option =
+          match String.strip kind with
+          | "call" -> Some Call
+          | "return" -> Some Return
+          | "jmp" -> Some Jump
+          | "jcc" -> Some Jump
+          | "syscall" -> Some Syscall
+          | "hw int" -> Some Hardware_interrupt
+          | "iret" -> Some Iret
+          | "sysret" -> Some Sysret
+          | "" -> None
+          | _ ->
+            printf "Warning: skipping unrecognized perf output: %s\n%!" line;
+            None
+        in
         { thread =
             { pid = (if pid = 0 then None else Some (Pid.of_int pid))
             ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
             }
         ; time = time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
-        ; kind =
-            (match String.strip kind with
-            | "call" -> Call
-            | "return" -> Return
-            | "jmp" -> Jump
-            | "jcc" -> Jump
-            | "syscall" -> Syscall
-            | "hw int" -> Hardware_interrupt
-            | "iret" -> Iret
-            | "sysret" -> Sysret
-            | "tr strt" -> Start
-            | "tr end" -> End None
-            | "tr end  call" -> End Call
-            | "tr end  return" -> End Return
-            | "tr end  syscall" -> End Syscall
-            | "tr end  iret" -> End Iret
-            | "tr end  sysret" -> End Sysret
-            (* "tr strt tr end" happens when someone `go run`s ./demo/demo.go. But that trace is
-               pretty broken for other reasons, so it's hard to say if this is truly necessary.
-               Regardless, it's slightly more user friendly to show a broken trace instead of
-               crashing here. *)
-            | "tr strt tr end" -> Jump
-            | kind -> raise_s [%message "unrecognized perf event" (kind : string)])
+        ; trace_state_change
+        ; kind
         ; src =
             { instruction_pointer = src_instruction_pointer
             ; symbol = src_symbol
@@ -397,7 +412,7 @@ module Perf_line = struct
         [%expect
           {|
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-           (kind Start)
+           (trace_state_change Start)
            (src ((instruction_pointer 0x0) (symbol Unknown) (symbol_offset 0x0)))
            (dst
             ((instruction_pointer 0x7f6fce0b71d0) (symbol (From_perf __clock_gettime))
