@@ -142,6 +142,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     type t =
       { backend_opts : Backend.Record_opts.t
       ; multi_snapshot : bool
+      ; min_trigger_span : Time.Span.t
       ; when_to_snapshot : When_to_snapshot.t
       ; record_dir : string
       ; executable : string
@@ -228,6 +229,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | None -> Deferred.unit
       | Some { Elf.Stop_info.name; addr; _ } ->
         Core.eprintf "[Attaching to %s @ 0x%016Lx]\n%!" name addr;
+        let%bind () = Async_unix.after opts.min_trigger_span in
         (* This is a safety feature so that if you accidentally attach to a symbol that
            gets called very frequently, in single snapshot mode it will only trigger the
            breakpoint once before the breakpoint gets disabled. In [multi_snapshot] mode
@@ -339,6 +341,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
            materially impacted.\n\
            (2) Each snapshot linearly increases the size of the trace file. Large trace \
            files may crash the trace viewer."
+    and min_trigger_span =
+      flag
+        "-min-trigger-time"
+        (optional_with_default Time.Span.zero Time_unix.Span.arg_type)
+        ~doc:
+          "SPAN Ignore [-trigger] symbol hits that occur earlier than this. Allows \
+           collecting meaningful traces for symbols that are called very frequently. \
+           Accepts time units, e.g. '100ms'."
     and trace_mode = Trace_mode.param
     and timer_resolution = Timer_resolution.param
     and backend_opts = Backend.Record_opts.param in
@@ -358,6 +368,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           f
             { Record_opts.backend_opts
             ; multi_snapshot
+            ; min_trigger_span
             ; when_to_snapshot
             ; record_dir
             ; executable
