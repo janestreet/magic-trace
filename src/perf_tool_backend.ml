@@ -134,6 +134,7 @@ module Recording = struct
       | false -> [ "--per-thread"; "-t" ]
       | true -> [ "-p" ]
     in
+    let pid_opt = [ Pid.to_string pid ] in
     let ev_arg =
       let timer_resolution : Timer_resolution.t =
         match
@@ -175,7 +176,6 @@ module Recording = struct
       | None -> []
       | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
     in
-    let pid_opt = [ Pid.to_int pid |> Int.to_string ] in
     let snapshot_opt =
       if full_execution
       then []
