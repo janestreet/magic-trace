@@ -460,7 +460,6 @@ let write_event (t : t) event =
     |> List.concat
     |> assert_trace_mode;
     clear_callstack ();
-    flush_all t;
     (match Stack.pop inactive_callstacks with
     | Some callstack -> thread_info.callstack <- callstack
     | None ->
