@@ -33,8 +33,8 @@ module Callstack = struct
 end
 
 module Thread_info = struct
-  type t =
-    { thread : Tracing.Trace.Thread.t
+  type 'thread t =
+    { thread : 'thread
     ; (* This isn't a canonical callstack, but represents all of the information that we
        know about the callstack at the point in the events up to the current event being
        processed, and is reflected in the trace at that point. *)
@@ -52,21 +52,42 @@ module Thread_info = struct
     }
 end
 
-type t =
+module type Trace = Trace_writer_intf.S_trace
+
+type 'thread inner =
   { debug_info : Elf.Addr_table.t
-  ; trace : Tracing.Trace.t
-  ; thread_info : Thread_info.t Hashtbl.M(Event.Thread).t
+  ; thread_info : 'thread Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
   ; trace_mode : Trace_mode.t
+  ; trace : (module Trace with type thread = 'thread)
   }
 
-let map_time t time = Time_ns.Span.( - ) time t.base_time
+type t = T : 'thread inner -> t
+
+let real_trace (trace : Tracing.Trace.t) =
+  let module T = struct
+    type thread = Tracing.Trace.Thread.t
+
+    let allocate_pid = Tracing.Trace.allocate_pid trace
+    let allocate_thread = Tracing.Trace.allocate_thread trace
+    let write_duration_begin = Tracing.Trace.write_duration_begin trace ~category:""
+    let write_duration_end = Tracing.Trace.write_duration_end trace ~category:""
+    let write_duration_complete = Tracing.Trace.write_duration_complete trace ~category:""
+    let write_duration_instant = Tracing.Trace.write_duration_instant trace ~category:""
+  end
+  in
+  (module T : Trace with type thread = Tracing.Trace.Thread.t)
+;;
+
+let map_time (T t) time = Time_ns.Span.( - ) time t.base_time
 
 let write_hits t hits =
+  let (T u) = t in
   if not (List.is_empty hits)
-  then (
-    let pid = Tracing.Trace.allocate_pid t.trace ~name:"Snapshot symbol hits" in
-    let thread = Tracing.Trace.allocate_thread t.trace ~pid ~name:"hits" in
+  then
+    let module Trace = (val u.trace) in
+    let pid = Trace.allocate_pid ~name:"Snapshot symbol hits" in
+    let thread = Trace.allocate_thread ~pid ~name:"hits" in
     List.iter hits ~f:(fun (sym, (hit : Breakpoint.Hit.t)) ->
         let is_default_symbol = String.( = ) sym Magic_trace.Private.stop_symbol in
         let name = [%string "hit %{sym}"] in
@@ -98,41 +119,46 @@ let write_hits t hits =
          [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
         let valid_timestamp =
           Time_ns.Span.(
-            hit.passed_timestamp > t.base_time && hit.passed_timestamp < hit.timestamp)
+            hit.passed_timestamp > u.base_time && hit.passed_timestamp < hit.timestamp)
         in
         let start =
           if is_default_symbol && valid_timestamp
           then map_time t hit.passed_timestamp
           else time
         in
-        Tracing.Trace.write_duration_complete
-          t.trace
-          ~thread
-          ~args
-          ~category:""
-          ~name
-          ~time:start
-          ~time_end:time))
+        Trace.write_duration_complete ~thread ~args ~name ~time:start ~time_end:time)
 ;;
 
-let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
+let create_expert ~trace_mode ~debug_info ~earliest_time ~hits trace =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
         Time_ns.Span.min acc hit.timestamp)
   in
   let t =
-    { debug_info = Option.value debug_info ~default:(Int.Table.create ())
-    ; trace
-    ; thread_info = Hashtbl.create (module Event.Thread)
-    ; base_time
-    ; trace_mode
-    }
+    T
+      { debug_info = Option.value debug_info ~default:(Int.Table.create ())
+      ; thread_info = Hashtbl.create (module Event.Thread)
+      ; base_time
+      ; trace_mode
+      ; trace
+      }
   in
   write_hits t hits;
   t
 ;;
 
-let write_pending_event' t (thread : Thread_info.t) time { Pending_event.symbol; kind } =
+let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
+  create_expert ~trace_mode ~debug_info ~earliest_time ~hits (real_trace trace)
+;;
+
+let write_pending_event'
+    (type thread)
+    (t : thread inner)
+    (thread : thread Thread_info.t)
+    time
+    { Pending_event.symbol; kind }
+  =
+  let module Trace = (val t.trace) in
   let symbol = Symbol.demangle symbol in
   let display_name = Symbol.display_name symbol in
   match kind with
@@ -176,30 +202,16 @@ let write_pending_event' t (thread : Thread_info.t) time { Pending_event.symbol;
     let name =
       if from_untraced then display_name ^ " [inferred start time]" else display_name
     in
-    Tracing.Trace.write_duration_begin
-      t.trace
-      ~thread:thread.thread
-      ~name
-      ~time
-      ~args
-      ~category:""
+    Trace.write_duration_begin ~thread:thread.thread ~name ~time ~args
   | Ret ->
-    Tracing.Trace.write_duration_end
-      t.trace
-      ~name:display_name
-      ~time
-      ~thread:thread.thread
-      ~args:[]
-      ~category:""
+    Trace.write_duration_end ~name:display_name ~time ~thread:thread.thread ~args:[]
   | Ret_from_untraced { reset_time } ->
-    Tracing.Trace.write_duration_complete
-      t.trace
+    Trace.write_duration_complete
       ~time:reset_time
       ~time_end:time
       ~name:(Symbol.display_name Unknown)
       ~thread:thread.thread
       ~args:[]
-      ~category:""
 ;;
 
 (* It would be reasonable to also have returns consume time, but making them not
@@ -212,7 +224,12 @@ let consumes_time { Pending_event.symbol = _; kind } =
   | Ret | Ret_from_untraced _ -> false
 ;;
 
-let write_pending_event t (thread : Thread_info.t) time (ev : Pending_event.t) =
+let write_pending_event
+    (t : _ inner)
+    (thread : _ Thread_info.t)
+    time
+    (ev : Pending_event.t)
+  =
   match ev.kind with
   | Ret_from_untraced _ | Call { from_untraced = true; _ } ->
     Deque.enqueue_front thread.start_events (time, ev)
@@ -221,7 +238,7 @@ let write_pending_event t (thread : Thread_info.t) time (ev : Pending_event.t) =
   | _ -> write_pending_event' t thread time ev
 ;;
 
-let flush (t : t) ~to_time (thread : Thread_info.t) =
+let flush (t : _ inner) ~to_time (thread : _ Thread_info.t) =
   (* Try to evenly distribute the time between timestamp updates between all the
      time-consuming events in the batch. *)
   let count = List.count thread.pending_events ~f:consumes_time in
@@ -261,7 +278,7 @@ let flush_all t =
       Deque.clear thread.start_events)
 ;;
 
-let add_event t (thread : Thread_info.t) time ev =
+let add_event (t : _ inner) (thread : _ Thread_info.t) time ev =
   if Time_ns.Span.( <> ) time thread.pending_time then flush t ~to_time:time thread;
   thread.pending_events <- ev :: thread.pending_events
 ;;
@@ -277,7 +294,9 @@ let is_kernel_address addr = Int64.(addr < 0L)
 (** Write perf_events into a file as a Fuschia trace (stack events). Events should be
     collected with --itrace=b or cre, and -F pid,tid,time,flags,addr,sym,symoff as per the
     constants defined above. *)
-let write_event (t : t) event =
+let write_event t event =
+  let (T u) = t in
+  let module Trace = (val u.trace) in
   let { Event.thread
       ; time
       ; kind
@@ -295,14 +314,13 @@ let write_event (t : t) event =
        ; _
        } as thread_info)
     =
-    Hashtbl.find_or_add t.thread_info thread ~default:(fun () ->
+    Hashtbl.find_or_add u.thread_info thread ~default:(fun () ->
         let trace_pid =
-          Tracing.Trace.allocate_pid
-            t.trace
+          Trace.allocate_pid
             ~name:
               [%string "%{opt_pid_to_string thread.pid}/%{opt_pid_to_string thread.tid}"]
         in
-        let thread = Tracing.Trace.allocate_thread t.trace ~pid:trace_pid ~name:"main" in
+        let thread = Trace.allocate_thread ~pid:trace_pid ~name:"main" in
         { thread
         ; callstack = Callstack.create ~create_time:time
         ; inactive_callstacks = Stack.create ()
@@ -317,17 +335,17 @@ let write_event (t : t) event =
     let ev =
       { Pending_event.symbol; kind = Call { addr; offset; from_untraced = false } }
     in
-    add_event t thread_info time ev;
+    add_event u thread_info time ev;
     Callstack.push thread_info.callstack symbol
   in
   let ret () =
     match Callstack.pop thread_info.callstack with
-    | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
+    | Some symbol -> add_event u thread_info time { symbol; kind = Ret }
     | None ->
       (* No known stackframe was popped --- could occur if the start of the snapshot
          started in the middle of a tracing region *)
       add_event
-        t
+        u
         thread_info
         time
         { symbol = From_perf "[unknown]"
@@ -355,7 +373,7 @@ let write_event (t : t) event =
       let ev =
         { Pending_event.symbol; kind = Call { addr; offset; from_untraced = true } }
       in
-      write_pending_event t thread_info thread_info.callstack.create_time ev;
+      write_pending_event u thread_info thread_info.callstack.create_time ev;
       Callstack.push thread_info.callstack symbol
   in
   let unwind_stack diff =
@@ -387,12 +405,12 @@ let write_event (t : t) event =
     Callstack.create ~create_time
   in
   let assert_trace_mode trace_modes =
-    if List.find trace_modes ~f:(Trace_mode.equal t.trace_mode) |> Option.is_none
+    if List.find trace_modes ~f:(Trace_mode.equal u.trace_mode) |> Option.is_none
     then
       Core.eprint_s
         [%message
           "BUG: assumptions violated, saw an unexpected event for this trace mode"
-            ~trace_mode:(t.trace_mode : Trace_mode.t)
+            ~trace_mode:(u.trace_mode : Trace_mode.t)
             (event : Event.t)]
   in
   match kind with
@@ -409,7 +427,7 @@ let write_event (t : t) event =
   | Start ->
     (* Might get this under /u, /k, and /uk, but we need to handle them all
        differently. *)
-    if Trace_mode.equal t.trace_mode Kernel
+    if Trace_mode.equal u.trace_mode Kernel
     then (
       (* We're back in the kernel after having been in userspace. We have a
          brand new stack to work with. [clear_callstack] here should only be
@@ -466,13 +484,7 @@ let write_event (t : t) event =
       thread_info.callstack <- new_callstack ();
       check_current_symbol ())
   | Decode_error ->
-    Tracing.Trace.write_duration_instant
-      t.trace
-      ~thread
-      ~name:"[decode error]"
-      ~time
-      ~args:[]
-      ~category:"";
+    Trace.write_duration_instant ~thread ~name:"[decode error]" ~time ~args:[];
     let rec clear_all_callstacks () =
       match Stack.pop inactive_callstacks with
       | None -> ()
@@ -481,8 +493,10 @@ let write_event (t : t) event =
         clear_all_callstacks ()
     in
     clear_all_callstacks ();
-    flush_all t;
+    flush_all u;
     thread_info.last_decode_error_time <- time;
     thread_info.callstack <- new_callstack ()
   | Jump -> check_current_symbol ()
 ;;
+
+let flush_all (T t) = flush_all t
