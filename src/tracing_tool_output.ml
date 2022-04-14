@@ -12,7 +12,7 @@ module Serve = struct
     | Enabled of enabled
 
   let param =
-    match Env_vars.perfetto_ui_base_directory with
+    match Env_vars.perfetto_dir with
     | None -> Command.Param.return Disabled
     | Some perfetto_ui_base_directory ->
       let%map_open.Command port =

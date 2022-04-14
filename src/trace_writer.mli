@@ -15,6 +15,7 @@ val create
   -> debug_info:Elf.Addr_table.t option
   -> earliest_time:Time_ns.Span.t
   -> hits:(string * Breakpoint.Hit.t) list
+  -> annotate_inferred_start_times:bool
   -> Tracing.Trace.t
   -> t
 
@@ -25,6 +26,7 @@ val create_expert
   -> debug_info:Elf.Addr_table.t option
   -> earliest_time:Time_ns.Span.t
   -> hits:(string * Breakpoint.Hit.t) list
+  -> annotate_inferred_start_times:bool
   -> (module Trace with type thread = _)
   -> t
 

@@ -53,6 +53,7 @@ let run ?(debug = false) ~trace_mode file =
           ~debug_info:None
           ~earliest_time:Time_ns.Span.zero
           ~hits:[]
+          ~annotate_inferred_start_times:true
           (module Trace)
       in
       let first_event_time = ref Time_ns.Span.Option.none in

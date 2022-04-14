@@ -110,6 +110,7 @@ type 'thread inner =
   ; base_time : Time_ns.Span.t
   ; trace_mode : Trace_mode.t
   ; trace : (module Trace with type thread = 'thread)
+  ; annotate_inferred_start_times : bool
   }
 
 type t = T : 'thread inner -> t
@@ -251,7 +252,14 @@ let write_hits (T t) hits =
         write_duration_complete t ~thread ~args ~name ~time:start ~time_end:time))
 ;;
 
-let create_expert ~trace_mode ~debug_info ~earliest_time ~hits trace =
+let create_expert
+    ~trace_mode
+    ~debug_info
+    ~earliest_time
+    ~hits
+    ~annotate_inferred_start_times
+    trace
+  =
   let base_time =
     List.fold hits ~init:earliest_time ~f:(fun acc (_, (hit : Breakpoint.Hit.t)) ->
         Time_ns.Span.min acc hit.timestamp)
@@ -263,14 +271,28 @@ let create_expert ~trace_mode ~debug_info ~earliest_time ~hits trace =
       ; base_time
       ; trace_mode
       ; trace
+      ; annotate_inferred_start_times
       }
   in
   write_hits t hits;
   t
 ;;
 
-let create ~trace_mode ~debug_info ~earliest_time ~hits trace =
-  create_expert ~trace_mode ~debug_info ~earliest_time ~hits (real_trace trace)
+let create
+    ~trace_mode
+    ~debug_info
+    ~earliest_time
+    ~hits
+    ~annotate_inferred_start_times
+    trace
+  =
+  create_expert
+    ~trace_mode
+    ~debug_info
+    ~earliest_time
+    ~hits
+    ~annotate_inferred_start_times
+    (real_trace trace)
 ;;
 
 let write_pending_event'
@@ -287,8 +309,8 @@ let write_pending_event'
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
-    let args =
-      let open Tracing.Trace.Arg in
+    let open Tracing.Trace.Arg in
+    let symbol_args =
       (* Using [Interned] may cause some issues with the 32k interned string limit, on
          sufficiently large programs if the trace goes through a lot of different code,
          but that'll also be a problem with the span names. This will just make it
@@ -320,8 +342,14 @@ let write_pending_event'
           | Some x -> [ "file", Interned x ]
           | None -> []))
     in
+    let inferred_start_time_arg =
+      if from_untraced then [ "inferred_start_time", Interned "true" ] else []
+    in
+    let args = symbol_args @ inferred_start_time_arg in
     let name =
-      if from_untraced then display_name ^ " [inferred start time]" else display_name
+      if t.annotate_inferred_start_times && from_untraced
+      then display_name ^ " [inferred start time]"
+      else display_name
     in
     write_duration_begin t ~thread:thread.thread ~name ~time ~args
   | Ret -> write_duration_end t ~name:display_name ~time ~thread:thread.thread ~args:[]
