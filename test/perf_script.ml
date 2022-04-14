@@ -3,7 +3,7 @@ open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 
-let run ~trace_mode file =
+let run ?(debug = false) ~trace_mode file =
   (* CR-someday cgaebel: Get the git root by shelling out to `git rev-parse --show-toplevel`.
      This works, but is ridiculous. *)
   let git_root = "../../.." in
@@ -43,37 +43,48 @@ let run ~trace_mode file =
     ;;
   end
   in
-  let trace_writer =
-    Trace_writer.create_expert
-      ~trace_mode
-      ~debug_info:None
-      ~earliest_time:Time_ns.Span.zero
-      ~hits:[]
-      (module Trace)
-  in
-  let first_event_time = ref Time_ns.Span.Option.none in
-  (* Make the start of the trace start at time=0, regardless of when it actually started. *)
-  let adjust_event_time (event : Event.t) =
-    let event_time = event.time in
-    let first_event_time =
-      match%optional.Time_ns.Span.Option !first_event_time with
-      | None ->
-        first_event_time := Time_ns.Span.Option.some event_time;
-        event_time
-      | Some first_event_time -> first_event_time
-    in
-    { event with time = Time_ns.Span.( - ) event_time first_event_time }
-  in
-  List.iter lines ~f:(fun line ->
-      if not (String.is_empty line)
-      then (
-        let event = Perf_tool_backend.Perf_line.to_event line ~perf_map:None in
-        let event = adjust_event_time event in
-        (* Most of a trace is just jumps within a single function. Those are basically
+  Magic_trace_lib.Trace_writer.debug := debug;
+  Exn.protect
+    ~finally:(fun () -> Magic_trace_lib.Trace_writer.debug := false)
+    ~f:(fun () ->
+      let trace_writer =
+        Trace_writer.create_expert
+          ~trace_mode
+          ~debug_info:None
+          ~earliest_time:Time_ns.Span.zero
+          ~hits:[]
+          (module Trace)
+      in
+      let first_event_time = ref Time_ns.Span.Option.none in
+      (* Make the start of the trace start at time=0, regardless of when it actually started. *)
+      let adjust_event_time (event : Event.t) : Event.t =
+        Event.change_time event ~f:(fun event_time ->
+            let first_event_time =
+              match%optional.Time_ns.Span.Option !first_event_time with
+              | None ->
+                first_event_time := Time_ns.Span.Option.some event_time;
+                event_time
+              | Some first_event_time -> first_event_time
+            in
+            Time_ns.Span.( - ) event_time first_event_time)
+      in
+      let should_print_perf_line (event : Event.t) =
+        match event with
+        | Ok event ->
+          (* Most of a trace is just jumps within a single function. Those are basically
+         uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
+          not ([%compare.equal: Symbol.t] event.src.symbol event.dst.symbol)
+        | Error _ -> true
+      in
+      List.iter lines ~f:(fun line ->
+          if not (String.is_empty line)
+          then (
+            let event = Perf_tool_backend.Perf_line.to_event line ~perf_map:None in
+            let event = adjust_event_time event in
+            (* Most of a trace is just jumps within a single function. Those are basically
            uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
-        if not ([%compare.equal: Symbol.t] event.src.symbol event.dst.symbol)
-        then printf "%s\n" line;
-        Trace_writer.write_event trace_writer event));
-  printf "END\n";
-  Trace_writer.flush_all trace_writer
+            if should_print_perf_line event then printf "%s\n" line;
+            Trace_writer.write_event trace_writer event));
+      printf "END\n";
+      Trace_writer.end_of_trace trace_writer)
 ;;

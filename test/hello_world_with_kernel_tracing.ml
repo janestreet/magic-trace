@@ -4206,10 +4206,10 @@ let%expect_test "C hello world with kernel tracing" =
     681400/681400 2065408.180199074:   tr strt                             0 [unknown] => ffffffffad670a14 native_write_msr+0x4
     -> 102.106us END   __entry_text_start
     END
+    -> 61.733us BEGIN _dl_relocate_object [inferred start time]
     -> 100.091us END   _dl_find_object_from_map
     -> 100.091us BEGIN _dl_new_object
-    -> 61.733us BEGIN _dl_relocate_object [inferred start time]
-    -> 103.513us BEGIN native_write_msr
+    -> 100.091us END   _dl_new_object
     -> 100.166us BEGIN [unknown]
     -> 101.096us END   [unknown]
     -> 100.166us BEGIN _dl_map_object_from_fd [inferred start time]
@@ -4385,5 +4385,155 @@ let%expect_test "C hello world with kernel tracing" =
     ->  1.812us END   [unknown]
     ->  1.689us BEGIN _dl_map_object_from_fd [inferred start time]
     ->    281ns BEGIN _dl_map_object_from_fd [inferred start time]
-    ->      0ns BEGIN _dl_map_object_from_fd |}]
+    ->      0ns BEGIN _dl_map_object_from_fd
+    -> 103.513us BEGIN native_write_msr
+    -> 103.513us END   native_write_msr
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   __GI___fstatat64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   __GI___read_nocancel
+    -> 103.513us END   open_verify.constprop.0
+    -> 103.513us END   __open64_nocancel
+    -> 103.513us END   open_verify.constprop.0
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   _dl_load_cache_lookup
+    -> 103.513us END   __GI___close_nocancel
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   __GI___fstatat64
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   __open64_nocancel
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   _dl_load_cache_lookup
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   dl_open_worker_begin
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   dl_open_worker
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_open
+    -> 103.513us END   dlopen_doit
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_catch_error
+    -> 103.513us END   _dlerror_run
+    -> 103.513us END   dlopen
+    -> 103.513us END   main
+    -> 103.513us END   __munmap
+    -> 103.513us END   _dl_unmap
+    -> 103.513us END   _dl_close_worker
+    -> 103.513us END   _fini
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_close_worker
+    -> 103.513us END   _dl_close
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_catch_error
+    -> 103.513us END   _dlerror_run
+    -> 103.513us END   dlclose
+    -> 103.513us END   main
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   main
+    -> 103.513us END   __munmap
+    -> 103.513us END   _dl_unload_cache
+    -> 103.513us END   _dl_open
+    -> 103.513us END   _init
+    -> 103.513us END   call_init
+    -> 103.513us END   _dl_init
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   dl_open_worker
+    -> 103.513us END   mprotect
+    -> 103.513us END   _dl_protect_relro
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   fmaf32x
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   exp2f
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   sinf32x
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   dl_open_worker_begin
+    -> 103.513us END   __GI___close_nocancel
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   memset
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   __GI___fstatat64
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   __GI___read_nocancel
+    -> 103.513us END   open_verify.constprop.0
+    -> 103.513us END   __open64_nocancel
+    -> 103.513us END   open_verify.constprop.0
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   _dl_load_cache_lookup
+    -> 103.513us END   __GI___close_nocancel
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   mmap64
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   __GI___fstatat64
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   __open64_nocancel
+    -> 103.513us END   _dl_sysdep_read_whole_file
+    -> 103.513us END   _dl_load_cache_lookup
+    -> 103.513us END   _dl_map_object
+    -> 103.513us END   dl_open_worker_begin
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   dl_open_worker
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_open
+    -> 103.513us END   dlopen_doit
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_catch_error
+    -> 103.513us END   _dlerror_run
+    -> 103.513us END   dlopen
+    -> 103.513us END   main
+    -> 103.513us END   __munmap
+    -> 103.513us END   _dl_unmap
+    -> 103.513us END   _dl_close_worker
+    -> 103.513us END   _fini
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_close_worker
+    -> 103.513us END   _dl_close
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   _dl_catch_error
+    -> 103.513us END   _dlerror_run
+    -> 103.513us END   dlclose
+    -> 103.513us END   main
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   __cos_fma
+    -> 103.513us END   main
+    -> 103.513us END   __munmap
+    -> 103.513us END   _dl_unload_cache
+    -> 103.513us END   _dl_open
+    -> 103.513us END   _init
+    -> 103.513us END   call_init
+    -> 103.513us END   _dl_init
+    -> 103.513us END   _dl_catch_exception
+    -> 103.513us END   dl_open_worker
+    -> 103.513us END   mprotect
+    -> 103.513us END   _dl_protect_relro
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   fmaf32x
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   exp2f
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   sinf32x
+    -> 103.513us END   _dl_relocate_object
+    -> 103.513us END   _dl_map_object_from_fd
+    -> 103.513us END   _dl_map_object_from_fd |}]
 ;;
