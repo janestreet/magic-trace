@@ -65,8 +65,8 @@ let write_trace_from_events
   let%bind.Deferred earliest_time =
     let%map.Deferred _wait_for_first = Pipe.values_available events in
     match Pipe.peek events with
-    | Some earliest -> earliest.time
-    | None -> Time_ns.Span.zero
+    | Some (Ok earliest) -> earliest.time
+    | None | Some (Error _) -> Time_ns.Span.zero
   in
   let trace =
     let base_time =
@@ -75,14 +75,17 @@ let write_trace_from_events
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
   let events =
-    Pipe.map events ~f:(fun (event : Event.t) ->
-        if print_events then Core.print_s ~mach:() (Event.sexp_of_t event);
-        { event with time = event.time })
+    if print_events
+    then
+      Pipe.map events ~f:(fun (event : Event.t) ->
+          Core.print_s ~mach:() (Event.sexp_of_t event);
+          event)
+    else events
   in
   let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
   let process_event ev = Trace_writer.write_event writer ev in
   let%bind () = Pipe.iter_without_pushback events ~f:process_event in
-  Trace_writer.flush_all writer;
+  Trace_writer.end_of_trace writer;
   Tracing.Trace.close trace;
   close_result
 ;;

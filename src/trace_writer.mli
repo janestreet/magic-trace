@@ -1,7 +1,14 @@
 open! Core
 open! Import
 
-type t
+(* Enable this in tests to see [t] after every perf event. Don't forget to disable it when
+   you're done!
+
+   To take advantage of this from perf script tests, call [Perf_script.run ~debug:true].
+*)
+val debug : bool ref
+
+type t [@@deriving sexp_of]
 
 val create
   :  trace_mode:Trace_mode.t
@@ -22,4 +29,4 @@ val create_expert
   -> t
 
 val write_event : t -> Event.t -> unit
-val flush_all : t -> unit
+val end_of_trace : t -> unit

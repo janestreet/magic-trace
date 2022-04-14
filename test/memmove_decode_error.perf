@@ -1,0 +1,16 @@
+293415/293415 47170.086912805:   jcc                            40ac3f itch_bbo::book::Book::add_order+0xef =>           40ac20 itch_bbo::book::Book::add_order+0xd0
+293415/293415 47170.086912815:   jmp                            40ac4d itch_bbo::book::Book::add_order+0xfd =>           40aec5 itch_bbo::book::Book::add_order+0x375
+293415/293415 47170.086912815:   jcc                            40af03 itch_bbo::book::Book::add_order+0x3b3 =>           40b012 itch_bbo::book::Book::add_order+0x4c2
+293415/293415 47170.086912824:   call                           40b06c itch_bbo::book::Book::add_order+0x51c =>     7ffff7327730 __memmove_avx_unaligned_erms+0x0
+293415/293415 47170.086912825:   jcc                      7ffff732773b __memmove_avx_unaligned_erms+0xb =>     7ffff7327786 __memmove_avx_unaligned_erms+0x56
+293415/293415 47170.086912825:   jcc                      7ffff732778e __memmove_avx_unaligned_erms+0x5e =>     7ffff73277b7 __memmove_avx_unaligned_erms+0x87
+293415/293415 47170.086912825:   return                   7ffff73277c7 __memmove_avx_unaligned_erms+0x97 =>           40b072 itch_bbo::book::Book::add_order+0x522
+293415/293415 47170.086912826:   call                           40b093 itch_bbo::book::Book::add_order+0x543 =>     7ffff7327730 __memmove_avx_unaligned_erms+0x0
+ instruction trace error type 1 time 47170.086912826 cpu -1 pid 293415 tid 293415 ip 0x7ffff7327730 code 7: Overflow packet
+293415/293415 47170.086912872:   tr strt                             0 [unknown] =>     7ffff7327786 __memmove_avx_unaligned_erms+0x56
+293415/293415 47170.086912944:   jcc                      7ffff7327793 __memmove_avx_unaligned_erms+0x63 =>     7ffff73277c8 __memmove_avx_unaligned_erms+0x98
+293415/293415 47170.086912946:   return                   7ffff73277d4 __memmove_avx_unaligned_erms+0xa4 =>           40b099 itch_bbo::book::Book::add_order+0x549
+293415/293415 47170.086912946:   jmp                            40b0a8 itch_bbo::book::Book::add_order+0x558 =>           40b1ba itch_bbo::book::Book::add_order+0x66a
+293415/293415 47170.086912946:   jmp                            40b1ce itch_bbo::book::Book::add_order+0x67e =>           40b62d itch_bbo::book::Book::add_order+0xadd
+293415/293415 47170.086912946:   jmp                            40b63c itch_bbo::book::Book::add_order+0xaec =>           40ac7f itch_bbo::book::Book::add_order+0x12f
+293415/293415 47170.086912946:   jmp                            40ad14 itch_bbo::book::Book::add_order+0x1c4 =>           40ad4d itch_bbo::book::Book::add_order+0x1fd
