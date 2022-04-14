@@ -1,29 +1,16 @@
 open! Core
 
-module End_kind = struct
-  type t =
-    | Call
-    | Return
-    | Syscall
-    | Sysret
-    | Iret
-    | None
-  [@@deriving sexp, compare, equal]
-end
-
 module Kind = struct
   type t =
     | Call
     | Return
-    | Start
     | Syscall
     | Sysret
     | Hardware_interrupt
     | Iret
     | Decode_error
-    | End of End_kind.t
     | Jump
-  [@@deriving sexp, compare, equal]
+  [@@deriving sexp, compare]
 end
 
 module Thread = struct
@@ -46,7 +33,8 @@ end
 type t =
   { thread : Thread.t
   ; time : Time_ns.Span.t
-  ; kind : Kind.t
+  ; trace_state_change : Trace_state_change.t option [@sexp.option]
+  ; kind : Kind.t option [@sexp.option]
   ; src : Location.t
   ; dst : Location.t
   }
