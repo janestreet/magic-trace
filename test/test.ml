@@ -50,7 +50,8 @@ end = struct
   let random_event () : Event.t =
     { thread
     ; time = time ()
-    ; kind = Call
+    ; trace_state_change = None
+    ; kind = Some Call
     ; src = random_location ()
     ; dst = random_location ()
     }
@@ -60,7 +61,7 @@ end = struct
 
   let random_event' kind symbol =
     let event = random_event () in
-    { event with kind; dst = { event.dst with symbol } }
+    { event with kind = Some kind; dst = { event.dst with symbol } }
   ;;
 
   let call () =
@@ -77,7 +78,9 @@ end = struct
       ; symbol_offset = 0
       }
     in
-    Queue.enqueue events { thread; time; kind; src = loc; dst = loc }
+    Queue.enqueue
+      events
+      { thread; time; trace_state_change = None; kind = Some kind; src = loc; dst = loc }
   ;;
 
   let ret () =

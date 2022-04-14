@@ -299,6 +299,7 @@ let write_event t event =
   let module Trace = (val u.trace) in
   let { Event.thread
       ; time
+      ; trace_state_change
       ; kind
       ; src = _
       ; dst = { instruction_pointer = addr; symbol; symbol_offset = offset }
@@ -413,18 +414,26 @@ let write_event t event =
             ~trace_mode:(u.trace_mode : Trace_mode.t)
             (event : Event.t)]
   in
-  match kind with
-  | Call | End Call -> call symbol
-  | End None -> call Untraced
-  | End Syscall ->
+  match kind, trace_state_change with
+  | Some Call, (None | Some End) -> call symbol
+  | Some (Call | Syscall | Return | Hardware_interrupt | Iret | Sysret | Jump), Some Start
+  | Some (Hardware_interrupt | Jump), Some End ->
+    raise_s
+      [%message
+        "BUG: magic-trace devs thought this event was impossible, but you just proved \
+         them wrong. Please report this to \
+         https://github.com/janestreet/magic-trace/issues/"
+          (event : Event.t)]
+  | None, Some End -> call Untraced
+  | Some Syscall, Some End ->
     (* We should only be getting these under /u *)
     assert_trace_mode [ Userspace ];
     call Syscall
-  | End Return -> call Returned
-  | Return ->
+  | Some Return, Some End -> call Returned
+  | Some Return, None ->
     ret_track_exn_data ();
     check_current_symbol ()
-  | Start ->
+  | None, Some Start ->
     (* Might get this under /u, /k, and /uk, but we need to handle them all
        differently. *)
     if Trace_mode.equal u.trace_mode Kernel
@@ -448,11 +457,11 @@ let write_event t event =
          faults, the restart after the page fault at the new location would get
          treated as a tail call if we did call [check_current_symbol]. *)
       ret_track_exn_data ()
-  | Syscall | Hardware_interrupt ->
+  | Some ((Syscall | Hardware_interrupt) as kind), None ->
     (* We should only be getting [Syscall] these under /uk, but we can get
        [Hardware_interrupt] under /uk, /k. *)
     [ [ Trace_mode.Userspace_and_kernel ]
-    ; (if Event.Kind.equal kind Hardware_interrupt then [ Kernel ] else [])
+    ; (if [%compare.equal: Event.Kind.t] kind Hardware_interrupt then [ Kernel ] else [])
     ]
     |> List.concat
     |> assert_trace_mode;
@@ -464,16 +473,16 @@ let write_event t event =
     Stack.push inactive_callstacks thread_info.callstack;
     thread_info.callstack <- new_callstack ();
     call symbol
-  | End Iret | End Sysret ->
+  | Some (Iret | Sysret), Some End ->
     (* We should only be getting these under /k *)
     assert_trace_mode [ Kernel ];
     clear_callstack ();
     call Untraced
-  | Sysret | Iret ->
+  | Some ((Iret | Sysret) as kind), None ->
     (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
        well (because the kernel can be interrupted). *)
     [ [ Trace_mode.Userspace_and_kernel ]
-    ; (if Event.Kind.equal kind Iret then [ Kernel ] else [])
+    ; (if [%compare.equal: Event.Kind.t] kind Iret then [ Kernel ] else [])
     ]
     |> List.concat
     |> assert_trace_mode;
@@ -483,7 +492,7 @@ let write_event t event =
     | None ->
       thread_info.callstack <- new_callstack ();
       check_current_symbol ())
-  | Decode_error ->
+  | Some Decode_error, _ ->
     Trace.write_duration_instant ~thread ~name:"[decode error]" ~time ~args:[];
     let rec clear_all_callstacks () =
       match Stack.pop inactive_callstacks with
@@ -496,7 +505,10 @@ let write_event t event =
     flush_all u;
     thread_info.last_decode_error_time <- time;
     thread_info.callstack <- new_callstack ()
-  | Jump -> check_current_symbol ()
+  | Some Jump, None -> check_current_symbol ()
+  (* (None, _) comes up when perf spews something magic-trace doesn't recognize. Instead
+     of crashing, we ignore it and keep going. *)
+  | None, _ -> ()
 ;;
 
 let flush_all (T t) = flush_all t
