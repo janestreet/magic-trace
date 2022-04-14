@@ -42,9 +42,7 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
-let debug_flag flag =
-  if Env_vars.enable_debug_options then flag else Command.Param.return false
-;;
+let debug_flag flag = if Env_vars.debug then flag else Command.Param.return false
 
 let debug_print_perf_commands =
   let open Command.Param in
@@ -82,7 +80,15 @@ let write_trace_from_events
           event)
     else events
   in
-  let writer = Trace_writer.create ~trace_mode ~debug_info ~earliest_time ~hits trace in
+  let writer =
+    Trace_writer.create
+      ~trace_mode
+      ~debug_info
+      ~earliest_time
+      ~hits
+      ~annotate_inferred_start_times:Env_vars.debug
+      trace
+  in
   let process_event ev = Trace_writer.write_event writer ev in
   let%bind () = Pipe.iter_without_pushback events ~f:process_event in
   Trace_writer.end_of_trace writer;
