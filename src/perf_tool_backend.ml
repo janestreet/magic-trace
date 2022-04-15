@@ -255,6 +255,41 @@ module Perf_line = struct
     | Some offset -> offset
   ;;
 
+  let int64_of_hex_string str =
+    (* Bit hacks for fast parsing of hex strings.
+     *
+     * Note that in ASCII, ('1' | 'a' | 'A') & 0xF = 1.
+     *
+     * So for each character, take the bottom 4 bits, and add 9 if it's
+     * not a digit. *)
+    let res = ref 0L in
+    for i = 0 to String.length str - 1 do
+      let open Int64 in
+      let c = of_int (Char.to_int (String.unsafe_get str i)) in
+      res := (!res lsl 4) lor ((c land 0xFL) + ((c lsr 6) lor ((c lsr 3) land 0x8L)))
+    done;
+    !res
+  ;;
+
+  let%test_module _ =
+    (module struct
+      open Core
+
+      let check str = Core.print_s ([%sexp_of: Int64.Hex.t] (int64_of_hex_string str))
+
+      let%expect_test "int64 hex parsing" =
+        check "fF";
+        [%expect {| 0xff |}];
+        check "f0f";
+        [%expect {| 0xf0f |}];
+        check "fA0f";
+        [%expect {| 0xfa0f |}];
+        check "0";
+        [%expect {| 0x0 |}]
+      ;;
+    end)
+  ;;
+
   let ok_perf_line_re =
     Re.Perl.re
       {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
@@ -334,10 +369,6 @@ module Perf_line = struct
       let pid = Int.of_string pid in
       let tid = Int.of_string tid in
       let time = parse_time ~time_hi ~time_lo in
-      let int64_of_hex_string str =
-        try Scanf.sscanf str "%Lx" Fn.id with
-        | Scanf.Scan_failure _ | End_of_file -> 0L
-      in
       let src_instruction_pointer = int64_of_hex_string src_instruction_pointer in
       let dst_instruction_pointer = int64_of_hex_string dst_instruction_pointer in
       let parse_symbol_and_offset str ~addr =
