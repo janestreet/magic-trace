@@ -7,6 +7,10 @@ open Async
    files around. *)
 let perfetto_dir = Unix.getenv "MAGIC_TRACE_PERFETTO_DIR"
 
+(* Whether [perf] should be considered privileged when running as not-root. Bypasses error
+   checks around kernel tracing when not root. *)
+let perf_is_privileged = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_IS_PRIVILEGED")
+
 (* Turns on hidden command line options and attached "[inferred start time]" to functions
    with inferred start times.
 
