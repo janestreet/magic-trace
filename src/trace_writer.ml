@@ -18,6 +18,7 @@ module Mapped_time : sig
   val is_base_time : t -> bool
   val add : t -> Time_ns.Span.t -> t
   val diff : t -> t -> Time_ns.Span.t
+  val sub_one_ns : t -> t
 end = struct
   module T = struct
     type t = Time_ns.Span.t [@@deriving sexp, compare]
@@ -28,6 +29,7 @@ end = struct
   let is_base_time = Time_ns.Span.( = ) Time_ns.Span.zero
   let add = Time_ns.Span.( + )
   let diff = Time_ns.Span.( - )
+  let sub_one_ns t = add (Time_ns.Span.of_int_ns (-1)) t
 
   include T
   include Comparable.Make (T)
@@ -585,11 +587,26 @@ let write_event (T t) event =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () -> create_thread t event)
   in
   let thread = thread_info.thread in
+  let last_event_time = thread_info.last_event_time in
   let time = event_time t event thread_info in
   let outer_event = event in
   match event with
   | Error { thread = _; instruction_pointer; message; time = _ } ->
     let name = sprintf !"[decode error: %s]" message in
+    (* A practical, but not perfect, fix for #155: If events happen with the exact same timestamp
+       as a decode error, stacks break. We implement a hack to prevent that:
+
+       If and only if it doesn't reorder events, we pretend the decode error happened 1ns sooner
+       than it actually did. That makes it have a distinct timestamp from any following events
+       that have the same timestamp.
+
+       This hack fails, and the user will see broken stacks, when the previous event has the same
+       timestamp as the overflow error. I haven't seen that happen before and I imagine it's quite
+       rare -- it would imply Intel PT was in an overflow state for an exceedingly small amount of
+       time. *)
+    let time =
+      if Mapped_time.( > ) time last_event_time then Mapped_time.sub_one_ns time else time
+    in
     write_duration_instant t ~thread ~name ~time ~args:[];
     end_of_thread t thread_info ~time;
     thread_info.last_decode_error_time <- time;
