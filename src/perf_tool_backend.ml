@@ -110,8 +110,11 @@ module Recording = struct
       match trace_mode, Perf_capabilities.(do_intersect capabilities kernel_tracing) with
       | Userspace, _ | _, true -> return (Ok ())
       | (Kernel | Userspace_and_kernel), false ->
-        Deferred.Or_error.error_string
-          "magic-trace must be run as root in order to trace the kernel"
+        if not Env_vars.perf_is_privileged
+        then
+          Deferred.Or_error.error_string
+            "magic-trace must be run as root in order to trace the kernel"
+        else return (Ok ())
     in
     let perf_supports_snapshot_on_exit =
       Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
