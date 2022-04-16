@@ -1,4 +1,4 @@
-///usr/bin/env -S gcc -ldl -o demo "$0" -o /tmp/demo && exec /tmp/demo "$@"
+///usr/bin/env -S gcc -std=c99 -Wall -ldl -o demo "$0" -o /tmp/demo && exec /tmp/demo "$@"
 
 #include <dlfcn.h>
 #include <gnu/lib-names.h>
@@ -11,6 +11,7 @@ int main(void) {
     void *handle;
     double (*cosine)(double);
     char *error;
+    double cos1, cos2;
 
     handle = dlopen(LIBM_SO, RTLD_LAZY);
     if (!handle) {
@@ -27,7 +28,10 @@ int main(void) {
       exit(EXIT_FAILURE);
     }
 
-    fprintf(out, "%f\n", (*cosine)(2.0));
+    cos1 = cosine(2.0);
+    cos2 = cosine(cos1);
+
+    fprintf(out, "%f\n", cos2);
     dlclose(handle);
   }
 }
