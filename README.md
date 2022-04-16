@@ -102,7 +102,7 @@ magic-trace continuously records control flow into a ring buffer. Upon some sort
 
 There are two ways to take a snapshot:
 
-We just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates without already having taken a snapshot, it takes a snapshot of the end of the program.
+We just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic-trace terminates without already having taken a snapshot, it takes a snapshot of the end of the program.
 
 You can also trigger snapshots when the application calls a function. To do so, pass magic-trace
 the `-trigger` flag.
@@ -127,7 +127,7 @@ More documentation is available on [the magic-trace wiki](https://github.com/jan
 
 # Discussion
 
-Join us [on discord](https://discord.gg/vkzPYeZ292) to synchronously chat, or the [github discussion group](https://github.com/janestreet/magic-trace/discussions) to do so asynchronously.
+Join us [on Discord](https://discord.gg/vkzPYeZ292) to chat synchronously, or the [GitHub discussion group](https://github.com/janestreet/magic-trace/discussions) to do so asynchronously.
 
 # Contributing
 
@@ -148,7 +148,7 @@ that UI does not send your trace anywhere. If you're worried about that changing
 
 # Acknowledgements
 
-[Tristan Hume](https://thume.ca/) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), who currently maintains it.
+[Tristan Hume](https://github.com/trishume) is the original author of magic-trace. He wrote it while working at [Jane Street](https://www.janestreet.com/join-jane-street/), who currently maintains it.
 
 Intel PT is the foundational technology upon which magic-trace rests. We'd like to thank the people at Intel for their years-long efforts to make it available, despite its slow uptake in the greater software community.
 
