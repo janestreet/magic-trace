@@ -6,15 +6,15 @@ let%expect_test "A page fault during demo.c" =
     {|
     1439745/1439745 2472089.651284813:   jmp                      7f59488f90f7 call_destructors+0x67 =>     7f5948676e18 _fini+0x0
      instruction trace error type 1 time 2472089.651285037 cpu -1 pid 1439745 tid 1439745 ip 0x7f5948676e18 code 7: Overflow packet
-    ->    223ns BEGIN [decode error: Overflow packet]
+    ->    224ns BEGIN [decode error: Overflow packet]
     ->          END   [decode error: Overflow packet]
     ->      0ns BEGIN _fini [inferred start time]
-    ->    223ns END   _fini
+    ->    224ns END   _fini
     1439745/1439745 2472089.651285037:   tr strt                             0 [unknown] => ffffffffae200ab0 asm_exc_page_fault+0x0
     1439745/1439745 2472089.651285037:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 => ffffffffae201310 error_entry+0x0
     1439745/1439745 2472089.651285124:   call                 ffffffffae20137a error_entry+0x6a => ffffffffae121a30 sync_regs+0x0
-    ->    224ns BEGIN asm_exc_page_fault
-    ->    267ns BEGIN error_entry
+    ->    225ns BEGIN asm_exc_page_fault
+    ->    268ns BEGIN error_entry
     1439745/1439745 2472089.651285217:   return               ffffffffae121a51 sync_regs+0x21 => ffffffffae20137f error_entry+0x6f
     ->    311ns BEGIN sync_regs
     1439745/1439745 2472089.651285217:   return               ffffffffae201384 error_entry+0x74 => ffffffffae200ab8 asm_exc_page_fault+0x8
@@ -639,8 +639,8 @@ let%expect_test "A page fault during demo.c" =
     1439745/1439745 2472089.651286186:   return                   7f5948676e24 _fini+0xc =>     7f5948832e75 _dl_catch_exception+0xe5
     ->  1.347us END   native_iret
     END
-    ->    223ns BEGIN _dl_catch_exception [inferred start time]
-    ->    223ns BEGIN _fini [inferred start time]
+    ->    224ns BEGIN _dl_catch_exception [inferred start time]
+    ->    224ns BEGIN _fini [inferred start time]
     ->  1.373us END   _fini
     ->  1.373us END   _dl_catch_exception |}]
 ;;

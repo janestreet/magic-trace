@@ -18,7 +18,6 @@ module Mapped_time : sig
   val is_base_time : t -> bool
   val add : t -> Time_ns.Span.t -> t
   val diff : t -> t -> Time_ns.Span.t
-  val sub_one_ns : t -> t
 end = struct
   module T = struct
     type t = Time_ns.Span.t [@@deriving sexp, compare]
@@ -29,7 +28,6 @@ end = struct
   let is_base_time = Time_ns.Span.( = ) Time_ns.Span.zero
   let add = Time_ns.Span.( + )
   let diff = Time_ns.Span.( - )
-  let sub_one_ns t = add (Time_ns.Span.of_int_ns (-1)) t
 
   include T
   include Comparable.Make (T)
@@ -424,17 +422,42 @@ let opt_pid_to_string opt_pid =
   | Some pid -> Pid.to_string pid
 ;;
 
+(* A practical, but not perfect, fix for #155: If events happen with the exact same timestamp
+   as a decode error, stacks break. We implement this "#155 hack" to prevent that:
+
+       If an event happens at exactly the same time as the previous decode error, slide it forward
+       by one nanosecond. Maintain the invariant that no event which follows a decode error has the
+       same timestamp as that decode error.
+
+   This should have minimal impact on the timestamps displayed to the user, they're precise to at
+   most ~40ns anyhow. But it does make sure our stacks always come out in the right order.
+
+   Also worth noting is that despite the fact that we're changing timestamps, this can't reorder
+   events. 1ns is the minimum amount of time by which timestamps can differ. So even if there were
+   more events exactly 1ns after the decode error, they'll be seen as having the exact same
+   timestamp as the events that happened during the decode error. *)
+let hack_155 (thread_info : _ Thread_info.t) time =
+  let last_decode_error_time = thread_info.last_decode_error_time in
+  if Mapped_time.( = ) time last_decode_error_time
+     && Mapped_time.( <> ) last_decode_error_time Mapped_time.start_of_trace
+  then Mapped_time.add time (Time_ns.Span.of_int_ns 1)
+  else time
+;;
+
 let event_time t (event : Event.t) (thread_info : _ Thread_info.t) =
   let event_time = Event.time event in
-  match%optional.Time_ns_unix.Span.Option event_time with
-  | None ->
-    (* Decode errors sometimes do not have a timestamp, so we pretend they happen at the
+  let unadjusted_time =
+    match%optional.Time_ns_unix.Span.Option event_time with
+    | None ->
+      (* Decode errors sometimes do not have a timestamp, so we pretend they happen at the
        same time as the last event. *)
-    thread_info.last_event_time
-  | Some time ->
-    let time = map_time t time in
-    thread_info.last_event_time <- time;
-    time
+      thread_info.last_event_time
+    | Some time ->
+      let time = map_time t time in
+      thread_info.last_event_time <- time;
+      time
+  in
+  hack_155 thread_info unadjusted_time
 ;;
 
 let create_thread t event =
@@ -587,26 +610,11 @@ let write_event (T t) event =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () -> create_thread t event)
   in
   let thread = thread_info.thread in
-  let last_event_time = thread_info.last_event_time in
   let time = event_time t event thread_info in
   let outer_event = event in
   match event with
   | Error { thread = _; instruction_pointer; message; time = _ } ->
     let name = sprintf !"[decode error: %s]" message in
-    (* A practical, but not perfect, fix for #155: If events happen with the exact same timestamp
-       as a decode error, stacks break. We implement a hack to prevent that:
-
-       If and only if it doesn't reorder events, we pretend the decode error happened 1ns sooner
-       than it actually did. That makes it have a distinct timestamp from any following events
-       that have the same timestamp.
-
-       This hack fails, and the user will see broken stacks, when the previous event has the same
-       timestamp as the overflow error. I haven't seen that happen before and I imagine it's quite
-       rare -- it would imply Intel PT was in an overflow state for an exceedingly small amount of
-       time. *)
-    let time =
-      if Mapped_time.( > ) time last_event_time then Mapped_time.sub_one_ns time else time
-    in
     write_duration_instant t ~thread ~name ~time ~args:[];
     end_of_thread t thread_info ~time;
     thread_info.last_decode_error_time <- time;
