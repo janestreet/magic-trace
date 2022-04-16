@@ -86,7 +86,7 @@ You can point magic-trace at a function such that when your application calls it
   <img src="docs/assets/stage-3.gif">
 </p>
 
-7. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~3us.
+7. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~5.7us.
 
 <p align="center">
   <img src="docs/assets/stage-4.gif">
@@ -94,7 +94,7 @@ You can point magic-trace at a function such that when your application calls it
 
 Congratulations, you just magically traced your first program!
 
-In contrast to traditional `perf` workflows, magic-trace excels at hypothesis generation. For example, you might notice that taking 3us to run `cos` is a really long time! If you zoom in even more, you'll see that there's actually 4 pink "\[untraced\]" cells in there. If you re-run magic-trace with root and pass it `-trace-include-kernel`, you'll see stacktraces for those. They're page fault handlers! If you change the demo program to call `cos` twice in a row and retrace it, you'll see that the second call takes far less time and does not page fault.
+In contrast to traditional `perf` workflows, magic-trace excels at hypothesis generation. For example, you might notice that taking 6us to run `cos` is a really long time! If you zoom in even more, you'll see that there's actually five pink "\[untraced\]" cells in there. If you re-run magic-trace with root and pass it `-trace-include-kernel`, you'll see stacktraces for those. They're page fault handlers! The demo program actually calls `cos` twice. If you zoom in even more near the end of the 6us `cos` call, you'll see that the second call takes *far* less time and does not page fault.
 
 # How to use it
 
@@ -102,7 +102,7 @@ magic-trace continuously records control flow into a ring buffer. Upon some sort
 
 There are two ways to take a snapshot:
 
-You just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates without already having taken a snapshot, it takes a snapshot of the end of the program.
+We just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic trace terminates without already having taken a snapshot, it takes a snapshot of the end of the program.
 
 You can also trigger snapshots when the application calls a function. To do so, pass magic-trace
 the `-trigger` flag.
@@ -148,6 +148,6 @@ that UI does not send your trace anywhere. If you're worried about that changing
 
 Intel PT is the foundational technology upon which magic-trace rests. We'd like to thank the people at Intel for their years-long efforts to make it available, despite its slow uptake in the greater software community.
 
-magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, everyone who contributed.
+magic-trace would not be possible without `perf`s extensive support for Intel PT. `perf` does most of the work in interpreting Intel PT's output, and magic-trace likely wouldn't exist were it not for their efforts. Thank you, `perf` developers.
 
-magic-trace's UI is a fork of [Perfetto](https://github.com/janestreet/magic-trace/wiki/About-the-UI), with minor modifications. We'd like to thank the people at Google who worked on it, it solves a hard problem well so we don't have to.
+magic-trace's UI is a fork of [Perfetto](https://github.com/janestreet/magic-trace/wiki/About-the-UI), with minor modifications. We'd like to thank the people at Google responsible for it. It's a high quality codebase that solves a hard problem well.
