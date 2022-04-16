@@ -389,6 +389,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let run_command =
     Command.async_or_error
       ~summary:"Runs a command and traces it."
+      ~readme:(fun () ->
+        "=== examples ===\n\n\
+         # Run a process, snapshotting at ^C or exit\n\
+         magic-trace run ./program -- arg1 arg2\n\n\
+         # Run and trace all threads of a process, not just the main one, snapshotting \
+         at ^C or exit\n\
+         magic-trace run -multi-thread ./program -- arg1 arg2\n\n\
+         # Run a process, tracing its entire execution (only practical for short-lived \
+         processes)\n\
+         magic-trace run -full-execution ./program\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
@@ -466,6 +476,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let attach_command =
     Command.async_or_error
       ~summary:"Traces a running process."
+      ~readme:(fun () ->
+        "=== examples ===\n\n\
+         # Fuzzy-find to select a running process to trace the main thread of, \
+         snapshotting at ^C or exit\n\
+         magic-trace attach\n\n\
+         # Fuzzy-find to select a running process and symbol to trigger on, snapshotting \
+         the next time the symbol is called\n\
+         magic-trace attach -trigger ?\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
