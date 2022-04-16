@@ -125,6 +125,10 @@ You may leave the stop indicator in production code. It doesn't need to do anyth
 
 More documentation is available on [the magic-trace wiki](https://github.com/janestreet/magic-trace/wiki).
 
+# Discussion
+
+Join us [on discord](https://discord.gg/vkzPYeZ292) to synchronously chat, or the [github discussion group](https://github.com/janestreet/magic-trace/discussions) to do so asynchronously.
+
 # Contributing
 
 If you'd like to contribute:
