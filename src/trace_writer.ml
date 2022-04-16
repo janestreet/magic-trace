@@ -223,8 +223,8 @@ let write_hits (T t) hits =
             ]
         in
         (* Args that are computed from captured registers are only meaningful on our
-         special stop symbol, we still capture them regardless, but on other symbols
-         they'll just have confusing broken values. *)
+           special stop symbol, we still capture them regardless, but on other symbols
+           they'll just have confusing broken values. *)
         let args =
           if is_default_symbol
           then
@@ -236,10 +236,10 @@ let write_hits (T t) hits =
           else args
         in
         (* For the special symbol, if present the passed timestamp comes from
-         Magic_trace.mark_start and marks the start of a region of interest.
+           Magic_trace.mark_start and marks the start of a region of interest.
 
-         We check it for validity since it's possible someone uses an older version of
-         [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
+           We check it for validity since it's possible someone uses an older version of
+           [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
         let valid_timestamp =
           Time_ns.Span.(
             hit.passed_timestamp > t.base_time && hit.passed_timestamp < hit.timestamp)
@@ -450,7 +450,7 @@ let event_time t (event : Event.t) (thread_info : _ Thread_info.t) =
     match%optional.Time_ns_unix.Span.Option event_time with
     | None ->
       (* Decode errors sometimes do not have a timestamp, so we pretend they happen at the
-       same time as the last event. *)
+         same time as the last event. *)
       thread_info.last_event_time
     | Some time ->
       let time = map_time t time in
@@ -496,7 +496,7 @@ let ret t (thread_info : _ Thread_info.t) ~time =
   | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
   | None ->
     (* No known stackframe was popped --- could occur if the start of the snapshot
-         started in the middle of a tracing region *)
+       started in the middle of a tracing region *)
     add_event
       t
       thread_info
@@ -513,9 +513,9 @@ let check_current_symbol
     (location : Event.Location.t)
   =
   (* After every operation, we should be in a situation where the current symbol under
-       the pc matches the symbol at the top of the callstack. This can go out-of-sync
-       with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
-       known function, so we have to correct the top of the stack here. *)
+     the pc matches the symbol at the top of the callstack. This can go out-of-sync
+     with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
+     known function, so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
   | Some known when not ([%compare.equal: Symbol.t] known location.symbol) ->
     ret t thread_info ~time;
@@ -523,12 +523,12 @@ let check_current_symbol
   | Some _ -> ()
   | None ->
     (* If we have no callstack left, then we just returned out of something we didn't
-         see the call for. Since we're in snapshot mode, this happens with functions
-         called before the perf events started, so add in a call that begins at the
-         start of the trace for that pid.
+       see the call for. Since we're in snapshot mode, this happens with functions
+       called before the perf events started, so add in a call that begins at the
+       start of the trace for that pid.
 
-         These shouldn't be buffered for spreading since we want them exactly at the reset
-         time. *)
+       These shouldn't be buffered for spreading since we want them exactly at the reset
+       time. *)
     let ev = Pending_event.create_call location ~from_untraced:true in
     write_pending_event t thread_info thread_info.callstack.create_time ev;
     Callstack.push thread_info.callstack location.symbol
@@ -658,27 +658,27 @@ let write_event (T t) event =
       if Trace_mode.equal t.trace_mode Kernel
       then (
         (* We're back in the kernel after having been in userspace. We have a
-         brand new stack to work with. [clear_callstack] here should only be
-         clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
+           brand new stack to work with. [clear_callstack] here should only be
+           clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
         clear_callstack t thread_info ~time;
         Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time)
       else if Callstack.is_empty thread_info.callstack
       then
         (* View stopping tracing always as a call (typically the result of a call
-         into a special library / linker), with starting tracing again as
-         exiting it. The one exception is the initial start of the trace for
-         that process, when there is no stack and a prior end won't have pushed
-         a synthetic stack frame. *)
+           into a special library / linker), with starting tracing again as
+           exiting it. The one exception is the initial start of the trace for
+           that process, when there is no stack and a prior end won't have pushed
+           a synthetic stack frame. *)
         call t thread_info ~time ~location:dst
       else
         (* We don't call [check_current_symbol] here because stops don't change
-         the program location in most cases, and when a call to a symbol page
-         faults, the restart after the page fault at the new location would get
-         treated as a tail call if we did call [check_current_symbol]. *)
+           the program location in most cases, and when a call to a symbol page
+           faults, the restart after the page fault at the new location would get
+           treated as a tail call if we did call [check_current_symbol]. *)
         ret_track_exn_data t thread_info ~time
     | Some ((Syscall | Hardware_interrupt) as kind), None ->
       (* We should only be getting [Syscall] these under /uk, but we can get
-       [Hardware_interrupt] under /uk, /k. *)
+         [Hardware_interrupt] under /uk, /k. *)
       [ [ Trace_mode.Userspace_and_kernel ]
       ; (if [%compare.equal: Event.Kind.t] kind Hardware_interrupt
         then [ Kernel ]
@@ -687,10 +687,10 @@ let write_event (T t) event =
       |> List.concat
       |> assert_trace_mode t outer_event;
       (* A syscall or hardware interrupt can be modelled as operating on a new
-       stack, and shouldn't be allowed to modify the previous stack.
+         stack, and shouldn't be allowed to modify the previous stack.
 
-       Also, hardware interrupts can occur during syscalls, so we maintain a
-       "stack of callstacks" here. *)
+         Also, hardware interrupts can occur during syscalls, so we maintain a
+         "stack of callstacks" here. *)
       Stack.push thread_info.inactive_callstacks thread_info.callstack;
       Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time;
       call t thread_info ~time ~location:dst
@@ -701,7 +701,7 @@ let write_event (T t) event =
       call t thread_info ~time ~location:Event.Location.untraced
     | Some ((Iret | Sysret) as kind), None ->
       (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
-       well (because the kernel can be interrupted). *)
+         well (because the kernel can be interrupted). *)
       [ [ Trace_mode.Userspace_and_kernel ]
       ; (if [%compare.equal: Event.Kind.t] kind Iret then [ Kernel ] else [])
       ]
@@ -714,8 +714,8 @@ let write_event (T t) event =
         Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time;
         check_current_symbol t thread_info ~time dst)
     | Some Jump, None -> check_current_symbol t thread_info ~time dst
-    (* (None, _) comes up when perf spews something magic-trace doesn't recognize. Instead
-     of crashing, we ignore it and keep going. *)
+    (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
+       Instead of crashing, ignore it and keep going. *)
     | None, _ -> ());
     if !debug then print_s (sexp_of_inner t)
 ;;
