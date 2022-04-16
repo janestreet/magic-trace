@@ -52,12 +52,6 @@ You can point magic-trace at a function such that when your application calls it
 
 [more testimonials...](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews)
 
-# Demo
-
-<p align="center">
-  <img src="docs/assets/demo.gif">
-</p>
-
 # Getting started
 
 1. Make sure the system you want to trace is [supported](https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes). The constraints that most commonly trip people up are: VMs are mostly not supported, Intel only (Skylake[^3] or later), Linux only.
@@ -76,23 +70,27 @@ You can point magic-trace at a function such that when your application calls it
 
 4. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.ftf` in your working directory.
 
-5. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step.
+<p align="center">
+  <img src="docs/assets/stage-1.gif">
+</p>
 
-6. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
+5. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
 
-![](docs/assets/perfetto-1.png)
+<p align="center">
+  <img src="docs/assets/stage-2.gif">
+</p>
 
-7. That should have expanded into a trace. Your screen should now look something like this:
+6. That should have expanded into a trace. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> and the scroll wheel to navigate around. <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful), <kbd>S</kbd> zooms out, <kbd>A</kbd> moves left, <kbd>D</kbd> moves right, and scroll wheel moves your viewport up and down the stack. You'll only need to scroll to see particularly deep stack traces, it's probably not useful for this example. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
 
-![](docs/assets/perfetto-2.png)
+<p align="center">
+  <img src="docs/assets/stage-3.gif">
+</p>
 
-8. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> and the scroll wheel to navigate around. <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful), <kbd>S</kbd> zooms out, <kbd>A</kbd> moves left, <kbd>D</kbd> moves right, and scroll wheel moves your viewport up and down the stack. You'll only need to scroll to see particularly deep stack traces, it's probably not useful for this example. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
+7. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~3us.
 
-![](docs/assets/perfetto-3.png)
-
-9. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~3us.
-
-![](https://user-images.githubusercontent.com/128969/160201591-dc51b5d9-fb78-4c8b-9b21-8c127f89b13d.png)
+<p align="center">
+  <img src="docs/assets/stage-4.gif">
+</p>
 
 Congratulations, you just magically traced your first program!
 
