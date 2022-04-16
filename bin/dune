@@ -2,5 +2,14 @@
  (names magic_trace_bin)
  (public_names magic-trace)
  (libraries core magic_trace_lib core_unix.command_unix)
+ (foreign_stubs
+  (language c)
+  (names version_stubs))
  (preprocess
   (pps ppx_jane)))
+
+(rule
+ (target version_stubs.c)
+ (deps gen-versions.sh)
+ (action
+  (run %{deps} %{target})))
