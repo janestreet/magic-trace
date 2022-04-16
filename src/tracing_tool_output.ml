@@ -15,17 +15,19 @@ module Serve = struct
     match Env_vars.perfetto_dir with
     | None -> Command.Param.return Disabled
     | Some perfetto_ui_base_directory ->
-      let%map_open.Command port =
+      let%map_open.Command serve =
+        flag "serve" no_arg ~doc:" Host the magic-trace UI locally."
+      and port =
         let default = 8080 in
         flag
-          "serve"
+          "serve-port"
           (optional_with_default default int)
           ~doc:
             [%string
-              "PORT Chooses the port that the local copy of Perfetto will be served on. \
-               (default: %{default#Int})"]
+              "PORT Chooses the port that the local copy of the magic-trace UI will be \
+               served on if [-serve] is specified. (default: %{default#Int})"]
       in
-      Enabled { port; perfetto_ui_base_directory }
+      if serve then Enabled { port; perfetto_ui_base_directory } else Disabled
   ;;
 
   let url t =
