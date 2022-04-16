@@ -640,9 +640,7 @@ let decode_events () ~debug_print_perf_commands ~record_dir ~perf_map =
   then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
   (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
      the [perf script] process from outliving the parent. *)
-  let%map perf_script_proc =
-    Process.create_exn ~env:perf_env ~prog:"perf" ~working_dir:record_dir ~args ()
-  in
+  let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
   let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
   don't_wait_for
     (Reader.transfer
