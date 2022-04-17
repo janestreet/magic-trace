@@ -96,9 +96,13 @@ module Thread_info = struct
     }
   [@@deriving sexp_of]
 
-  let set_callstack t ~addr ~time =
-    let create_time = if is_kernel_address addr then time else t.last_decode_error_time in
+  let set_callstack t ~is_kernel_address ~time =
+    let create_time = if is_kernel_address then time else t.last_decode_error_time in
     t.callstack <- Callstack.create ~create_time
+  ;;
+
+  let set_callstack_from_addr t ~addr ~time =
+    set_callstack t ~is_kernel_address:(is_kernel_address addr) ~time
   ;;
 end
 
@@ -618,7 +622,12 @@ let write_event (T t) event =
     write_duration_instant t ~thread ~name ~time ~args:[];
     end_of_thread t thread_info ~time;
     thread_info.last_decode_error_time <- time;
-    Thread_info.set_callstack thread_info ~addr:instruction_pointer ~time
+    let is_kernel_address =
+      match instruction_pointer with
+      | None -> false
+      | Some ip -> is_kernel_address ip
+    in
+    Thread_info.set_callstack thread_info ~is_kernel_address ~time
   | Ok event ->
     let { Event.Ok.thread = _ (* Already used this to look up thread info. *)
         ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
@@ -661,7 +670,10 @@ let write_event (T t) event =
            brand new stack to work with. [clear_callstack] here should only be
            clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
         clear_callstack t thread_info ~time;
-        Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time)
+        Thread_info.set_callstack_from_addr
+          thread_info
+          ~addr:dst.instruction_pointer
+          ~time)
       else if Callstack.is_empty thread_info.callstack
       then
         (* View stopping tracing always as a call (typically the result of a call
@@ -692,7 +704,7 @@ let write_event (T t) event =
          Also, hardware interrupts can occur during syscalls, so we maintain a
          "stack of callstacks" here. *)
       Stack.push thread_info.inactive_callstacks thread_info.callstack;
-      Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time;
+      Thread_info.set_callstack_from_addr thread_info ~addr:dst.instruction_pointer ~time;
       call t thread_info ~time ~location:dst
     | Some (Iret | Sysret), Some End ->
       (* We should only be getting these under /k *)
@@ -711,7 +723,10 @@ let write_event (T t) event =
       (match Stack.pop thread_info.inactive_callstacks with
       | Some callstack -> thread_info.callstack <- callstack
       | None ->
-        Thread_info.set_callstack thread_info ~addr:dst.instruction_pointer ~time;
+        Thread_info.set_callstack_from_addr
+          thread_info
+          ~addr:dst.instruction_pointer
+          ~time;
         check_current_symbol t thread_info ~time dst)
     | Some Jump, None -> check_current_symbol t thread_info ~time dst
     (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
