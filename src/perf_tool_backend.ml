@@ -301,7 +301,7 @@ module Perf_line = struct
 
   let trace_error_re =
     Re.Posix.re
-      {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+) code [0-9+]: (.*)$|}
+      {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+|0) code [0-9+]: (.*)$|}
     |> Re.compile
   ;;
 
@@ -336,7 +336,9 @@ module Perf_line = struct
     | [| _; _; time_hi; time_lo; pid; tid; ip; message |] ->
       let pid = Int.of_string pid in
       let tid = Int.of_string tid in
-      let instruction_pointer = Int64.Hex.of_string ip in
+      let instruction_pointer =
+        if String.( = ) ip "0" then None else Some (Int64.Hex.of_string ip)
+      in
       let time =
         if String.is_empty time_hi && String.is_empty time_lo
         then Time_ns_unix.Span.Option.none
@@ -608,7 +610,7 @@ module Perf_line = struct
           {|
           (Error
            ((thread ((pid (293415)) (tid (293415)))) (time (13h6m10.086912826s))
-            (instruction_pointer 0x7ffff7327730) (message "Overflow packet"))) |}]
+            (instruction_pointer (0x7ffff7327730)) (message "Overflow packet"))) |}]
       ;;
 
       let%expect_test "decode error without a timestamp" =
@@ -619,7 +621,18 @@ module Perf_line = struct
           {|
           (Error
            ((thread ((pid (293415)) (tid (293415)))) (time ())
-            (instruction_pointer 0x7ffff7327730) (message "Overflow packet"))) |}]
+            (instruction_pointer (0x7ffff7327730)) (message "Overflow packet"))) |}]
+      ;;
+
+      let%expect_test "lost trace data" =
+        check
+          " instruction trace error type 1 time 2651115.104731379 cpu -1 pid 1801680 tid \
+           1801680 ip 0 code 8: Lost trace data";
+        [%expect
+          {|
+          (Error
+           ((thread ((pid (1801680)) (tid (1801680)))) (time (30d16h25m15.104731379s))
+            (instruction_pointer ()) (message "Lost trace data"))) |}]
       ;;
     end)
   ;;

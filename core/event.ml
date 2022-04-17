@@ -56,7 +56,7 @@ module Decode_error = struct
        Skylake test machine has it while my Tiger Lake test machine doesn't. It could
        easily be a difference between different versions of perf... *)
     ; time : Time_ns_unix.Span.Option.t
-    ; instruction_pointer : Int64.Hex.t
+    ; instruction_pointer : Int64.Hex.t option
     ; message : string
     }
   [@@deriving sexp]

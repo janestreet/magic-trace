@@ -50,7 +50,7 @@ module Decode_error : sig
   type t =
     { thread : Thread.t
     ; time : Time_ns_unix.Span.Option.t
-    ; instruction_pointer : int64
+    ; instruction_pointer : int64 option
     ; message : string
     }
   [@@deriving sexp]
