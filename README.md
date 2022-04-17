@@ -35,9 +35,9 @@ You use it like [`perf`](https://en.wikipedia.org/wiki/Perf_(Linux)): point it t
 
 You can point magic-trace at a function such that when your application calls it, magic-trace takes a snapshot. Alternatively, attach it to a running process and detatch it with <kbd>Ctrl</kbd>+<kbd>C</kbd>, to see a trace of an arbitrary point in your program.
 
-[^1]: Less than `perf -g`, more than `perf -glbr`. 2~10% in our experience, and usually closer to 2% than 10% for our workloads.
+[^1]: Less than `perf -g`, more than `perf -glbr`. 2~10% in our experience, and usually closer to 2% than 10%.
 
-[^2]: `perf` can do this too, but that's not how most people use it. In fact, if you peek under the hood you'll discover that magic-trace uses `perf` for exactly this.
+[^2]: `perf` can do this too, but that's not how most people use it. In fact, if you peek under the hood you'll see that magic-trace uses `perf` to drive Intel PT.
 
 # Testimonials
 
