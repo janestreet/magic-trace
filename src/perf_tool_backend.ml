@@ -220,15 +220,9 @@ module Recording = struct
     { can_snapshot = not full_execution; pid = perf_pid; capabilities }
   ;;
 
-  let take_snapshot { pid; can_snapshot; capabilities } =
+  let take_snapshot { pid; can_snapshot; _ } =
     if can_snapshot
-    then (
-      let signal =
-        if Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
-        then Signal.int
-        else Signal.usr2
-      in
-      Signal_unix.send_i signal (`Pid pid))
+    then Signal_unix.send_i Signal.usr2 (`Pid pid)
     else Core.eprintf "Warning: Ignoring snapshot during a full-execution trace\n%!";
     Ok ()
   ;;
