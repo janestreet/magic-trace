@@ -119,7 +119,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~perf_map
       { Decode_opts.output_config; decode_opts; print_events }
     =
-    Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
+    Core.eprintf "[ Decoding, this takes a while... ]\n%!";
     Tracing_tool_output.write_and_maybe_view output_config ~f:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
         let hits =
@@ -218,7 +218,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       match Backend.Recording.take_snapshot recording with
       | Ok () ->
         snapshot_taken := true;
-        Core.eprintf "[Snapshot taken!]\n%!";
+        Core.eprintf "[ Snapshot taken. ]\n%!";
         if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
       | Error e -> Core.eprint_s [%message "failed to take snapshot" (e : Error.t)]
     in
@@ -237,7 +237,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       match snap_loc with
       | None -> Deferred.unit
       | Some { Elf.Stop_info.name; addr; _ } ->
-        Core.eprintf "[Attaching to %s @ 0x%016Lx]\n%!" name addr;
+        Core.eprintf "[ Attaching to %s @ 0x%016Lx ]\n%!" name addr;
         (* This is a safety feature so that if you accidentally attach to a symbol that
            gets called very frequently, in single snapshot mode it will only trigger the
            breakpoint once before the breakpoint gets disabled. In [multi_snapshot] mode
@@ -278,7 +278,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let detach { Attachment.recording; done_ivar; breakpoint_done; finalize_recording } =
     Ivar.fill_if_empty done_ivar ();
     let%bind () = breakpoint_done in
-    Core.eprintf "[Finished recording!]\n%!";
+    Core.eprintf "[ Finished recording. ]\n%!";
     finalize_recording ();
     Backend.Recording.finish_recording recording
   ;;
@@ -316,9 +316,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
-        Core.eprintf "[Got signal, detaching...]\n%!";
+        Core.eprintf "[ Got signal, detaching... ]\n%!";
         Ivar.fill_if_empty done_ivar ());
-    Core.eprintf "[Attached! Press Ctrl-C to stop recording]\n%!";
+    Core.eprintf "[ Attached. Press Ctrl-C to stop recording. ]\n%!";
     let%bind () = stop in
     detach attachment
   ;;
