@@ -215,12 +215,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
     let take_snapshot () =
-      match Backend.Recording.take_snapshot recording with
-      | Ok () ->
-        snapshot_taken := true;
-        Core.eprintf "[ Snapshot taken. ]\n%!";
-        if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
-      | Error e -> Core.eprint_s [%message "failed to take snapshot" (e : Error.t)]
+      Backend.Recording.maybe_take_snapshot recording;
+      snapshot_taken := true;
+      Core.eprintf "[ Snapshot taken. ]\n%!";
+      if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
     in
     let hits = ref [] in
     let finalize_recording () =

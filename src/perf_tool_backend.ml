@@ -220,11 +220,8 @@ module Recording = struct
     { can_snapshot = not full_execution; pid = perf_pid; capabilities }
   ;;
 
-  let take_snapshot { pid; can_snapshot; _ } =
-    if can_snapshot
-    then Signal_unix.send_i Signal.usr2 (`Pid pid)
-    else Core.eprintf "Warning: Ignoring snapshot during a full-execution trace\n%!";
-    Ok ()
+  let maybe_take_snapshot { pid; can_snapshot; _ } =
+    if can_snapshot then Signal_unix.send_i Signal.usr2 (`Pid pid)
   ;;
 
   let finish_recording { pid; _ } =
