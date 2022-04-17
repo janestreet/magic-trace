@@ -13,6 +13,7 @@ is most relevant to your report:
 - What did you expect to happen?
 - How can we, magic-trace developers, reproduce the issue you're seeing?
 - What version of perf userspace tools are you running? `perf --version`
+- What CPU do you have? `cat /proc/cpuinfo`
 - If you're reporting a UI bug, can you provide the trace file and/or screenshots
   of the probem?
         
