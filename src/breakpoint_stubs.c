@@ -138,7 +138,7 @@ struct my_sample {
 
 CAMLprim value magic_breakpoint_next_stub(value state) {
   CAMLparam1(state);
-  CAMLlocal2(res, info);
+  CAMLlocal3(res, info, ip);
   struct breakpoint_state *s = Breakpoint_state_val(state);
   if (!s)
     CAMLreturn(Val_none);
@@ -162,12 +162,13 @@ CAMLprim value magic_breakpoint_next_stub(value state) {
       uint64_t timestamp = tsc != 0 ? perf_time_of_tsc(s->mmap, tsc) : 0;
 
       /* Keep in sync with Breakpoint.Hit.t */
+      ip = caml_copy_int64(samp->ip);
       info = caml_alloc_tuple(5);
-      Field(info, 0) = Val_long(samp->time);
-      Field(info, 1) = Val_long(timestamp);
-      Field(info, 2) = Val_long(val);
-      Field(info, 3) = Val_long(samp->tid);
-      Field(info, 4) = Val_long(samp->ip);
+      Store_field(info, 0, Val_long(samp->time));
+      Store_field(info, 1, Val_long(timestamp));
+      Store_field(info, 2, Val_long(val));
+      Store_field(info, 3, Val_long(samp->tid));
+      Store_field(info, 4, ip);
       res = caml_alloc_some(info);
       // Needs to be updated after we read the sample because the kernel uses
       // this value to not overwrite data until we've read it.
