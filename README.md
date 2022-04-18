@@ -80,7 +80,12 @@ You can point magic-trace at a function such that when your application calls it
   <img src="docs/assets/stage-2.gif">
 </p>
 
-6. That should have expanded into a trace. Use <kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> and the scroll wheel to navigate around. <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful), <kbd>S</kbd> zooms out, <kbd>A</kbd> moves left, <kbd>D</kbd> moves right, and scroll wheel moves your viewport up and down the stack. You'll only need to scroll to see particularly deep stack traces, it's probably not useful for this example. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
+6. That should have expanded into a trace. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
+    - <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful),
+    - <kbd>S</kbd> zooms out,
+    - <kbd>A</kbd> moves left,
+    - <kbd>D</kbd> moves right, and
+    - scroll wheel moves your viewport up and down the stack. You'll only need to scroll to see particularly deep stack traces, it's probably not useful for this example.
 
 <p align="center">
   <img src="docs/assets/stage-3.gif">
