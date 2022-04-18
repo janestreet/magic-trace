@@ -51,7 +51,7 @@ open! Core
 type t
 
 (** Open a file to write trace events to in the Fuchsia Trace Format, suggested extension
-    is [.ftf].
+    is [.fxt].
 
     If [base_time] is provided, a time initialization record will be written which
     records what absolute time corresponds to [Time_ns.Span.zero]. *)
