@@ -64,9 +64,8 @@ let perf_fork_exec ?env ~prog ~argv () =
 
 module Recording = struct
   type t =
-    { can_snapshot : bool
-    ; pid : Pid.t
-    ; capabilities : Perf_capabilities.t
+    { pid : Pid.t
+    ; when_to_snapshot : [ `at_exit of [ `sigint | `sigusr2 ] | `function_call | `never ]
     }
 
   let perf_selector_of_trace_mode : Trace_mode.t -> string = function
@@ -179,16 +178,20 @@ module Recording = struct
       | None -> []
       | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
     in
-    let snapshot_opt =
+    let when_to_snapshot =
       if full_execution
-      then []
+      then `never
       else (
-        let snapshot_on_exit =
-          match when_to_snapshot with
-          | Magic_trace_or_the_application_terminates -> perf_supports_snapshot_on_exit
-          | Application_calls_a_function _ -> false
-        in
-        if snapshot_on_exit then [ "--snapshot=e" ] else [ "--snapshot" ])
+        match when_to_snapshot with
+        | Magic_trace_or_the_application_terminates ->
+          if perf_supports_snapshot_on_exit then `at_exit `sigint else `at_exit `sigusr2
+        | Application_calls_a_function _ -> `function_call)
+    in
+    let snapshot_opt =
+      match when_to_snapshot with
+      | `never -> []
+      | `at_exit `sigint -> [ "--snapshot=e" ]
+      | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ]
     in
     let argv =
       List.concat
@@ -217,18 +220,41 @@ module Recording = struct
       | Some (_, exit) -> perf_exit_to_or_error exit
       | _ -> Ok ()
     in
-    { can_snapshot = not full_execution; pid = perf_pid; capabilities }
+    { pid = perf_pid; when_to_snapshot }
   ;;
 
-  let maybe_take_snapshot { pid; can_snapshot; _ } =
-    if can_snapshot then Signal_unix.send_i Signal.usr2 (`Pid pid)
+  let maybe_take_snapshot t ~source =
+    let signal =
+      match t.when_to_snapshot, source with
+      (* [`never] only comes up in [-full-execution] mode. In that mode, perf always gives a
+         complete trace; there's no snapshotting. *)
+      | `never, _ -> None
+      (* Do not snapshot at the end of a program if the user has set up a trigger symbol. *)
+      | `function_call, `ctrl_c -> None
+      (* This shouldn't happen unless there was a bug elsewhere. It would imply that a trigger
+         symbol was hit when there is no trigger symbol configured. *)
+      | `at_exit _, `function_call -> None
+      (* Trigger symbol was hit, and we're configured to look for them. *)
+      | `function_call, `function_call -> Some Signal.usr2
+      (* Ctrl-C was hit, and we're configured to look for that. *)
+      | `at_exit signal, `ctrl_c ->
+        (* The actual signal to use varies depending on whether or not the user's version of perf
+           supports snapshot-at-exit. *)
+        Some
+          (match signal with
+          | `sigint -> Signal.int
+          | `sigusr2 -> Signal.usr2)
+    in
+    match signal with
+    | None -> ()
+    | Some signal -> Signal_unix.send_i signal (`Pid t.pid)
   ;;
 
-  let finish_recording { pid; _ } =
-    Signal_unix.send_i Signal.term (`Pid pid);
+  let finish_recording t =
+    Signal_unix.send_i Signal.term (`Pid t.pid);
     (* This should usually be a signal exit, but we don't really care, if it didn't produce
      a good perf.data file the next step will fail. *)
-    let%map (res : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
+    let%map (res : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid t.pid in
     perf_exit_to_or_error res
   ;;
 end

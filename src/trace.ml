@@ -214,22 +214,22 @@ module Make_commands (Backend : Backend_intf.S) = struct
     in
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
-    let take_snapshot () =
-      Backend.Recording.maybe_take_snapshot recording;
+    let take_snapshot ~source =
+      Backend.Recording.maybe_take_snapshot recording ~source;
       snapshot_taken := true;
       Core.eprintf "[ Snapshot taken. ]\n%!";
       if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
     in
     let hits = ref [] in
     let finalize_recording () =
-      if not !snapshot_taken then take_snapshot ();
+      if not !snapshot_taken then take_snapshot ~source:`ctrl_c;
       Out_channel.write_all
         (Hits_file.filename ~record_dir:opts.record_dir)
         ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string)
     in
     let take_snapshot_on_hit hit =
       hits := hit :: !hits;
-      take_snapshot ()
+      take_snapshot ~source:`function_call
     in
     let breakpoint_done =
       match snap_loc with
@@ -276,9 +276,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let detach { Attachment.recording; done_ivar; breakpoint_done; finalize_recording } =
     Ivar.fill_if_empty done_ivar ();
     let%bind () = breakpoint_done in
-    Core.eprintf "[ Finished recording. ]\n%!";
     finalize_recording ();
-    Backend.Recording.finish_recording recording
+    let%bind.Deferred.Or_error () = Backend.Recording.finish_recording recording in
+    Core.eprintf "[ Finished recording. ]\n%!";
+    return (Ok ())
   ;;
 
   let run_and_record record_opts ~elf ~debug_print_perf_commands ~prog ~argv =
