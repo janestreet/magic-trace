@@ -25,7 +25,7 @@ module type S = sig
       -> Pid.t
       -> t Deferred.Or_error.t
 
-    val maybe_take_snapshot : t -> unit
+    val maybe_take_snapshot : t -> source:[ `ctrl_c | `function_call ] -> unit
     val finish_recording : t -> unit Deferred.Or_error.t
   end
 
