@@ -119,7 +119,7 @@ type t =
 
 let param =
   let%map_open.Command store_path =
-    let default = "trace.ftf" in
+    let default = "trace.fxt" in
     flag
       "output"
       (optional_with_default default string)
