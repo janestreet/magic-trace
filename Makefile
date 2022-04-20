@@ -5,7 +5,7 @@ default:
 	dune build $(BUILD_ARGS)
 
 install:
-	dune install $(INSTALL_ARGS)
+	dune install $(INSTALL_ARGS) magic-trace
 
 uninstall:
 	dune uninstall $(INSTALL_ARGS)
