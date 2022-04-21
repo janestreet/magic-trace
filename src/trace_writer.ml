@@ -3,6 +3,10 @@ open! Import
 
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
+let cacheline_size = 64L
+let align_to_cacheline addr = Int64.(addr land lnot (cacheline_size - 1L))
+let page_size = 4096L
+let align_to_page addr = Int64.(addr land lnot (page_size - 1L))
 
 (* Time spans from perf start whenever the machine booted. Perfetto uses floats to represent time
    spans, which struggles with large spans when we care about small differences in them. To
@@ -33,45 +37,119 @@ end = struct
   include Comparable.Make (T)
 end
 
-module Pending_event = struct
-  module Kind = struct
+module Callstack = struct
+  module Frame = struct
     type t =
-      | Call of
-          { addr : int64
-          ; offset : int
-          ; from_untraced : bool
-          }
-      | Ret
-      | Ret_from_untraced of { reset_time : Mapped_time.t }
+      { location : Event.Location.t
+      ; mutable child_frames : t list
+      ; mutable instruction_cachelines_hit : Int64.Set.t
+      ; mutable instruction_pages_hit : Int64.Set.t
+      ; mutable last_address : Int64.t option
+      }
     [@@deriving sexp_of]
+
+    let create location =
+      { location
+      ; child_frames = []
+      ; instruction_cachelines_hit =
+          Int64.Set.singleton (align_to_cacheline location.instruction_pointer)
+      ; instruction_pages_hit =
+          Int64.Set.singleton (align_to_page location.instruction_pointer)
+      ; last_address = None
+      }
+    ;;
+
+    let update_instruction_cachelines_hit ~from ~to_ t =
+      let from = ref (align_to_cacheline from) in
+      let to_ = align_to_cacheline to_ in
+      while Int64.(!from <= to_) do
+        t.instruction_cachelines_hit <- Set.add t.instruction_cachelines_hit !from;
+        from := Int64.(!from + cacheline_size)
+      done
+    ;;
+
+    let update_instruction_pages_hit ~from ~to_ t =
+      let from = ref (align_to_page from) in
+      let to_ = align_to_page to_ in
+      while Int64.(!from <= to_) do
+        t.instruction_pages_hit <- Set.add t.instruction_pages_hit !from;
+        from := Int64.(!from + page_size)
+      done
+    ;;
+
+    let jump ~from ~to_ t =
+      (match t.last_address with
+      | None -> ()
+      | Some prev ->
+        update_instruction_cachelines_hit ~from:prev ~to_:from t;
+        update_instruction_pages_hit ~from:prev ~to_:from t);
+      t.last_address <- Some to_
+    ;;
+
+    let call_or_ret ~at t =
+      (match t.last_address with
+      | None -> ()
+      | Some prev ->
+        update_instruction_cachelines_hit ~from:prev ~to_:at t;
+        update_instruction_pages_hit ~from:prev ~to_:at t);
+      t.last_address <- Some at
+    ;;
   end
 
   type t =
-    { symbol : Symbol.t
-    ; kind : Kind.t
-    }
-  [@@deriving sexp_of]
-
-  let create_call location ~from_untraced =
-    let { Event.Location.instruction_pointer; symbol; symbol_offset } = location in
-    { symbol
-    ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
-    }
-  ;;
-end
-
-module Callstack = struct
-  type t =
-    { stack : Symbol.t Stack.t
+    { stack : Frame.t Stack.t
     ; create_time : Mapped_time.t
     }
   [@@deriving sexp_of]
 
   let create ~create_time = { stack = Stack.create (); create_time }
-  let push t v = Stack.push t.stack v
-  let pop t = Stack.pop t.stack
   let top t = Stack.top t.stack
+
+  let push t symbol =
+    let frame = Frame.create symbol in
+    (match top t with
+    | None -> ()
+    | Some parent_frame -> parent_frame.child_frames <- frame :: parent_frame.child_frames);
+    Stack.push t.stack frame
+  ;;
+
+  let pop t =
+    Option.map (Stack.pop t.stack) ~f:(fun top ->
+        top.instruction_cachelines_hit
+          <- Int64.Set.union_list
+               (top.instruction_cachelines_hit
+               :: List.map top.child_frames ~f:(fun frame ->
+                      frame.instruction_cachelines_hit));
+        top.instruction_pages_hit
+          <- Int64.Set.union_list
+               (top.instruction_pages_hit
+               :: List.map top.child_frames ~f:(fun frame -> frame.instruction_pages_hit)
+               );
+        top)
+  ;;
+
   let is_empty t = Stack.is_empty t.stack
+
+  module For_stats = struct
+    let jump ~from ~to_ t = Option.iter (top t) ~f:(Frame.jump ~from ~to_)
+    let call_or_ret ~at t = Option.iter (top t) ~f:(Frame.call_or_ret ~at)
+  end
+end
+
+module Pending_event = struct
+  module Kind = struct
+    type t =
+      | Call of { from_untraced : bool }
+      | Ret of { frame : Callstack.Frame.t }
+      | Ret_from_untraced of { reset_time : Mapped_time.t }
+    [@@deriving sexp_of]
+  end
+
+  type t =
+    { location : Event.Location.t
+    ; kind : Kind.t
+    }
+  [@@deriving sexp_of]
 end
 
 module Thread_info = struct
@@ -304,11 +382,13 @@ let write_pending_event'
     (t : thread inner)
     (thread : thread Thread_info.t)
     time
-    { Pending_event.symbol; kind }
+    { Pending_event.location; kind }
   =
-  let display_name = Symbol.display_name symbol in
+  let display_name = Symbol.display_name location.symbol in
   match kind with
-  | Call { addr; offset; from_untraced } ->
+  | Call { from_untraced } ->
+    let addr = location.instruction_pointer in
+    let offset = location.symbol_offset in
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
@@ -328,7 +408,7 @@ let write_pending_event'
          that's alright, because we wouldn't have a symbol for it in the executable's
          [debug_info] anyway). *)
       let address = [ "address", Pointer addr ] in
-      match symbol with
+      match location.symbol with
       | From_perf_map { start_addr = _; size = _; function_ = _ } ->
         address @ [ "symbol", Interned display_name ]
       | _ ->
@@ -355,7 +435,17 @@ let write_pending_event'
       else display_name
     in
     write_duration_begin t ~thread:thread.thread ~name ~time ~args
-  | Ret -> write_duration_end t ~name:display_name ~time ~thread:thread.thread ~args:[]
+  | Ret { frame } ->
+    write_duration_end
+      t
+      ~name:display_name
+      ~time
+      ~thread:thread.thread
+      ~args:
+        [ ( "total_instruction_cachelines_hit"
+          , Int (Set.length frame.instruction_cachelines_hit) )
+        ; "total_instruction_pages_hit", Int (Set.length frame.instruction_pages_hit)
+        ]
   | Ret_from_untraced { reset_time } ->
     write_duration_complete
       t
@@ -370,10 +460,10 @@ let write_pending_event'
    consume time substantially reduces the frequency where we need to use zero-duration
    events. In general the traces are easier to read if returns aren't counted as consuming
    time. *)
-let consumes_time { Pending_event.symbol = _; kind } =
+let consumes_time { Pending_event.location = _; kind } =
   match kind with
   | Call _ -> true
-  | Ret | Ret_from_untraced _ -> false
+  | Ret _ | Ret_from_untraced _ -> false
 ;;
 
 let write_pending_event
@@ -489,14 +579,14 @@ let create_thread t event =
 ;;
 
 let call t thread_info ~time ~location =
-  let ev = Pending_event.create_call location ~from_untraced:false in
-  add_event t thread_info time ev;
-  Callstack.push thread_info.callstack location.symbol
+  add_event t thread_info time { location; kind = Call { from_untraced = false } };
+  Callstack.push thread_info.callstack location
 ;;
 
 let ret t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
-  | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
+  | Some frame ->
+    add_event t thread_info time { location = frame.location; kind = Ret { frame } }
   | None ->
     (* No known stackframe was popped --- could occur if the start of the snapshot
        started in the middle of a tracing region *)
@@ -504,7 +594,8 @@ let ret t (thread_info : _ Thread_info.t) ~time =
       t
       thread_info
       time
-      { symbol = From_perf "[unknown]"
+      { location =
+          { symbol = From_perf "[unknown]"; instruction_pointer = 0L; symbol_offset = 0 }
       ; kind = Ret_from_untraced { reset_time = thread_info.callstack.create_time }
       }
 ;;
@@ -520,7 +611,8 @@ let check_current_symbol
      with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
      known function, so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
-  | Some known when not ([%compare.equal: Symbol.t] known location.symbol) ->
+  | Some { location = location'; _ }
+    when not ([%compare.equal: Symbol.t] location'.symbol location.symbol) ->
     ret t thread_info ~time;
     call t thread_info ~time ~location
   | Some _ -> ()
@@ -532,9 +624,12 @@ let check_current_symbol
 
        These shouldn't be buffered for spreading since we want them exactly at the reset
        time. *)
-    let ev = Pending_event.create_call location ~from_untraced:true in
-    write_pending_event t thread_info thread_info.callstack.create_time ev;
-    Callstack.push thread_info.callstack location.symbol
+    write_pending_event
+      t
+      thread_info
+      thread_info.callstack.create_time
+      { location; kind = Call { from_untraced = true } };
+    Callstack.push thread_info.callstack location
 ;;
 
 let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
@@ -548,7 +643,7 @@ let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
 let ret_track_exn_data t thread_info ~time =
   let { Thread_info.callstack; frames_to_unwind; _ } = thread_info in
   (match Callstack.top callstack with
-  | Some (From_perf symbol) ->
+  | Some { location = { symbol = From_perf symbol; _ }; _ } ->
     (match symbol with
     | "caml_next_frame_descriptor" -> incr frames_to_unwind
     | "caml_raise_exn" -> unwind_stack t thread_info ~time (-2)
@@ -632,13 +727,17 @@ let write_event (T t) event =
         ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
         ; kind
         ; trace_state_change
-          (* [src] is useful, but we don't use it for mostly historical reasons. It's not
-           semantically important that we ignore it here. *)
-        ; src = _
+        ; src
         ; dst
         }
       =
       event
+    in
+    let call t thread_info ~time ~location =
+      Callstack.For_stats.call_or_ret
+        ~at:src.instruction_pointer
+        thread_info.Thread_info.callstack;
+      call t thread_info ~time ~location
     in
     (match kind, trace_state_change with
     | Some Call, (None | Some End) -> call t thread_info ~time ~location:dst
@@ -658,6 +757,7 @@ let write_event (T t) event =
       call t thread_info ~time ~location:Event.Location.syscall
     | Some Return, Some End -> call t thread_info ~time ~location:Event.Location.returned
     | Some Return, None ->
+      Callstack.For_stats.call_or_ret ~at:src.instruction_pointer thread_info.callstack;
       ret_track_exn_data t thread_info ~time;
       check_current_symbol t thread_info ~time dst
     | None, Some Start ->
@@ -727,7 +827,12 @@ let write_event (T t) event =
           ~addr:dst.instruction_pointer
           ~time;
         check_current_symbol t thread_info ~time dst)
-    | Some Jump, None -> check_current_symbol t thread_info ~time dst
+    | Some Jump, None ->
+      Callstack.For_stats.jump
+        ~from:src.instruction_pointer
+        ~to_:dst.instruction_pointer
+        thread_info.callstack;
+      check_current_symbol t thread_info ~time dst
     (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
        Instead of crashing, ignore it and keep going. *)
     | None, _ -> ());
