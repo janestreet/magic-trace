@@ -47,8 +47,8 @@ You can point magic-trace at a function such that when your application calls it
 > "Magic-trace is not just for performance. The tool gives insight directly into what happens in your program, when, and why. Consider using it for all your introspective goals!"
 - Andrew Hunter, Jane Street
 
-> "I can't believe you open sourced that."
-- Anonymous, Jump Trading
+> I use perf a ton, and I think that both perf and magic-trace give perspectives that the other doesn't. The benefit I got from magic-trace was entirely based on the fact that it works in slices at any zoom level, so I was able to see all the function calls that a 70ns function was performing, which was invisible in perf.
+- Doug Patti, Jane Street
 
 [more testimonials...](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews)
 
