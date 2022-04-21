@@ -306,7 +306,6 @@ let write_pending_event'
     time
     { Pending_event.symbol; kind }
   =
-  let symbol = Symbol.demangle symbol in
   let display_name = Symbol.display_name symbol in
   match kind with
   | Call { addr; offset; from_untraced } ->

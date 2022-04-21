@@ -10,4 +10,3 @@ type t =
 [@@deriving sexp, compare]
 
 val display_name : t -> string
-val demangle : t -> t
