@@ -83,7 +83,7 @@ You can point magic-trace at a function such that when your application calls it
 </p>
 
 4. That should have expanded into a trace. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
-    - <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful),
+    - <kbd>W</kbd> zooms into wherever your mouse cursor is pointed (you'll need to zoom in a bunch to see anything useful),
     - <kbd>S</kbd> zooms out,
     - <kbd>A</kbd> moves left,
     - <kbd>D</kbd> moves right, and
