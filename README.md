@@ -52,7 +52,7 @@ You can point magic-trace at a function such that when your application calls it
 
 [more testimonials...](https://github.com/janestreet/magic-trace/wiki/Unsolicited-reviews)
 
-# Getting started
+# Install
 
 1. Make sure the system you want to trace is [supported](https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes). The constraints that most commonly trip people up are: VMs are mostly not supported, Intel only (Skylake[^3] or later), Linux only.
 
@@ -66,21 +66,23 @@ You can point magic-trace at a function such that when your application calls it
 [^3]: Strictly speaking, anything newer than Broadwell, but this is not a platform we regularly test on, and timing resolution is worse (~1us).
 [^4]: https://github.com/actions/upload-artifact/issues/38
 
-3. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
+# Getting started
 
-4. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.fxt` in your working directory.
+1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
+
+2. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.fxt` in your working directory.
 
 <p align="center">
   <img src="docs/assets/stage-1.gif">
 </p>
 
-5. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
+3. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
 
 <p align="center">
   <img src="docs/assets/stage-2.gif">
 </p>
 
-6. That should have expanded into a trace. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
+4. That should have expanded into a trace. Zoom in until you can see an individual loop through `dlopen`/`dlsym`/`cos`/`printf`/`dlclose`.
     - <kbd>W</kbd> zooms in (you'll need to zoom in a bunch to see anything useful),
     - <kbd>S</kbd> zooms out,
     - <kbd>A</kbd> moves left,
@@ -91,7 +93,7 @@ You can point magic-trace at a function such that when your application calls it
   <img src="docs/assets/stage-3.gif">
 </p>
 
-7. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~5.7us.
+5. Click and drag on the white space around the call stacks to measure. Plant flags by clicking in the timeline along the top. Using the measurement tool, measure how long it takes to run `cos`. On my screen it takes ~5.7us.
 
 <p align="center">
   <img src="docs/assets/stage-4.gif">
