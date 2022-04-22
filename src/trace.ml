@@ -4,18 +4,31 @@ open! Core
 open! Async
 open! Import
 
-let supports_fzf =
+let supports_command command =
   Lazy.from_fun (fun () ->
       match Core_unix.fork () with
       | `In_the_child ->
         Core_unix.close Core_unix.stdout;
-        Core_unix.exec ~prog:"fzf" ~argv:[ "fzf"; "--version" ] ~use_path:true ()
+        Core_unix.close Core_unix.stderr;
+        Core_unix.exec ~prog:command ~argv:[ command; "--version" ] ~use_path:true ()
         |> never_returns
       | `In_the_parent pid ->
         let exit_or_signal = Core_unix.waitpid pid in
         (match Core_unix.Exit_or_signal.or_error exit_or_signal with
         | Error _ -> false
         | Ok () -> true))
+;;
+
+let supports_fzf = supports_command "fzf"
+let supports_perf = supports_command "perf"
+
+let check_for_perf () =
+  if force supports_perf
+  then return (Ok ())
+  else
+    Deferred.Or_error.errorf
+      "magic-trace relies on \"perf\", but it is not present in your path. You may need \
+       to install it."
 ;;
 
 let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
@@ -32,9 +45,9 @@ let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
    we can give a more helpful error message regardless of backend. *)
 let check_for_processor_trace_support () =
   match Core_unix.access "/sys/bus/event_source/devices/intel_pt" [ `Exists ] with
-  | Ok () -> Ok ()
+  | Ok () -> return (Ok ())
   | Error _ ->
-    Or_error.error_string
+    Deferred.Or_error.error_string
       "Error: This machine doesn't support Intel Processor Trace, which is a hardware \
        feature essential for magic-trace to work.\n\
        This may be because it's a virtual machine or it's a physical machine that isn't \
@@ -169,9 +182,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
   end
 
   let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pid =
-    let%bind.Deferred.Or_error () =
-      check_for_processor_trace_support () |> Deferred.return
-    in
     let%bind.Deferred.Or_error snap_loc =
       match elf with
       | None -> return (Ok None)
@@ -407,6 +417,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
+         let%bind () = check_for_processor_trace_support () in
+         let%bind () = check_for_perf () in
          let executable =
            match Shell.which prog with
            | Some path -> path
@@ -497,6 +509,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
+         let%bind () = check_for_processor_trace_support () in
+         let%bind () = check_for_perf () in
          let%bind pid =
            match pid with
            | Some pid -> return (Pid.of_int pid)
