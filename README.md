@@ -76,7 +76,7 @@ You can point magic-trace at a function such that when your application calls it
   <img src="docs/assets/stage-1.gif">
 </p>
 
-3. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step. Once it's loaded, expand the trace by clicking the two little arrows in the main trace area.
+3. Open [magic-trace.org](https://magic-trace.org/), click _"Open trace file"_ in the top-left-hand and give it the trace file generated in the previous step.
 
 <p align="center">
   <img src="docs/assets/stage-2.gif">
