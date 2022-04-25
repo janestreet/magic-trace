@@ -54,9 +54,7 @@ let create filename =
         }
     | _, _ -> None
   with
-  | Owee_buf.Invalid_format _ ->
-    Core.eprintf "Invalid or unknown debug info format.\n";
-    None
+  | _ -> None
 ;;
 
 let is_func sym =
