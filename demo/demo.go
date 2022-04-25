@@ -13,11 +13,11 @@ func check(e error) {
 
 func main() {
 	r, err := os.Open("/dev/zero")
-    check(err)
+	check(err)
 	w, err := os.Create("/dev/null")
 	check(err)
 	buf := make([]byte, 4096)
-	for {
+	for i := 0; i < 10; i++ {
 		_, err = r.Read(buf)
 		_, err = w.Write(buf)
 		check(err)
