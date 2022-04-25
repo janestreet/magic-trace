@@ -36,8 +36,12 @@ let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
   match when_to_snapshot, elf with
   | Application_calls_a_function _, None ->
     Deferred.Or_error.errorf
-      "As far as magic-trace can tell, that executable doesn't have a symbol table. Was \
-       the binary built without debug info?"
+      "Cannot select a snapshot symbol because magic-trace can't find that executable's \
+       symbol table. Was it built without debug info, or with debug info magic-trace \
+       doesn't understand?\n\
+       See \
+       https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+       for more info."
   | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
 ;;
 
@@ -66,7 +70,7 @@ let debug_print_perf_commands =
 let write_trace_from_events
     ~print_events
     ~trace_mode
-    ?debug_info
+    ~debug_info
     writer
     hits
     decode_result
@@ -140,7 +144,20 @@ module Make_commands (Backend : Backend_intf.S) = struct
           |> Sexp.of_string
           |> [%of_sexp: Hits_file.t]
         in
-        let debug_info = Option.map elf ~f:Elf.addr_table in
+        let debug_info =
+          match
+            Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
+          with
+          | None ->
+            eprintf
+              "Warning: Debug info is unavaliable, so filenames and line numbers will \
+               not be available in the trace.\n\
+               See \
+               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+               for more info.\n";
+            None
+          | Some _ as x -> x
+        in
         let%bind decode_result =
           Backend.decode_events
             decode_opts
@@ -150,7 +167,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         in
         let%bind () =
           write_trace_from_events
-            ?debug_info
+            ~debug_info
             ~trace_mode
             ~print_events
             writer

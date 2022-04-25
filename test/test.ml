@@ -135,7 +135,7 @@ let dump_using_file events =
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
   let%bind or_error =
-    write_trace_from_events ~trace_mode:Userspace writer [] decode_result
+    write_trace_from_events ~debug_info:None ~trace_mode:Userspace writer [] decode_result
   in
   ok_exn or_error;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
