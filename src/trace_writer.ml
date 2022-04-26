@@ -494,6 +494,66 @@ let ret t (thread_info : _ Thread_info.t) ~time =
       }
 ;;
 
+let rec clear_callstack t (thread_info : _ Thread_info.t) ~time =
+  match Callstack.top thread_info.callstack with
+  | None -> ()
+  | Some _ ->
+    ret t thread_info ~time;
+    clear_callstack t thread_info ~time
+;;
+
+(* Unlike [clear_callstack], [clear_all_callstacks] also returns from all inactive
+   callstacks. *)
+let rec clear_all_callstacks t thread_info ~time =
+  clear_callstack t thread_info ~time;
+  match Stack.pop thread_info.inactive_callstacks with
+  | None -> ()
+  | Some callstack ->
+    thread_info.callstack <- callstack;
+    clear_all_callstacks t thread_info ~time
+;;
+
+let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : unit =
+  let to_time = thread_info.pending_time in
+  Deque.iter' thread_info.start_events `front_to_back ~f:(fun (time, ev) ->
+      write_pending_event' t thread_info time ev);
+  Deque.clear thread_info.start_events;
+  clear_all_callstacks t thread_info ~time;
+  flush t ~to_time thread_info;
+  thread_info.last_decode_error_time <- time;
+  Thread_info.set_callstack thread_info ~is_kernel_address ~time
+;;
+
+(* Handles ocaml exception unwinding, unless the application calls [raise_notrace] (in which case,
+   magic-trace doesn't detect the irregular control flow). The way this works is that it counts the
+   number of [caml_next_frame_descriptor] calls while an exception is unwinding, and knows to
+   unwind the stack that many times (+/- a constant) when the next [caml_raise_exn] or
+   [caml_raise_exception] return. *)
+module Ocaml_hacks : sig
+  val ret_track_exn_data : 'a inner -> 'a Thread_info.t -> time:Mapped_time.t -> unit
+end = struct
+  let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
+    let frames_to_unwind = thread_info.frames_to_unwind in
+    for _ = 0 to !frames_to_unwind + diff do
+      ret t thread_info ~time
+    done;
+    frames_to_unwind := 0
+  ;;
+
+  let ret_track_exn_data t thread_info ~time =
+    let { Thread_info.callstack; frames_to_unwind; _ } = thread_info in
+    (match Callstack.top callstack with
+    | Some (From_perf symbol) ->
+      (match symbol with
+      | "caml_next_frame_descriptor" -> incr frames_to_unwind
+      | "caml_raise_exn" -> unwind_stack t thread_info ~time (-2)
+      | "caml_raise_exception" -> unwind_stack t thread_info ~time 1
+      | _ -> ())
+    | _ -> ());
+    ret t thread_info ~time
+  ;;
+end
+
 let check_current_symbol
     t
     (thread_info : _ Thread_info.t)
@@ -522,46 +582,6 @@ let check_current_symbol
     Callstack.push thread_info.callstack location.symbol
 ;;
 
-let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
-  let frames_to_unwind = thread_info.frames_to_unwind in
-  for _ = 0 to !frames_to_unwind + diff do
-    ret t thread_info ~time
-  done;
-  frames_to_unwind := 0
-;;
-
-let ret_track_exn_data t thread_info ~time =
-  let { Thread_info.callstack; frames_to_unwind; _ } = thread_info in
-  (match Callstack.top callstack with
-  | Some (From_perf symbol) ->
-    (match symbol with
-    | "caml_next_frame_descriptor" -> incr frames_to_unwind
-    | "caml_raise_exn" -> unwind_stack t thread_info ~time (-2)
-    | "caml_raise_exception" -> unwind_stack t thread_info ~time 1
-    | _ -> ())
-  | _ -> ());
-  ret t thread_info ~time
-;;
-
-let rec clear_callstack t (thread_info : _ Thread_info.t) ~time =
-  match Callstack.top thread_info.callstack with
-  | None -> ()
-  | Some _ ->
-    ret t thread_info ~time;
-    clear_callstack t thread_info ~time
-;;
-
-(* Unlike [clear_callstack], [clear_all_callstacks] also returns from all inactive
-   callstacks. *)
-let rec clear_all_callstacks t thread_info ~time =
-  clear_callstack t thread_info ~time;
-  match Stack.pop thread_info.inactive_callstacks with
-  | None -> ()
-  | Some callstack ->
-    thread_info.callstack <- callstack;
-    clear_all_callstacks t thread_info ~time
-;;
-
 let assert_trace_mode t event trace_modes =
   if List.find trace_modes ~f:(Trace_mode.equal t.trace_mode) |> Option.is_none
   then
@@ -573,20 +593,15 @@ let assert_trace_mode t event trace_modes =
           (event : Event.t)]
 ;;
 
-let end_of_thread t (thread_info : _ Thread_info.t) ~time : unit =
-  let to_time = thread_info.pending_time in
-  Deque.iter' thread_info.start_events `front_to_back ~f:(fun (time, ev) ->
-      write_pending_event' t thread_info time ev);
-  Deque.clear thread_info.start_events;
-  clear_all_callstacks t thread_info ~time;
-  flush t ~to_time thread_info
-;;
-
 let end_of_trace (T t) =
   (* CR-someday cgaebel: I wish this iteration had a defined order; it'd make magic-trace
      a little bit more deterministic. *)
   Hashtbl.iter t.thread_info ~f:(fun thread_info ->
-      end_of_thread t thread_info ~time:thread_info.last_event_time)
+      end_of_thread
+        t
+        thread_info
+        ~time:thread_info.last_event_time
+        ~is_kernel_address:false)
 ;;
 
 (* Write perf_events into a file as a Fuschia trace (stack events). Events should be
@@ -604,14 +619,12 @@ let write_event (T t) event =
   | Error { thread = _; instruction_pointer; message; time = _ } ->
     let name = sprintf !"[decode error: %s]" message in
     write_duration_instant t ~thread ~name ~time ~args:[];
-    end_of_thread t thread_info ~time;
-    thread_info.last_decode_error_time <- time;
     let is_kernel_address =
       match instruction_pointer with
       | None -> false
       | Some ip -> is_kernel_address ip
     in
-    Thread_info.set_callstack thread_info ~is_kernel_address ~time
+    end_of_thread t thread_info ~time ~is_kernel_address
   | Ok event ->
     let { Event.Ok.thread = _ (* Already used this to look up thread info. *)
         ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
@@ -643,7 +656,7 @@ let write_event (T t) event =
       call t thread_info ~time ~location:Event.Location.syscall
     | Some Return, Some End -> call t thread_info ~time ~location:Event.Location.returned
     | Some Return, None ->
-      ret_track_exn_data t thread_info ~time;
+      Ocaml_hacks.ret_track_exn_data t thread_info ~time;
       check_current_symbol t thread_info ~time dst
     | None, Some Start ->
       (* Might get this under /u, /k, and /uk, but we need to handle them all
@@ -671,7 +684,7 @@ let write_event (T t) event =
            the program location in most cases, and when a call to a symbol page
            faults, the restart after the page fault at the new location would get
            treated as a tail call if we did call [check_current_symbol]. *)
-        ret_track_exn_data t thread_info ~time
+        Ocaml_hacks.ret_track_exn_data t thread_info ~time
     | Some ((Syscall | Hardware_interrupt) as kind), None ->
       (* We should only be getting [Syscall] these under /uk, but we can get
          [Hardware_interrupt] under /uk, /k. *)
