@@ -66,7 +66,7 @@ You can point magic-trace at a function such that when your application calls it
 
 # Getting started
 
-1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc -ldl demo.c -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
+1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc demo.c -ldl -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
 
 2. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.fxt` in your working directory.
 
