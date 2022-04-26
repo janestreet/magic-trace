@@ -1,6 +1,12 @@
 open! Core
 open! Import
 
+(* Whether a language-specific hack override the default behavior or not. *)
+type hack_result =
+  | Handled
+  | Ignored
+[@@deriving sexp_of]
+
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
 
@@ -479,7 +485,7 @@ let call t thread_info ~time ~location =
   Callstack.push thread_info.callstack location.symbol
 ;;
 
-let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
+let ret t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
   | None ->
@@ -495,7 +501,6 @@ let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
 ;;
 
 let rec clear_callstack t (thread_info : _ Thread_info.t) ~time =
-  let ret = ret_without_checking_for_go_hacks in
   match Callstack.top thread_info.callstack with
   | None -> ()
   | Some _ ->
@@ -534,12 +539,20 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
 
    At startup (and maybe other situations?), gogo clears all callstacks and executes [main]. *)
 module Go_hacks : sig
-  val ret_track_gogo
+  val detect_stack_switch
     :  'a inner
     -> 'a Thread_info.t
     -> time:Mapped_time.t
-    -> returned_from:Symbol.t option
-    -> unit
+    -> top_of_stack:Symbol.t
+    -> jump_target:Event.Location.t
+    -> hack_result
+
+  val detect_goexit
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> jump_target:Event.Location.t
+    -> hack_result
 end = struct
   let is_gogo (symbol : Symbol.t) =
     match symbol with
@@ -547,44 +560,58 @@ end = struct
     | _ -> false
   ;;
 
-  let is_known_gogo_destination (symbol : Symbol.t) =
+  let is_goexit_abi0 (symbol : Symbol.t) =
     match symbol with
-    | From_perf ("runtime.mcall" | "runtime.morestack.abi0") -> true
+    | From_perf "runtime.goexit.abi0" -> true
     | _ -> false
   ;;
 
-  let current_stack_contains_known_gogo_destination (thread_info : _ Thread_info.t) =
-    Stack.find thread_info.callstack.stack ~f:is_known_gogo_destination |> Option.is_some
-  ;;
-
-  let rec pop_until_gogo_destination t (thread_info : _ Thread_info.t) ~time =
-    let ret = ret_without_checking_for_go_hacks in
-    match Callstack.top thread_info.callstack with
-    | None -> ()
-    | Some symbol ->
+  (* Walk up the stack, popping stack frames until we hit gogo's jump target. If we make
+     it to the end of the stack without seeing a gogo jump target, assume that we're
+     switching to a separate stack. *)
+  let rec pop_until_gogo_destination t (thread_info : _ Thread_info.t) ~time ~jump_target =
+    if Callstack.is_empty thread_info.callstack
+    then (
+      (* Popped off the complete stack. If we hit this, there was a gogo but we didn't find
+       the destination function anywhere in the stack. We assume this means we're switching
+       to another stack entirely, so mark it as the end of the thread so future decode errors
+       get marked to this point and past decode errors are flushed. *)
+      end_of_thread t thread_info ~time ~is_kernel_address:false;
+      `switched_stacks)
+    else (
       ret t thread_info ~time;
-      (* Return one past the known gogo destination. This hack is necessary because:
-
-         - all gogo-destination functions are jumped into and out of
-         - magic-trace translates the jump returning from gogo-destination into a ret/call pair
-         - this runs on the ret, but the call is to gogo-destination's caller and we don't
-           want a second stack frame for that.
-
-         This is a little janky because you see a stack frame momentarily end then start back
-         up again on every [gogo]. I think that's a small price to pay to keep all the Go hacks
-         in one place. *)
-      if is_known_gogo_destination symbol
-      then ret t thread_info ~time
-      else pop_until_gogo_destination t thread_info ~time
+      if [%compare.equal: Symbol.t option]
+           (Callstack.top thread_info.callstack)
+           (Some jump_target)
+      then `jumped_internally
+      else pop_until_gogo_destination t thread_info ~time ~jump_target)
   ;;
 
-  let ret_track_gogo t thread_info ~time ~returned_from =
-    let is_ret_from_gogo = Option.value_map ~f:is_gogo returned_from ~default:false in
-    if is_ret_from_gogo
-    then
-      if current_stack_contains_known_gogo_destination thread_info
-      then pop_until_gogo_destination t thread_info ~time
-      else end_of_thread t thread_info ~time ~is_kernel_address:false
+  let detect_stack_switch
+      t
+      thread_info
+      ~time
+      ~top_of_stack
+      ~(jump_target : Event.Location.t)
+    =
+    if is_gogo top_of_stack
+    then (
+      (match
+         pop_until_gogo_destination t thread_info ~time ~jump_target:jump_target.symbol
+       with
+      | `jumped_internally -> ()
+      | `switched_stacks -> call t thread_info ~time ~location:jump_target);
+      Handled)
+    else Ignored
+  ;;
+
+  let detect_goexit t thread_info ~time ~(jump_target : Event.Location.t) =
+    if is_goexit_abi0 jump_target.symbol
+    then (
+      end_of_thread t thread_info ~time ~is_kernel_address:false;
+      call t thread_info ~time ~location:jump_target;
+      Handled)
+    else Ignored
   ;;
 end
 
@@ -596,9 +623,6 @@ end
 module Ocaml_hacks : sig
   val ret_track_exn_data : 'a inner -> 'a Thread_info.t -> time:Mapped_time.t -> unit
 end = struct
-  (* It's ocaml, not go. *)
-  let ret = ret_without_checking_for_go_hacks
-
   let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
     let frames_to_unwind = thread_info.frames_to_unwind in
     for _ = 0 to !frames_to_unwind + diff do
@@ -621,12 +645,6 @@ end = struct
   ;;
 end
 
-let ret t (thread_info : _ Thread_info.t) ~time : unit =
-  let returned_from = Callstack.top thread_info.callstack in
-  ret_without_checking_for_go_hacks t thread_info ~time;
-  Go_hacks.ret_track_gogo t thread_info ~time ~returned_from
-;;
-
 let check_current_symbol
     t
     (thread_info : _ Thread_info.t)
@@ -638,10 +656,21 @@ let check_current_symbol
      with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
      known function, so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
-  | Some known when not ([%compare.equal: Symbol.t] known location.symbol) ->
-    ret t thread_info ~time;
-    call t thread_info ~time ~location
-  | Some _ -> ()
+  | Some known ->
+    if not ([%compare.equal: Symbol.t] known location.symbol)
+    then (
+      match
+        Go_hacks.detect_stack_switch
+          t
+          thread_info
+          ~time
+          ~top_of_stack:known
+          ~jump_target:location
+      with
+      | Handled -> ()
+      | Ignored ->
+        ret t thread_info ~time;
+        call t thread_info ~time ~location)
   | None ->
     (* If we have no callstack left, then we just returned out of something we didn't
        see the call for. Since we're in snapshot mode, this happens with functions
@@ -729,8 +758,11 @@ let write_event (T t) event =
       call t thread_info ~time ~location:Event.Location.syscall
     | Some Return, Some End -> call t thread_info ~time ~location:Event.Location.returned
     | Some Return, None ->
-      Ocaml_hacks.ret_track_exn_data t thread_info ~time;
-      check_current_symbol t thread_info ~time dst
+      (match Go_hacks.detect_goexit t thread_info ~time ~jump_target:dst with
+      | Handled -> ()
+      | Ignored ->
+        Ocaml_hacks.ret_track_exn_data t thread_info ~time;
+        check_current_symbol t thread_info ~time dst)
     | None, Some Start ->
       (* Might get this under /u, /k, and /uk, but we need to handle them all
        differently. *)
