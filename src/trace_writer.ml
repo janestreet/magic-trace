@@ -193,21 +193,6 @@ let write_duration_instant
   T.write_duration_instant ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
-let real_trace (trace : Tracing.Trace.t) =
-  let module T = struct
-    type thread = Tracing.Trace.Thread.t
-
-    let allocate_pid = Tracing.Trace.allocate_pid trace
-    let allocate_thread = Tracing.Trace.allocate_thread trace
-    let write_duration_begin = Tracing.Trace.write_duration_begin trace ~category:""
-    let write_duration_end = Tracing.Trace.write_duration_end trace ~category:""
-    let write_duration_complete = Tracing.Trace.write_duration_complete trace ~category:""
-    let write_duration_instant = Tracing.Trace.write_duration_instant trace ~category:""
-  end
-  in
-  (module T : Trace with type thread = Tracing.Trace.Thread.t)
-;;
-
 let map_time t time = Mapped_time.create time ~base_time:t.base_time
 
 let write_hits (T t) hits =
@@ -296,7 +281,7 @@ let create
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times
-    (real_trace trace)
+    (Real_trace.create trace)
 ;;
 
 let write_pending_event'
