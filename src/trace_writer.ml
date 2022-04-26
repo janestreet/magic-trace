@@ -479,7 +479,7 @@ let call t thread_info ~time ~location =
   Callstack.push thread_info.callstack location.symbol
 ;;
 
-let ret t (thread_info : _ Thread_info.t) ~time =
+let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
   | None ->
@@ -495,6 +495,7 @@ let ret t (thread_info : _ Thread_info.t) ~time =
 ;;
 
 let rec clear_callstack t (thread_info : _ Thread_info.t) ~time =
+  let ret = ret_without_checking_for_go_hacks in
   match Callstack.top thread_info.callstack with
   | None -> ()
   | Some _ ->
@@ -524,6 +525,69 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
   Thread_info.set_callstack thread_info ~is_kernel_address ~time
 ;;
 
+(* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
+   from one goroutine to the next. Since [gogo] can jump anywhere, it's a shining example of what
+   magic-trace can't handle out of the box. So, we hack it.
+
+   Most of the time, control flow returns parallel to (i.e. as if jumped from) the previous caller
+   of [runtime.mcall] or [runtime.morestack.abi0].
+
+   At startup (and maybe other situations?), gogo clears all callstacks and executes [main]. *)
+module Go_hacks : sig
+  val ret_track_gogo
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> returned_from:Symbol.t option
+    -> unit
+end = struct
+  let is_gogo (symbol : Symbol.t) =
+    match symbol with
+    | From_perf "gogo" -> true
+    | _ -> false
+  ;;
+
+  let is_known_gogo_destination (symbol : Symbol.t) =
+    match symbol with
+    | From_perf ("runtime.mcall" | "runtime.morestack.abi0") -> true
+    | _ -> false
+  ;;
+
+  let current_stack_contains_known_gogo_destination (thread_info : _ Thread_info.t) =
+    Stack.find thread_info.callstack.stack ~f:is_known_gogo_destination |> Option.is_some
+  ;;
+
+  let rec pop_until_gogo_destination t (thread_info : _ Thread_info.t) ~time =
+    let ret = ret_without_checking_for_go_hacks in
+    match Callstack.top thread_info.callstack with
+    | None -> ()
+    | Some symbol ->
+      ret t thread_info ~time;
+      (* Return one past the known gogo destination. This hack is necessary because:
+
+         - all gogo-destination functions are jumped into and out of
+         - magic-trace translates the jump returning from gogo-destination into a ret/call pair
+         - this runs on the ret, but the call is to gogo-destination's caller and we don't
+           want a second stack frame for that.
+
+         This is a little janky because you see a stack frame momentarily end then start back
+         up again on every [gogo]. I think that's a small price to pay to keep all the Go hacks
+         in one place. *)
+      if is_known_gogo_destination symbol
+      then ret t thread_info ~time
+      else pop_until_gogo_destination t thread_info ~time
+  ;;
+
+  let ret_track_gogo t thread_info ~time ~returned_from =
+    let is_ret_from_gogo = Option.value_map ~f:is_gogo returned_from ~default:false in
+    if is_ret_from_gogo
+    then
+      if current_stack_contains_known_gogo_destination thread_info
+      then pop_until_gogo_destination t thread_info ~time
+      else end_of_thread t thread_info ~time ~is_kernel_address:false
+  ;;
+end
+
 (* Handles ocaml exception unwinding, unless the application calls [raise_notrace] (in which case,
    magic-trace doesn't detect the irregular control flow). The way this works is that it counts the
    number of [caml_next_frame_descriptor] calls while an exception is unwinding, and knows to
@@ -532,6 +596,9 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
 module Ocaml_hacks : sig
   val ret_track_exn_data : 'a inner -> 'a Thread_info.t -> time:Mapped_time.t -> unit
 end = struct
+  (* It's ocaml, not go. *)
+  let ret = ret_without_checking_for_go_hacks
+
   let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
     let frames_to_unwind = thread_info.frames_to_unwind in
     for _ = 0 to !frames_to_unwind + diff do
@@ -553,6 +620,12 @@ end = struct
     ret t thread_info ~time
   ;;
 end
+
+let ret t (thread_info : _ Thread_info.t) ~time : unit =
+  let returned_from = Callstack.top thread_info.callstack in
+  ret_without_checking_for_go_hacks t thread_info ~time;
+  Go_hacks.ret_track_gogo t thread_info ~time ~returned_from
+;;
 
 let check_current_symbol
     t
