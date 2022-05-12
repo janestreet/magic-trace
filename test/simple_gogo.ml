@@ -43,8 +43,6 @@ let%expect_test "an mcall/gogo pair from a small go program" =
     ->  70.97us END   runtime.schedule
     ->  70.97us END   runtime.park_m
     ->  70.97us END   runtime.mcall
-    ->  70.97us END   runtime.gopark
-    ->  70.97us BEGIN runtime.gopark
     3109264/3109264 3363099.850069207:   call                           404ea0 runtime.chanrecv+0x620 =>           430ce0 runtime.releaseSudog+0x0
     -> 70.982us END   runtime.gopark
     3109264/3109264 3363099.850069390:   return                         430e4e runtime.releaseSudog+0x16e =>           404ea5 runtime.chanrecv+0x625
