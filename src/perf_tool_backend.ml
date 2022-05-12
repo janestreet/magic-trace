@@ -318,7 +318,7 @@ module Perf_line = struct
 
   let trace_error_re =
     Re.Posix.re
-      {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+|0) code [0-9+]: (.*)$|}
+      {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+|0) code [0-9]+: (.*)$|}
     |> Re.compile
   ;;
 
@@ -650,6 +650,19 @@ module Perf_line = struct
           (Error
            ((thread ((pid (1801680)) (tid (1801680)))) (time (30d16h25m15.104731379s))
             (instruction_pointer ()) (message "Lost trace data"))) |}]
+      ;;
+
+      let%expect_test "never-ending loop" =
+        check
+          " instruction trace error type 1 time 406036.830210719 cpu -1 pid 114362 tid \
+           114362 ip 0xffffffffb0999ed5 code 10: Never-ending loop (refer perf config \
+           intel-pt.max-loops)";
+        [%expect
+          {|
+          (Error
+           ((thread ((pid (114362)) (tid (114362)))) (time (4d16h47m16.830210719s))
+            (instruction_pointer (-0x4f66612b))
+            (message "Never-ending loop (refer perf config intel-pt.max-loops)"))) |}]
       ;;
     end)
   ;;
