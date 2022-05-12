@@ -14,6 +14,7 @@ val create : Filename.t -> t option
 val symbol_stop_info : t -> Pid.t -> Owee_elf.Symbol_table.Symbol.t -> Stop_info.t
 
 val addr_table : t -> Addr_table.t
+val ocaml_exception_info : t -> Ocaml_exception_info.t option
 
 (** Find function symbols matching a regex and return a map from symbol name to symbol
     suitable for asking the user to disambiguate. *)

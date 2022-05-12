@@ -13,6 +13,7 @@ type t [@@deriving sexp_of]
 val create
   :  trace_mode:Trace_mode.t
   -> debug_info:Elf.Addr_table.t option
+  -> ocaml_exception_info:Ocaml_exception_info.t option
   -> earliest_time:Time_ns.Span.t
   -> hits:(string * Breakpoint.Hit.t) list
   -> annotate_inferred_start_times:bool
@@ -24,6 +25,7 @@ module type Trace = Trace_writer_intf.S_trace
 val create_expert
   :  trace_mode:Trace_mode.t
   -> debug_info:Elf.Addr_table.t option
+  -> ocaml_exception_info:Ocaml_exception_info.t option
   -> earliest_time:Time_ns.Span.t
   -> hits:(string * Breakpoint.Hit.t) list
   -> annotate_inferred_start_times:bool

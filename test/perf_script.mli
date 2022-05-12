@@ -13,4 +13,9 @@ open! Magic_trace_core
 
    If you're trying to demonstrate a bug, reduce your perf output to just the problematic section.
    It's hard to keep people engaged when reading diffs of massive tests. *)
-val run : ?debug:bool -> trace_mode:Trace_mode.t -> Filename.t -> unit
+val run
+  :  ?debug:bool
+  -> ?ocaml_exception_info:Ocaml_exception_info.t
+  -> trace_mode:Trace_mode.t
+  -> Filename.t
+  -> unit

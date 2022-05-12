@@ -68,6 +68,7 @@ let debug_print_perf_commands =
 ;;
 
 let write_trace_from_events
+    ?ocaml_exception_info
     ~print_events
     ~trace_mode
     ~debug_info
@@ -101,6 +102,7 @@ let write_trace_from_events
     Trace_writer.create
       ~trace_mode
       ~debug_info
+      ~ocaml_exception_info
       ~earliest_time
       ~hits
       ~annotate_inferred_start_times:Env_vars.debug
@@ -158,6 +160,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             None
           | Some _ as x -> x
         in
+        let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
         let%bind decode_result =
           Backend.decode_events
             decode_opts
@@ -167,6 +170,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         in
         let%bind () =
           write_trace_from_events
+            ?ocaml_exception_info
             ~debug_info
             ~trace_mode
             ~print_events
