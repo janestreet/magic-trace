@@ -150,7 +150,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           with
           | None ->
             eprintf
-              "Warning: Debug info is unavaliable, so filenames and line numbers will \
+              "Warning: Debug info is unavailable, so filenames and line numbers will \
                not be available in the trace.\n\
                See \
                https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
