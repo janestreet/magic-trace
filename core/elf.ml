@@ -7,10 +7,13 @@ type t =
   ; all_elf : Owee_buf.t
   ; sections : Owee_elf.section array
   ; debug : Owee_buf.t option
+  ; ocaml_exception_info : Ocaml_exception_info.t option
   ; base_offset : int
   ; filename : string
   ; statically_mappable : bool
   }
+
+let ocaml_exception_info t = t.ocaml_exception_info
 
 (** Elf files tend to have a "base offset" between where their sections end up in memory
     and where they are in the file, this function figures out that offset. *)
@@ -29,28 +32,84 @@ let is_non_pie_executable (header : Owee_elf.header) =
   | _e_type -> false
 ;;
 
+let find_ocaml_exception_info buffer sections =
+  let read_note cursor ~actual_base =
+    let descsz =
+      Owee_elf_notes.read_desc_size ~expected_owner:"OCaml" ~expected_type:1 cursor
+    in
+    if descsz < 8 * 4
+    then Owee_buf.invalid_format (Printf.sprintf "Too small size of note %d\n" descsz);
+    let recorded_base = Owee_buf.Read.u64 cursor in
+    let rec read_address_list acc =
+      let addr = Owee_buf.Read.u64 cursor in
+      if Int64.equal addr 0L
+      then acc
+      else (
+        let addr = Owee_elf_notes.Stapsdt.adjust addr ~actual_base ~recorded_base in
+        read_address_list (addr :: acc))
+    in
+    (* Order of field initializers matters!! Keep in sync with [Emit.mlp]. *)
+    let entertraps = read_address_list [] in
+    let pushtraps = read_address_list [] in
+    let poptraps = read_address_list [] in
+    entertraps, pushtraps, poptraps
+  in
+  try
+    let ocaml_eh = Owee_elf_notes.find_notes_section sections ".note.ocaml_eh" in
+    match Owee_elf_notes.Stapsdt.find_base_address sections with
+    | None ->
+      Core.eprint_s [%message "Found .note.ocaml_eh but not .stapsdt.base"];
+      None
+    | Some actual_base ->
+      let rec read_all cursor ~entertraps ~pushtraps ~poptraps =
+        if Owee_buf.at_end cursor
+        then (
+          let combine traps = Array.of_list (List.concat traps) in
+          combine entertraps, combine pushtraps, combine poptraps)
+        else (
+          let entertraps', pushtraps', poptraps' = read_note cursor ~actual_base in
+          read_all
+            cursor
+            ~entertraps:(entertraps' :: entertraps)
+            ~pushtraps:(pushtraps' :: pushtraps)
+            ~poptraps:(poptraps' :: poptraps))
+      in
+      let body = Owee_elf.section_body buffer ocaml_eh in
+      let cursor = Owee_buf.cursor body in
+      let entertraps, pushtraps, poptraps =
+        read_all cursor ~entertraps:[] ~pushtraps:[] ~poptraps:[]
+      in
+      Some (Ocaml_exception_info.create ~pushtraps ~poptraps ~entertraps)
+  with
+  | Owee_elf_notes.Section_not_found _ -> None
+;;
+
 let create filename =
   try
-    let buf = Owee_buf.map_binary filename in
-    let header, sections = Owee_elf.read_elf buf in
-    let string = Owee_elf.find_string_table buf sections in
-    let symbol = Owee_elf.find_symbol_table buf sections in
+    let buffer = Owee_buf.map_binary filename in
+    let header, sections = Owee_elf.read_elf buffer in
+    let string = Owee_elf.find_string_table buffer sections in
+    let symbol = Owee_elf.find_symbol_table buffer sections in
     match string, symbol with
     | Some string, Some symbol ->
       let base_offset =
         find_base_offset sections |> Option.value ~default:0L |> Int64.to_int_exn
       in
       let statically_mappable = is_non_pie_executable header in
-      let debug = Owee_elf.find_section_body buf sections ~section_name:".debug_line" in
+      let debug =
+        Owee_elf.find_section_body buffer sections ~section_name:".debug_line"
+      in
+      let ocaml_exception_info = find_ocaml_exception_info buffer sections in
       Some
         { string
         ; symbol
         ; debug
-        ; all_elf = buf
+        ; all_elf = buffer
         ; sections
         ; base_offset
         ; filename
         ; statically_mappable
+        ; ocaml_exception_info
         }
     | _, _ -> None
   with

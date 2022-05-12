@@ -75,6 +75,14 @@ module Callstack = struct
 end
 
 module Thread_info = struct
+  type ocaml_exception_state =
+    | Without_exception_info of { frames_to_unwind : int ref }
+    | With_exception_info of
+        { ocaml_exception_info : (Ocaml_exception_info.t[@sexp.opaque])
+        ; last_known_instruction_pointer : int64 option ref
+        }
+  [@@deriving sexp_of]
+
   type 'thread t =
     { thread : ('thread[@sexp.opaque])
     ; (* This isn't a canonical callstack, but represents all of the information that we
@@ -83,11 +91,7 @@ module Thread_info = struct
       mutable callstack : Callstack.t
     ; inactive_callstacks : Callstack.t Stack.t
     ; mutable last_decode_error_time : Mapped_time.t
-    ; (* Currently keeping track of the number of frames to unwind during an exception by
-       counting the number of calls to next_frame_descriptor (called during backtrace
-       collection) since the last raise. This fails on raise_notrace but that can be fixed
-       soon. *)
-      frames_to_unwind : int ref
+    ; ocaml_exception_state : ocaml_exception_state
     ; mutable pending_events : Pending_event.t list
     ; mutable pending_time : Mapped_time.t
     ; start_events : (Mapped_time.t * Pending_event.t) Deque.t
@@ -110,6 +114,7 @@ module type Trace = Trace_writer_intf.S_trace
 
 type 'thread inner =
   { debug_info : Elf.Addr_table.t
+  ; ocaml_exception_info : Ocaml_exception_info.t option
   ; thread_info : 'thread Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
   ; trace_mode : Trace_mode.t
@@ -244,6 +249,7 @@ let write_hits (T t) hits =
 let create_expert
     ~trace_mode
     ~debug_info
+    ~ocaml_exception_info
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times
@@ -256,6 +262,7 @@ let create_expert
   let t =
     T
       { debug_info = Option.value debug_info ~default:(Int.Table.create ())
+      ; ocaml_exception_info
       ; thread_info = Hashtbl.create (module Event.Thread)
       ; base_time
       ; trace_mode
@@ -270,6 +277,7 @@ let create_expert
 let create
     ~trace_mode
     ~debug_info
+    ~ocaml_exception_info
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times
@@ -278,6 +286,7 @@ let create
   create_expert
     ~trace_mode
     ~debug_info
+    ~ocaml_exception_info
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times
@@ -465,7 +474,12 @@ let create_thread t event =
   ; callstack = Callstack.create ~create_time:effective_time
   ; inactive_callstacks = Stack.create ()
   ; last_decode_error_time = effective_time
-  ; frames_to_unwind = ref 0
+  ; ocaml_exception_state =
+      (match t.ocaml_exception_info with
+      | None -> Without_exception_info { frames_to_unwind = ref 0 }
+      | Some ocaml_exception_info ->
+        With_exception_info
+          { ocaml_exception_info; last_known_instruction_pointer = ref None })
   ; pending_events = []
   ; pending_time = Mapped_time.start_of_trace
   ; start_events = Deque.create ()
@@ -588,39 +602,6 @@ end = struct
   ;;
 end
 
-(* Handles ocaml exception unwinding, unless the application calls [raise_notrace] (in which case,
-   magic-trace doesn't detect the irregular control flow). The way this works is that it counts the
-   number of [caml_next_frame_descriptor] calls while an exception is unwinding, and knows to
-   unwind the stack that many times (+/- a constant) when the next [caml_raise_exn] or
-   [caml_raise_exception] return. *)
-module Ocaml_hacks : sig
-  val ret_track_exn_data : 'a inner -> 'a Thread_info.t -> time:Mapped_time.t -> unit
-end = struct
-  (* It's ocaml, not go. *)
-  let ret = ret_without_checking_for_go_hacks
-
-  let unwind_stack t (thread_info : _ Thread_info.t) ~time diff =
-    let frames_to_unwind = thread_info.frames_to_unwind in
-    for _ = 0 to !frames_to_unwind + diff do
-      ret t thread_info ~time
-    done;
-    frames_to_unwind := 0
-  ;;
-
-  let ret_track_exn_data t thread_info ~time =
-    let { Thread_info.callstack; frames_to_unwind; _ } = thread_info in
-    (match Callstack.top callstack with
-    | Some (From_perf symbol) ->
-      (match symbol with
-      | "caml_next_frame_descriptor" -> incr frames_to_unwind
-      | "caml_raise_exn" -> unwind_stack t thread_info ~time (-2)
-      | "caml_raise_exception" -> unwind_stack t thread_info ~time 1
-      | _ -> ())
-    | _ -> ());
-    ret t thread_info ~time
-  ;;
-end
-
 let ret t (thread_info : _ Thread_info.t) ~time : unit =
   let returned_from = Callstack.top thread_info.callstack in
   ret_without_checking_for_go_hacks t thread_info ~time;
@@ -654,6 +635,122 @@ let check_current_symbol
     write_pending_event t thread_info thread_info.callstack.create_time ev;
     Callstack.push thread_info.callstack location.symbol
 ;;
+
+(* OCaml-specific hacks around tracking exception control flow. Supports two
+   modes.
+
+   With exception info provided by the compiler: read
+   [core/ocaml_exception_info.mli] for details.
+
+   Without exception info provided by the compiler: the way this works is that
+   it counts the number of [caml_next_frame_descriptor] calls while an
+   exception is unwinding, and knows to unwind the stack that many times (+/- a
+   constant) when the next [caml_raise_exn] or [caml_raise_exception] return.
+
+   This mode fails to account for [raise_notrace] exceptions. *)
+
+module Ocaml_hacks : sig
+  val ret_track_exn_data : 'a inner -> 'a Thread_info.t -> time:Mapped_time.t -> unit
+
+  val track_executed_pushtraps_and_poptraps_in_range
+    :  'a inner
+    -> 'a Thread_info.t
+    -> src:Event.Location.t
+    -> dst:Event.Location.t
+    -> time:Mapped_time.t
+    -> unit
+
+  val check_current_symbol_track_entertraps
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> Event.Location.t
+    -> unit
+end = struct
+  (* It's ocaml, not go. *)
+  let ret = ret_without_checking_for_go_hacks
+
+  let unwind_stack t (thread_info : _ Thread_info.t) ~time ~frames_to_unwind diff =
+    for _ = 0 to !frames_to_unwind + diff do
+      ret t thread_info ~time
+    done;
+    frames_to_unwind := 0
+  ;;
+
+  let ret_track_exn_data t thread_info ~time =
+    let { Thread_info.callstack; ocaml_exception_state; _ } = thread_info in
+    (match ocaml_exception_state with
+    | With_exception_info _ -> ()
+    | Without_exception_info { frames_to_unwind } ->
+      (match Callstack.top callstack with
+      | Some (From_perf symbol) ->
+        (match symbol with
+        | "caml_next_frame_descriptor" -> incr frames_to_unwind
+        | "caml_raise_exn" -> unwind_stack t thread_info ~time ~frames_to_unwind (-2)
+        | "caml_raise_exception" -> unwind_stack t thread_info ~time ~frames_to_unwind 1
+        | _ -> ())
+      | _ -> ()));
+    ret t thread_info ~time
+  ;;
+
+  let clear_trap_stack t thread_info ~time =
+    clear_callstack t thread_info ~time;
+    match Stack.pop thread_info.inactive_callstacks with
+    | Some callstack -> thread_info.callstack <- callstack
+    | None -> thread_info.callstack <- Callstack.create ~create_time:time
+  ;;
+
+  let check_current_symbol_track_entertraps
+      t
+      (thread_info : 'a Thread_info.t)
+      ~time
+      (dst : Event.Location.t)
+    =
+    match thread_info.ocaml_exception_state with
+    | With_exception_info { ocaml_exception_info; _ }
+      when Ocaml_exception_info.is_entertrap
+             ocaml_exception_info
+             ~addr:dst.instruction_pointer -> clear_trap_stack t thread_info ~time
+    | _ -> check_current_symbol t thread_info ~time dst
+  ;;
+
+  let track_executed_pushtraps_and_poptraps_in_range
+      t
+      (thread_info : _ Thread_info.t)
+      ~(src : Event.Location.t)
+      ~(dst : Event.Location.t)
+      ~time
+    =
+    match thread_info.ocaml_exception_state with
+    | Without_exception_info _ -> ()
+    | With_exception_info { ocaml_exception_info; last_known_instruction_pointer } ->
+      (match !last_known_instruction_pointer with
+      | None -> ()
+      | Some last_known_instruction_pointer ->
+        Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
+          ocaml_exception_info
+          ~from:last_known_instruction_pointer
+          ~to_:src.instruction_pointer
+          ~f:(fun (addr, kind) ->
+            match kind with
+            | Poptrap -> clear_trap_stack t thread_info ~time
+            | Pushtrap ->
+              Stack.push thread_info.inactive_callstacks thread_info.callstack;
+              thread_info.callstack <- Callstack.create ~create_time:time;
+              if !debug
+              then
+                call
+                  t
+                  thread_info
+                  ~time
+                  ~location:
+                    { instruction_pointer = 0L
+                    ; symbol_offset = 0
+                    ; symbol = From_perf [%string "[push trap @ %{addr#Int64.Hex}]"]
+                    }));
+      last_known_instruction_pointer := Some dst.instruction_pointer
+  ;;
+end
 
 let assert_trace_mode t event trace_modes =
   if List.find trace_modes ~f:(Trace_mode.equal t.trace_mode) |> Option.is_none
@@ -703,14 +800,18 @@ let write_event (T t) event =
         ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
         ; kind
         ; trace_state_change
-          (* [src] is useful, but we don't use it for mostly historical reasons. It's not
-           semantically important that we ignore it here. *)
-        ; src = _
+        ; src
         ; dst
         }
       =
       event
     in
+    Ocaml_hacks.track_executed_pushtraps_and_poptraps_in_range
+      t
+      thread_info
+      ~src
+      ~dst
+      ~time;
     (match kind, trace_state_change with
     | Some Call, (None | Some End) -> call t thread_info ~time ~location:dst
     | ( Some (Call | Syscall | Return | Hardware_interrupt | Iret | Sysret | Jump)
@@ -798,7 +899,8 @@ let write_event (T t) event =
           ~addr:dst.instruction_pointer
           ~time;
         check_current_symbol t thread_info ~time dst)
-    | Some Jump, None -> check_current_symbol t thread_info ~time dst
+    | Some Jump, None ->
+      Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
     (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
        Instead of crashing, ignore it and keep going. *)
     | None, _ -> ());
