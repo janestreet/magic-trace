@@ -115,14 +115,14 @@ let write_trace_from_events
   close_result
 ;;
 
-let write_event_sexps_to_stdout decode_result =
+let write_event_sexps writer decode_result =
   let { Decode_result.events; close_result } = decode_result in
-  Core.print_endline "(V1 (";
+  Writer.write_line writer "(V1 (";
   let%bind () =
     Pipe.iter_without_pushback events ~f:(fun (event : Event.t) ->
-        Core.print_s ~mach:() (Event.sexp_of_t event))
+        Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event))
   in
-  Core.print_endline "))";
+  Writer.write_line writer "))";
   close_result
 ;;
 
@@ -150,7 +150,20 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
-    Tracing_tool_output.write_and_maybe_view output_config ~f:(fun writer ->
+    Tracing_tool_output.write_and_maybe_view
+      output_config
+      ~f_sexp:(fun writer ->
+        let open Deferred.Or_error.Let_syntax in
+        let%bind decode_result =
+          Backend.decode_events
+            decode_opts
+            ~debug_print_perf_commands
+            ~record_dir
+            ~perf_map
+        in
+        let%bind () = write_event_sexps writer decode_result in
+        return ())
+      ~f_fuchsia:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
         let hits =
           In_channel.read_all (Hits_file.filename ~record_dir)
@@ -190,18 +203,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
             decode_result
         in
         return ())
-  ;;
-
-  let decode_to_sexp ~debug_print_perf_commands ~record_dir ~perf_map backend_decode_opts =
-    let open Deferred.Or_error.Let_syntax in
-    let%bind decode_result =
-      Backend.decode_events
-        backend_decode_opts
-        ~debug_print_perf_commands
-        ~record_dir
-        ~perf_map
-    in
-    write_event_sexps_to_stdout decode_result
   ;;
 
   module Record_opts = struct
@@ -613,36 +614,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            decode_opts)
   ;;
 
-  let export_commands =
-    Command.group
-      ~summary:"Export raw Intel Processor Trace data to other formats"
-      [ ( "sexp"
-        , Command.async_or_error
-            ~summary:"Export to s-expressions"
-            (let%map_open.Command record_dir = record_dir_flag required
-             and backend_decode_opts = Backend.Decode_opts.param
-             and perf_map_file =
-               flag
-                 "-perf-map-file"
-                 (optional Filename_unix.arg_type)
-                 ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
-             and debug_print_perf_commands = debug_print_perf_commands in
-             fun () ->
-               let%bind perf_map = maybe_load_perf_map perf_map_file in
-               decode_to_sexp
-                 ~debug_print_perf_commands
-                 ~record_dir
-                 ~perf_map
-                 backend_decode_opts) )
-      ]
-  ;;
-
   let commands =
-    [ "run", run_command
-    ; "attach", attach_command
-    ; "decode", decode_command
-    ; "export", export_commands
-    ]
+    [ "run", run_command; "attach", attach_command; "decode", decode_command ]
   ;;
 end
 

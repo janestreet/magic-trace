@@ -14,5 +14,6 @@ val param : t Command.Param.t
 val write_and_maybe_view
   :  ?num_temp_strs:int
   -> t
-  -> f:(Tracing_zero.Writer.t -> 'a Deferred.Or_error.t)
+  -> f_sexp:(Writer.t -> 'a Deferred.Or_error.t)
+  -> f_fuchsia:(Tracing_zero.Writer.t -> 'a Deferred.Or_error.t)
   -> 'a Deferred.Or_error.t
