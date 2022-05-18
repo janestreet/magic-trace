@@ -267,7 +267,7 @@ end
 
 module Perf_line = struct
   let report_itraces = "be"
-  let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff"
+  let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff,dso"
 
   let saturating_sub_i64 a b =
     match Int64.(to_int (a - b)) with
@@ -322,7 +322,8 @@ module Perf_line = struct
     |> Re.compile
   ;;
 
-  let symbol_and_offset_re = Re.Posix.re {|^(.*)\+(0x[0-9a-f]+)$|} |> Re.compile
+  let symbol_and_offset_re = Re.Perl.re {|^(.*)\+(0x[0-9a-f]+)\s+\(.*\)$|} |> Re.compile
+  let unknown_symbol_dso_re = Re.Perl.re {|^\[unknown\]\s+\((.*)\)|} |> Re.compile
 
   type classification =
     | Trace_error
@@ -399,7 +400,13 @@ module Perf_line = struct
         | _ | (exception _) ->
           let failed = Symbol.Unknown, 0 in
           (match perf_map with
-          | None -> failed
+          | None ->
+            (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
+            | [| _; dso |] ->
+              (* CR-someday tbrindus: ideally, we would subtract the DSO base
+               offset from [offset] here. *)
+              Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
+            | _ | (exception _) -> failed)
           | Some perf_map ->
             (match Perf_map.symbol perf_map ~addr with
             | None -> failed
@@ -497,7 +504,7 @@ module Perf_line = struct
 
       let%expect_test "C symbol" =
         check
-          {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 =>     7ffd193838e0 __vdso_clock_gettime+0x0|};
+          {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 (foo.so) =>     7ffd193838e0 __vdso_clock_gettime+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -513,13 +520,15 @@ module Perf_line = struct
 
       let%expect_test "C symbol trace start" =
         check
-          {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] =>     7f6fce0b71d0 __clock_gettime+0x0|};
+          {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
            ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
             (trace_state_change Start)
-            (src ((instruction_pointer 0x0) (symbol Unknown) (symbol_offset 0x0)))
+            (src
+             ((instruction_pointer 0x0) (symbol (From_perf "[unknown @ 0x0 (foo.so)]"))
+              (symbol_offset 0x0)))
             (dst
              ((instruction_pointer 0x7f6fce0b71d0) (symbol (From_perf __clock_gettime))
               (symbol_offset 0x0))))) |}]
@@ -527,7 +536,7 @@ module Perf_line = struct
 
       let%expect_test "C++ symbol" =
         check
-          {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb =>           9f68b0 J::K<int, std::string>+0x0|};
+          {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb (foo.so) =>           9f68b0 J::K<int, std::string>+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -545,7 +554,7 @@ module Perf_line = struct
 
       let%expect_test "OCaml symbol" =
         check
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb =>     56234f4bc7a0 caml_apply2+0x0|};
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -565,7 +574,7 @@ module Perf_line = struct
          {[
            let%expect_test "Unknown Go symbol" =
            check
-               {|2118573/2118573 770614.599007116:   tr strt tr end                      0 [unknown] =>           4591e1 [unknown]|};
+               {|2118573/2118573 770614.599007116:   tr strt tr end                      0 [unknown] (foo.so) =>           4591e1 [unknown] (foo.so)|};
              [%expect]
            ;;
          ]}
@@ -573,7 +582,7 @@ module Perf_line = struct
 
       let%expect_test "manufactured example 1" =
         check
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 caml_apply2+0x0|};
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -589,7 +598,7 @@ module Perf_line = struct
 
       let%expect_test "manufactured example 2" =
         check
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb =>     56234f4bc7a0 => +0x0|};
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 => +0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -605,7 +614,7 @@ module Perf_line = struct
 
       let%expect_test "manufactured example 3" =
         check
-          {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb =>     56234f4bc7a0 caml_apply2+0x0|};
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
           (Ok
@@ -614,6 +623,41 @@ module Perf_line = struct
             (src
              ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
               (symbol_offset 0xb)))
+            (dst
+             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+              (symbol_offset 0x0))))) |}]
+      ;;
+
+      let%expect_test "unknown symbol in DSO" =
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+        [%expect
+          {|
+          (Ok
+           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+            (kind Call)
+            (src
+             ((instruction_pointer 0x56234f77576b)
+              (symbol (From_perf "[unknown @ 0x56234f77576b (foo.so)]"))
+              (symbol_offset 0x0)))
+            (dst
+             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+              (symbol_offset 0x0))))) |}]
+      ;;
+
+      let%expect_test "DSO with spaces in it" =
+        check
+          {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (this is a spaced dso.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+        [%expect
+          {|
+          (Ok
+           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+            (kind Call)
+            (src
+             ((instruction_pointer 0x56234f77576b)
+              (symbol
+               (From_perf "[unknown @ 0x56234f77576b (this is a spaced dso.so)]"))
+              (symbol_offset 0x0)))
             (dst
              ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
               (symbol_offset 0x0))))) |}]

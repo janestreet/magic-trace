@@ -34,7 +34,7 @@ let%expect_test "A raise_notrace OCaml exception" =
   Perf_script.run ~ocaml_exception_info ~trace_mode:Userspace "ocaml_exceptions.perf";
   [%expect
     {|
-    23860/23860 426567.068172167:   call                           411021 camlRaise_test__entry+0x71 =>           410f70 camlRaise_test__raise_after_265+0x0
+    23860/23860 426567.068172167:   call                           411021 camlRaise_test__entry+0x71 (foo.so) =>           410f70 camlRaise_test__raise_after_265+0x0 (foo.so)
     ->      3ns BEGIN camlRaise_test__raise_after_265
     ->      6ns BEGIN camlRaise_test__raise_after_265
     ->      9ns BEGIN camlRaise_test__raise_after_265
@@ -50,7 +50,7 @@ let%expect_test "A raise_notrace OCaml exception" =
     ->     17ns BEGIN camlRaise_test__raise_after_265
     ->     18ns BEGIN camlRaise_test__raise_after_265
     ->     19ns BEGIN camlRaise_test__raise_after_265
-    23860/23860 426567.068172190:   jmp                            410fa0 camlRaise_test__raise_after_265+0x30 =>           411030 camlRaise_test__entry+0x80
+    23860/23860 426567.068172190:   jmp                            410fa0 camlRaise_test__raise_after_265+0x30 (foo.so) =>           411030 camlRaise_test__entry+0x80 (foo.so)
     ->     20ns BEGIN camlRaise_test__raise_after_265
     ->     20ns BEGIN camlRaise_test__raise_after_265
     ->     20ns BEGIN camlRaise_test__raise_after_265
