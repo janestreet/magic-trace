@@ -38,7 +38,8 @@ jobs:
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
-          sudo apt install bubblewrap musl-tools
+          sudo apt-get update
+          sudo apt-get install bubblewrap musl-tools
           sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.1.2/opam-2.1.2-x86_64-linux
           sudo chmod a+x /usr/local/bin/opam
 
