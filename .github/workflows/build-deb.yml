@@ -13,7 +13,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt install opam dune debhelper devscripts
+          sudo apt-get install opam dune debhelper devscripts
 
       - name: Build packages
         run: |
