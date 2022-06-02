@@ -464,11 +464,24 @@ let create_thread t event =
     | None -> Mapped_time.start_of_trace
     | Some time -> map_time t time
   in
-  let trace_pid =
-    allocate_pid
-      t
-      ~name:[%string "%{opt_pid_to_string thread.pid}/%{opt_pid_to_string thread.tid}"]
+  let pid = opt_pid_to_string thread.pid in
+  let tid = opt_pid_to_string thread.tid in
+  let default_name =
+    if String.(pid = tid)
+    then [%string "[(p|t)id=%{pid}]"]
+    else [%string "[pid=%{pid}] [tid=%{tid}]"]
   in
+  let name =
+    match thread.pid with
+    | None -> default_name
+    | Some pid ->
+      (match Process_info.cmdline_of_pid pid with
+      | None -> default_name
+      | Some cmdline ->
+        let concat_cmdline = String.concat ~sep:" " cmdline in
+        [%string "%{concat_cmdline} %{default_name}"])
+  in
+  let trace_pid = allocate_pid t ~name in
   let thread = allocate_thread t ~pid:trace_pid ~name:"main" in
   { Thread_info.thread
   ; callstack = Callstack.create ~create_time:effective_time

@@ -175,12 +175,14 @@ let%expect_test "random perfs" =
     {|
     (Interned_string (index 1) (value process))
     (Tick_initialization (ticks_per_second 1000000000))
-    (Interned_string (index 102) (value 1234/456))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value address))
     (Interned_string (index 105) (value S))
     (Interned_string (index 106) (value symbol))
@@ -229,12 +231,14 @@ let%expect_test "random perfs" =
     {|
 (Interned_string (index 1) (value process))
 (Tick_initialization (ticks_per_second 1000000000))
-(Interned_string (index 102) (value 1234/456))
+(Interned_string (index 102) (value "[pid=1234] [tid=456]"))
 (Process_name_change (name 102) (pid 1))
 (Interned_string (index 103) (value main))
 (Thread_name_change (name 103) (pid 1) (tid 2))
 (Interned_thread (index 1)
- (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+ (value
+  ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+   (thread_name (main)))))
 (Interned_string (index 104) (value address))
 (Interned_string (index 105) (value "\025J\015\018\023\018"))
 (Interned_string (index 106) (value symbol))
@@ -255,12 +259,14 @@ let%expect_test "random perfs" =
     {|
     (Interned_string (index 1) (value process))
     (Tick_initialization (ticks_per_second 1000000000))
-    (Interned_string (index 102) (value 1234/456))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value "\025J\015\018\023\018"))
     (Interned_string (index 105) (value ""))
     (Event
@@ -301,12 +307,14 @@ let%expect_test "random perfs" =
     {|
 (Interned_string (index 1) (value process))
 (Tick_initialization (ticks_per_second 1000000000))
-(Interned_string (index 102) (value 1234/456))
+(Interned_string (index 102) (value "[pid=1234] [tid=456]"))
 (Process_name_change (name 102) (pid 1))
 (Interned_string (index 103) (value main))
 (Thread_name_change (name 103) (pid 1) (tid 2))
 (Interned_thread (index 1)
- (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+ (value
+  ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+   (thread_name (main)))))
 (Interned_string (index 104) (value address))
 (Interned_string (index 105) (value S))
 (Interned_string (index 106) (value symbol))
@@ -385,12 +393,14 @@ let%expect_test "with initial returns" =
     {|
     (Interned_string (index 1) (value process))
     (Tick_initialization (ticks_per_second 1000000000))
-    (Interned_string (index 102) (value 1234/456))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value "\025J\015\018\023\018"))
     (Interned_string (index 105) (value ""))
     (Event
@@ -520,12 +530,14 @@ let%expect_test "time batch spreading" =
     {|
     (Interned_string (index 1) (value process))
     (Tick_initialization (ticks_per_second 1000000000))
-    (Interned_string (index 102) (value 1234/456))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value address))
     (Interned_string (index 105) (value sub))
     (Interned_string (index 106) (value symbol))
@@ -610,12 +622,14 @@ let%expect_test "enqueing events at start" =
     {|
     (Interned_string (index 1) (value process))
     (Tick_initialization (ticks_per_second 1000000000))
-    (Interned_string (index 102) (value 1234/456))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value fn3))
     (Interned_string (index 105) (value ""))
     (Event
