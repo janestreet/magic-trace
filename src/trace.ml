@@ -227,6 +227,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   end
 
   let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pid =
+    Process_info.read_all_proc_info ();
     let%bind.Deferred.Or_error snap_loc =
       match elf with
       | None -> return (Ok None)
