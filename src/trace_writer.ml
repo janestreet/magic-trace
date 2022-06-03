@@ -134,6 +134,7 @@ type 'thread inner =
   ; trace_scope : Trace_scope.t
   ; trace : (module Trace with type thread = 'thread)
   ; annotate_inferred_start_times : bool
+  ; mutable in_filtered_region : bool
   }
 
 type t = T : 'thread inner -> t
@@ -164,7 +165,8 @@ let write_duration_begin
     : unit
   =
   let module T = (val t.trace) in
-  T.write_duration_begin ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  if t.in_filtered_region
+  then T.write_duration_begin ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let write_duration_end
@@ -177,7 +179,8 @@ let write_duration_end
     : unit
   =
   let module T = (val t.trace) in
-  T.write_duration_end ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  if t.in_filtered_region
+  then T.write_duration_end ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let write_duration_complete
@@ -191,12 +194,14 @@ let write_duration_complete
     : unit
   =
   let module T = (val t.trace) in
-  T.write_duration_complete
-    ~args
-    ~thread
-    ~name
-    ~time:(time :> Time_ns.Span.t)
-    ~time_end:(time_end :> Time_ns.Span.t)
+  if t.in_filtered_region
+  then
+    T.write_duration_complete
+      ~args
+      ~thread
+      ~name
+      ~time:(time :> Time_ns.Span.t)
+      ~time_end:(time_end :> Time_ns.Span.t)
 ;;
 
 let write_duration_instant
@@ -209,7 +214,8 @@ let write_duration_instant
     : unit
   =
   let module T = (val t.trace) in
-  T.write_duration_instant ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  if t.in_filtered_region
+  then T.write_duration_instant ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let write_counter
@@ -222,7 +228,8 @@ let write_counter
     : unit
   =
   let module T = (val t.trace) in
-  T.write_counter ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  if t.in_filtered_region
+  then T.write_counter ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let map_time t time = Mapped_time.create time ~base_time:t.base_time
@@ -295,6 +302,7 @@ let create_expert
       ; trace_scope
       ; trace
       ; annotate_inferred_start_times
+      ; in_filtered_region = true
       }
   in
   write_hits t hits;
@@ -535,7 +543,7 @@ let call t thread_info ~time ~location =
 
 let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
-  | Some location -> add_event t thread_info time { symbol = location.symbol; kind = Ret }
+  | Some { symbol; _ } -> add_event t thread_info time { symbol; kind = Ret }
   | None ->
     (* No known stackframe was popped --- could occur if the start of the snapshot
        started in the middle of a tracing region *)
@@ -601,15 +609,15 @@ end = struct
     | _ -> false
   ;;
 
-  let is_known_gogo_destination (symbol : Symbol.t) =
-    match symbol with
-    | From_perf ("runtime.mcall" | "runtime.morestack.abi0") -> true
+  let is_known_gogo_destination (location : Event.Location.t) =
+    match location with
+    | { symbol = From_perf ("runtime.mcall" | "runtime.morestack.abi0"); _ } -> true
     | _ -> false
   ;;
 
   let current_stack_contains_known_gogo_destination (thread_info : _ Thread_info.t) =
     Stack.find thread_info.callstack.stack ~f:(fun location ->
-        is_known_gogo_destination location.symbol)
+        is_known_gogo_destination location)
     |> Option.is_some
   ;;
 
@@ -629,7 +637,7 @@ end = struct
          This is a little janky because you see a stack frame momentarily end then start back
          up again on every [gogo]. I think that's a small price to pay to keep all the Go hacks
          in one place. *)
-      if is_known_gogo_destination location.symbol
+      if is_known_gogo_destination location
       then ret t thread_info ~time
       else pop_until_gogo_destination t thread_info ~time
   ;;
@@ -646,7 +654,7 @@ end
 
 let ret t (thread_info : _ Thread_info.t) ~time : unit =
   let returned_from =
-    Callstack.top thread_info.callstack |> Option.map ~f:(fun location -> location.symbol)
+    Callstack.top thread_info.callstack |> Option.map ~f:Event.Location.symbol
   in
   ret_without_checking_for_go_hacks t thread_info ~time;
   Go_hacks.ret_track_gogo t thread_info ~time ~returned_from
@@ -663,7 +671,7 @@ let check_current_symbol
      with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
      known function, so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
-  | Some known when not ([%compare.equal: Symbol.t] known.symbol location.symbol) ->
+  | Some { symbol; _ } when not ([%compare.equal: Symbol.t] symbol location.symbol) ->
     ret t thread_info ~time;
     call t thread_info ~time ~location
   | Some _ -> ()
@@ -825,10 +833,55 @@ let end_of_trace ?to_time (T t) =
       | None -> ())
 ;;
 
+let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
+  let called_locations = callstack.stack |> Stack.to_list |> List.rev in
+  List.iter called_locations ~f:(fun location ->
+      write_pending_event'
+        t
+        thread_info
+        time
+        (Pending_event.create_call location ~from_untraced:true)
+      (* Not necessarily true, but setting [~from_untraced:true] causes the timestamp to be annotated as inferred *));
+  callstack.create_time
+    <- Mapped_time.add
+         time
+         (Time_ns.Span.of_ns
+            (-1.)
+            (* Set the reset time of future untraced returns to before the rewritten callstack *))
+;;
+
+let rewrite_all_callstacks t ~(thread_info : _ Thread_info.t) ~time =
+  let inactive_callstacks =
+    thread_info.inactive_callstacks |> Stack.to_list |> List.rev
+  in
+  List.iter inactive_callstacks ~f:(fun callstack ->
+      rewrite_callstack t ~callstack ~thread_info ~time);
+  rewrite_callstack t ~callstack:thread_info.callstack ~thread_info ~time
+;;
+
+let maybe_start_filtered_region t ~should_write ~time =
+  if (not t.in_filtered_region) && should_write
+  then (
+    Hashtbl.iter t.thread_info ~f:(fun thread_info ->
+        flush t ~to_time:time thread_info;
+        Deque.clear thread_info.start_events);
+    t.in_filtered_region <- true;
+    Hashtbl.iter t.thread_info ~f:(fun thread_info ->
+        rewrite_all_callstacks t ~thread_info ~time))
+;;
+
+let maybe_stop_filtered_region t ~should_write =
+  if t.in_filtered_region && not should_write
+  then (
+    end_of_trace (T t);
+    t.in_filtered_region <- false)
+;;
+
 (* Write perf_events into a file as a Fuschia trace (stack events). Events should be
    collected with --itrace=be or cre, and -F pid,tid,time,flags,addr,sym,symoff as per
    the constants defined above. *)
 let write_event (T t) event =
+  let { Event.With_write_info.event; should_write } = event in
   let thread = Event.thread event in
   let thread_info =
     Hashtbl.find_or_add t.thread_info thread ~default:(fun () -> create_thread t event)
@@ -836,6 +889,8 @@ let write_event (T t) event =
   let thread = thread_info.thread in
   let time = event_time t event thread_info in
   let outer_event = event in
+  maybe_start_filtered_region t ~should_write ~time;
+  maybe_stop_filtered_region t ~should_write;
   match event with
   | Error { thread = _; instruction_pointer; message; time = _ } ->
     let name = sprintf !"[decode error: %s]" message in

@@ -7,6 +7,7 @@ include struct
   module Decode_result = Decode_result
   module Event = Event
   module Symbol = Symbol
+  module Trace_filter = Trace_filter
 end
 
 module Trace_helpers : sig
@@ -36,6 +37,8 @@ end = struct
 
   let addr () = Random.State.int64_incl !rng 0L 0x7fffffffffffL
   let offset () = Random.State.int_incl !rng 0 0x1000
+  let unknown = Symbol.From_perf "unknown"
+  let loc symbol = { Event.Location.instruction_pointer = 0L; symbol; symbol_offset = 0 }
 
   let symbol () =
     Symbol.From_perf
@@ -74,19 +77,23 @@ end = struct
 
   let add kind ns symbol =
     let time = Time_ns.Span.of_int_ns ns in
-    let loc =
-      { Event.Location.instruction_pointer = 0L
-      ; symbol = From_perf symbol
-      ; symbol_offset = 0
-      }
+    let symbol = Symbol.From_perf symbol in
+    let dst = loc symbol in
+    let src =
+      match kind with
+      | Event.Kind.Call ->
+        let src = Option.value (Stack.top stack) ~default:unknown in
+        Stack.push stack symbol;
+        loc src
+      | Return -> Option.value (Stack.pop stack) ~default:unknown |> loc
+      | _ -> loc symbol
     in
     Queue.enqueue
       events
       (Ok
          { thread
          ; time
-         ; data =
-             Trace { trace_state_change = None; kind = Some kind; src = loc; dst = loc }
+         ; data = Trace { trace_state_change = None; kind = Some kind; src; dst }
          })
   ;;
 
@@ -129,10 +136,9 @@ module With = struct
   end
 end
 
-let dump_using_file events =
-  let decode_result =
-    { Decode_result.events = [ events ]; close_result = return (Ok ()) }
-  in
+let dump_using_file ?range_symbols events =
+  let%bind events = get_events_pipe ?range_symbols ~events () in
+  let close_result = return (Ok ()) in
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
@@ -141,8 +147,9 @@ let dump_using_file events =
       ~debug_info:None
       ~trace_scope:Userspace
       writer
-      []
-      decode_result
+      ~hits:[]
+      ~events:[ events ]
+      ~close_result
   in
   ok_exn or_error;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
@@ -175,7 +182,7 @@ let%expect_test "random perfs" =
   in
   let dump_one seed =
     let events = Quickcheck.random_value ~seed:(`Deterministic seed) ~size:5 generator in
-    dump_using_file (Pipe.of_list events)
+    dump_using_file events
   in
   let%bind () = dump_one "1" in
   [%expect
@@ -395,7 +402,7 @@ let%expect_test "with initial returns" =
       ret ();
       events ())
   in
-  let%bind () = dump_using_file (Pipe.of_list events) in
+  let%bind () = dump_using_file events in
   [%expect
     {|
     (Interned_string (index 1) (value process))
@@ -532,7 +539,7 @@ let%expect_test "time batch spreading" =
       add Return 103 "sub";
       events ())
   in
-  let%bind () = dump_using_file (Pipe.of_list events) in
+  let%bind () = dump_using_file events in
   [%expect
     {|
     (Interned_string (index 1) (value process))
@@ -624,7 +631,7 @@ let%expect_test "enqueing events at start" =
       add Return 3 "fn0";
       events ())
   in
-  let%bind () = dump_using_file (Pipe.of_list events) in
+  let%bind () = dump_using_file events in
   [%expect
     {|
     (Interned_string (index 1) (value process))
@@ -677,6 +684,105 @@ let%expect_test "enqueing events at start" =
       (event_type Duration_end)))
     (Event
      ((timestamp 3ns) (thread 1) (category 105) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words) |}];
+  return ()
+;;
+
+let%expect_test "filtered trace" =
+  let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
+  let events =
+    Trace_helpers.(
+      add Call 0 "base_fn";
+      add Call 1 "pre_fn";
+      add Return 2 "base_fn";
+      add Call 3 "container";
+      add Call 4 "start_trigger";
+      add Call 5 "fn0";
+      add Return 6 "start_trigger";
+      add Return 7 "container";
+      add Call 8 "fn1";
+      add Return 9 "container";
+      add Return 10 "base_fn";
+      add Call 11 "fn2";
+      add Return 12 "base_fn";
+      add Call 13 "stop_trigger";
+      add Return 14 "base_fn";
+      add Call 15 "post_fn";
+      add Return 16 "base_fn";
+      add Return 17 "outer";
+      events ())
+  in
+  let%bind () =
+    dump_using_file
+      ~range_symbols:
+        { Trace_filter.start_symbol = "start_trigger"; stop_symbol = "stop_trigger" }
+      events
+  in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value address))
+    (Interned_string (index 105) (value base_fn))
+    (Interned_string (index 106) (value symbol))
+    (Interned_string (index 107) (value true))
+    (Interned_string (index 108) (value inferred_start_time))
+    (Interned_string (index 109) (value ""))
+    (Event
+     ((timestamp 4ns) (thread 1) (category 109) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105)) (108 (String 107))))
+      (event_type Duration_begin)))
+    (Interned_string (index 110) (value container))
+    (Event
+     ((timestamp 4ns) (thread 1) (category 109) (name 110)
+      (arguments ((104 (Pointer 0x0)) (106 (String 110)) (108 (String 107))))
+      (event_type Duration_begin)))
+    (Interned_string (index 111) (value start_trigger))
+    (Event
+     ((timestamp 4ns) (thread 1) (category 109) (name 111)
+      (arguments ((104 (Pointer 0x0)) (106 (String 111))))
+      (event_type Duration_begin)))
+    (Interned_string (index 112) (value fn0))
+    (Event
+     ((timestamp 5ns) (thread 1) (category 109) (name 112)
+      (arguments ((104 (Pointer 0x0)) (106 (String 112))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 6ns) (thread 1) (category 109) (name 112) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 7ns) (thread 1) (category 109) (name 111) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 113) (value fn1))
+    (Event
+     ((timestamp 8ns) (thread 1) (category 109) (name 113)
+      (arguments ((104 (Pointer 0x0)) (106 (String 113))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 9ns) (thread 1) (category 109) (name 113) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 10ns) (thread 1) (category 109) (name 110) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 114) (value fn2))
+    (Event
+     ((timestamp 11ns) (thread 1) (category 109) (name 114)
+      (arguments ((104 (Pointer 0x0)) (106 (String 114))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 12ns) (thread 1) (category 109) (name 114) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 13ns) (thread 1) (category 109) (name 105) (arguments ())
       (event_type Duration_end)))
     (Error No_more_words) |}];
   return ()

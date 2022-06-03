@@ -15,5 +15,7 @@ include struct
   module Trace_scope = Trace_scope
   module Trace_state_change = Trace_state_change
   module Util = Util
+  module Symbol_selection = Symbol_selection
   module When_to_snapshot = When_to_snapshot
+  module Trace_filter = Trace_filter
 end

@@ -95,6 +95,7 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
             match lines with
             | [ line ] -> printf "%s\n" line
             | lines -> print_s [%message (lines : string list)]);
+          let event = Event.With_write_info.create ~should_write:true event in
           Trace_writer.write_event trace_writer event);
       printf "END\n";
       Trace_writer.end_of_trace trace_writer)

@@ -45,6 +45,48 @@ let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
   | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
 ;;
 
+let evaluate_symbol_selection ~symbol_selection ~elf ~header =
+  let open Deferred.Or_error.Let_syntax in
+  let%bind elf =
+    match elf with
+    | None -> Deferred.Or_error.error_string "No ELF found"
+    | Some elf -> return elf
+  in
+  match symbol_selection with
+  | Symbol_selection.Use_fzf_to_select_one ->
+    let all_symbol_names = Elf.all_symbols elf |> List.map ~f:Tuple2.get1 in
+    if force supports_fzf
+    then (
+      match%bind Fzf.pick_one ~header (Inputs all_symbol_names) with
+      | None -> Deferred.Or_error.error_string "No symbol selected"
+      | Some symbol -> return symbol)
+    else
+      Deferred.Or_error.error_string
+        "magic-trace could show you a fuzzy-finding selector here if \"fzf\" were in \
+         your PATH, but it is not."
+  | User_selected user_selection -> return user_selection
+;;
+
+let evaluate_trace_filter ~(trace_filter : Trace_filter.Unevaluated.t option) ~elf =
+  let open Deferred.Or_error.Let_syntax in
+  match trace_filter with
+  | None -> return None
+  | Some { start_symbol; stop_symbol } ->
+    let%bind start_symbol =
+      evaluate_symbol_selection
+        ~symbol_selection:start_symbol
+        ~elf
+        ~header:"Range filter start symbol"
+    in
+    let%map stop_symbol =
+      evaluate_symbol_selection
+        ~symbol_selection:stop_symbol
+        ~elf
+        ~header:"Range filter stop symbol"
+    in
+    Some { Trace_filter.start_symbol; stop_symbol }
+;;
+
 let debug_flag flag = if Env_vars.debug then flag else Command.Param.return false
 
 let debug_print_perf_commands =
@@ -59,15 +101,15 @@ let write_trace_from_events
     ~trace_scope
     ~debug_info
     writer
-    hits
-    decode_result
+    ~hits
+    ~events
+    ~close_result
   =
-  let { Decode_result.events; close_result } = decode_result in
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
     let events = List.hd_exn events in
     let%map.Deferred _wait_for_first = Pipe.values_available events in
-    match Pipe.peek events with
+    match Pipe.peek events |> Option.map ~f:Event.With_write_info.event with
     | Some (Ok earliest) -> earliest.time
     | None | Some (Error _) -> Time_ns.Span.zero
   in
@@ -78,13 +120,13 @@ let write_trace_from_events
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
   let events =
-    List.map events ~f:(fun events ->
-        if print_events
-        then
-          Pipe.map events ~f:(fun (event : Event.t) ->
-              Core.print_s ~mach:() (Event.sexp_of_t event);
-              event)
-        else events)
+    if print_events
+    then
+      List.map events ~f:(fun events ->
+          Pipe.map events ~f:(fun event ->
+              Core.print_s ~mach:() (Event.With_write_info.event event |> Event.sexp_of_t);
+              event))
+    else events
   in
   let writer =
     Trace_writer.create
@@ -97,12 +139,12 @@ let write_trace_from_events
       trace
   in
   let last_index = ref 0 in
-  let process_event index ev =
+  let process_event index (ev : Event.With_write_info.t) =
     (* When processing a new snapshot, clear all [Trace_writer] data in order to
        avoid sharing callstacks, start times, etc. *)
     if index > 0 && not (index = !last_index)
     then (
-      match%optional.Time_ns_unix.Span.Option Event.time ev with
+      match%optional.Time_ns_unix.Span.Option Event.time ev.event with
       | None -> Trace_writer.end_of_trace writer
       | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
     last_index := index;
@@ -117,16 +159,31 @@ let write_trace_from_events
   close_result
 ;;
 
-let write_event_sexps writer decode_result =
-  let { Decode_result.events; close_result } = decode_result in
+let write_event_sexps writer events close_result =
   Writer.write_line writer "(V3 (";
   let%bind () =
     Deferred.List.iter events ~f:(fun events ->
-        Pipe.iter_without_pushback events ~f:(fun (event : Event.t) ->
-            Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
+        Pipe.iter_without_pushback
+          events
+          ~f:(fun { Event.With_write_info.event; should_write } ->
+            if should_write
+            then Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
   in
   Writer.write_line writer "))";
   close_result
+;;
+
+let get_events_and_close_result ~decode_events ~range_symbols =
+  let open Deferred.Or_error.Let_syntax in
+  match range_symbols with
+  | None ->
+    let%map { Decode_result.events; close_result } = decode_events () in
+    ( List.map events ~f:(fun events ->
+          Pipe.map events ~f:(fun event ->
+              Event.With_write_info.create ~should_write:true event))
+    , close_result )
+  | Some range_symbols ->
+    For_range.decode_events_and_annotate ~decode_events ~range_symbols
 ;;
 
 module Make_commands (Backend : Backend_intf.S) = struct
@@ -146,6 +203,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let decode_to_trace
       ?perf_maps
+      ?range_symbols
       ~elf
       ~trace_scope
       ~debug_print_perf_commands
@@ -154,19 +212,22 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
+    let decode_events () =
+      Backend.decode_events
+        ?perf_maps
+        decode_opts
+        ~debug_print_perf_commands
+        ~record_dir
+        ~collection_mode
+    in
     Tracing_tool_output.write_and_maybe_view
       output_config
       ~f_sexp:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
-        let%bind decode_result =
-          Backend.decode_events
-            ?perf_maps
-            decode_opts
-            ~debug_print_perf_commands
-            ~record_dir
-            ~collection_mode
+        let%bind events, close_result =
+          get_events_and_close_result ~decode_events ~range_symbols
         in
-        let%bind () = write_event_sexps writer decode_result in
+        let%bind () = write_event_sexps writer events close_result in
         return ())
       ~f_fuchsia:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
@@ -190,13 +251,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
           | Some _ as x -> x
         in
         let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
-        let%bind decode_result =
-          Backend.decode_events
-            ?perf_maps
-            decode_opts
-            ~debug_print_perf_commands
-            ~record_dir
-            ~collection_mode
+        let%bind events, close_result =
+          get_events_and_close_result ~decode_events ~range_symbols
         in
         let%bind () =
           write_trace_from_events
@@ -205,8 +261,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ~trace_scope
             ~print_events
             writer
-            hits
-            decode_result
+            ~hits
+            ~events
+            ~close_result
         in
         return ())
   ;;
@@ -216,6 +273,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { backend_opts : Backend.Record_opts.t
       ; multi_snapshot : bool
       ; when_to_snapshot : When_to_snapshot.t
+      ; trace_filter : Trace_filter.Unevaluated.t option
       ; record_dir : string
       ; executable : string
       ; trace_scope : Trace_scope.t
@@ -241,40 +299,33 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~collection_mode
       pids
     =
+    let open Deferred.Or_error.Let_syntax in
     Process_info.read_all_proc_info ();
     let head_pid = List.hd_exn pids in
-    let%bind.Deferred.Or_error snap_loc =
-      match elf with
-      | None -> return (Ok None)
-      | Some elf ->
-        (match opts.when_to_snapshot with
-        | Magic_trace_or_the_application_terminates -> return (Ok None)
-        | Application_calls_a_function which_function ->
-          let%bind.Deferred.Or_error snap_sym =
-            match which_function with
-            | Use_fzf_to_select_one ->
-              let all_symbols = Elf.all_symbols elf in
-              let symbols = List.map all_symbols ~f:(fun (x, _) -> x) in
-              print_s [%message "" (symbols : string list)];
-              if force supports_fzf
-              then (
-                match%bind.Deferred.Or_error Fzf.pick_one (Assoc all_symbols) with
-                | None -> Deferred.Or_error.error_string "No symbol selected"
-                | Some symbol -> return (Ok symbol))
-              else
-                Deferred.Or_error.error_string
-                  "magic-trace could show you a fuzzy-finding selector here if \"fzf\" \
-                   were in your PATH, but it is not."
-            | User_selected symbol_name ->
-              (match Elf.find_symbol elf symbol_name with
-              | None ->
-                Deferred.Or_error.errorf "Snapshot symbol not found: %s" symbol_name
-              | Some symbol -> return (Ok symbol))
+    let%bind snap_loc =
+      match opts.when_to_snapshot with
+      | Magic_trace_or_the_application_terminates -> return None
+      | Application_calls_a_function symbol_selection ->
+        (match elf with
+        | None -> Deferred.Or_error.error_string "No ELF found"
+        | Some elf ->
+          let%bind symbol_name =
+            evaluate_symbol_selection
+              ~symbol_selection
+              ~elf:(Some elf)
+              ~header:"Snapshot symbol"
+          in
+          let%bind snap_sym =
+            Deferred.return
+              (Result.of_option
+                 (Elf.find_symbol elf symbol_name)
+                 ~error:
+                   (Error.of_string [%string "Snapshot symbol not found: %{symbol_name}"]))
           in
           let snap_loc = Elf.symbol_stop_info elf head_pid snap_sym in
-          return (Ok (Some snap_loc)))
+          return (Some snap_loc))
     in
-    let%map.Deferred.Or_error recording =
+    let%map recording =
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
@@ -443,6 +494,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let record_flags =
     let%map_open.Command record_dir = record_dir_flag optional
     and when_to_snapshot = When_to_snapshot.param
+    and trace_filter = Trace_filter.param
     and multi_snapshot =
       flag
         "-multi-snapshot"
@@ -476,6 +528,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             { Record_opts.backend_opts
             ; multi_snapshot
             ; when_to_snapshot
+            ; trace_filter
             ; record_dir
             ; executable
             ; trace_scope
@@ -522,6 +575,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
          in
          record_opt_fn ~executable ~f:(fun opts ->
              let elf = Elf.create opts.executable in
+             let%bind range_symbols =
+               evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
+             in
              let%bind pid =
                let argv = prog :: List.concat (Option.to_list argv) in
                run_and_record
@@ -535,6 +591,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
              let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
              decode_to_trace
                ~perf_maps
+               ?range_symbols
                ~elf
                ~trace_scope:opts.trace_scope
                ~debug_print_perf_commands
@@ -630,6 +687,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
                  opts
                in
                let%bind elf = create_elf ~executable ~when_to_snapshot in
+               let%bind range_symbols =
+                 evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
+               in
                let%bind () =
                  attach_and_record
                    opts
@@ -641,6 +701,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
                decode_to_trace
                  ~perf_maps
+                 ?range_symbols
                  ~elf
                  ~trace_scope:opts.trace_scope
                  ~debug_print_perf_commands
@@ -700,5 +761,19 @@ let command =
 ;;
 
 module For_testing = struct
+  let get_events_pipe ?range_symbols ~events () =
+    let decode_events () =
+      Deferred.Or_error.return
+        { Decode_result.events = [ Pipe.of_list events ]
+        ; close_result = Deferred.Or_error.return ()
+        }
+    in
+    let%map events, _ =
+      get_events_and_close_result ~decode_events ~range_symbols
+      |> Deferred.Or_error.ok_exn
+    in
+    List.hd_exn events
+  ;;
+
   let write_trace_from_events = write_trace_from_events ~print_events:false
 end

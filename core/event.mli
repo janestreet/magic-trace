@@ -26,7 +26,7 @@ module Location : sig
     ; symbol : Symbol.t
     ; symbol_offset : int
     }
-  [@@deriving sexp]
+  [@@deriving sexp, fields]
 
   val unknown : t
   val untraced : t
@@ -73,3 +73,15 @@ type t = (Ok.t, Decode_error.t) Result.t [@@deriving sexp]
 val thread : t -> Thread.t
 val time : t -> Time_ns_unix.Span.Option.t
 val change_time : t -> f:(Time_ns.Span.t -> Time_ns.Span.t) -> t
+
+module With_write_info : sig
+  type outer = t
+
+  type t =
+    { event : outer
+    ; should_write : bool
+    }
+  [@@deriving sexp_of, fields]
+
+  val create : ?should_write:bool -> outer -> t
+end

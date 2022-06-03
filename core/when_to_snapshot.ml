@@ -1,12 +1,8 @@
 open! Core
 
-type which_function =
-  | Use_fzf_to_select_one
-  | User_selected of string
-
 type t =
   | Magic_trace_or_the_application_terminates
-  | Application_calls_a_function of which_function
+  | Application_calls_a_function of Symbol_selection.t
 
 let param =
   let open Command.Param in
@@ -30,8 +26,6 @@ let param =
        application terminates if it has not yet triggered for any other reason."
   |> map ~f:(function
          | None -> Magic_trace_or_the_application_terminates
-         | Some "?" -> Application_calls_a_function Use_fzf_to_select_one
-         | Some "." ->
-           Application_calls_a_function (User_selected Magic_trace.Private.stop_symbol)
-         | Some symbol -> Application_calls_a_function (User_selected symbol))
+         | Some input ->
+           Application_calls_a_function (Symbol_selection.of_command_string input))
 ;;

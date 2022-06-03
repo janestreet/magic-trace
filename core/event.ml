@@ -26,7 +26,7 @@ module Location = struct
     ; symbol : Symbol.t
     ; symbol_offset : Int.Hex.t
     }
-  [@@deriving sexp]
+  [@@deriving sexp, fields]
 
   (* magic-trace has some things that aren't functions but look like they are in the trace
      (like "[untraced]" and "[syscall]") *)
@@ -93,3 +93,15 @@ let change_time (t : t) ~f : t =
     | None -> t
     | Some time -> Error { u with time = Time_ns_unix.Span.Option.some (f time) })
 ;;
+
+module With_write_info = struct
+  type outer = t [@@deriving sexp_of]
+
+  type t =
+    { event : outer
+    ; should_write : bool
+    }
+  [@@deriving sexp_of, fields]
+
+  let create ?(should_write = true) event = { event; should_write }
+end

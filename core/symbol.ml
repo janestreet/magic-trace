@@ -9,6 +9,10 @@ type t =
   | Syscall
 [@@deriving sexp, compare]
 
+(* [Int64.Hex] (used by [Perf_map_location]) doesn't derive [equal], so we implement
+   explicitly. *)
+let equal t1 t2 = compare t1 t2 = 0
+
 let display_name = function
   | Unknown -> "[unknown]"
   | Untraced -> "[untraced]"
