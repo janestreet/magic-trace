@@ -7,6 +7,6 @@ type t =
   | Untraced
   | Returned
   | Syscall
-[@@deriving sexp, compare]
+[@@deriving sexp, compare, equal]
 
 val display_name : t -> string

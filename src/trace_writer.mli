@@ -32,7 +32,7 @@ val create_expert
   -> (module Trace with type thread = _)
   -> t
 
-val write_event : t -> Event.t -> unit
+val write_event : t -> Event.With_write_info.t -> unit
 
 (** Updates interal data structures when trace ends. If [to_time] is passed, will
    shift to new start time which is useful when writing out multiple snapshots
