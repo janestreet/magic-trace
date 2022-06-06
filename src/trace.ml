@@ -142,11 +142,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
   end
 
   let decode_to_trace
+      ?perf_maps
       ~elf
       ~trace_mode
       ~debug_print_perf_commands
       ~record_dir
-      ~perf_map
       { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
@@ -156,10 +156,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let open Deferred.Or_error.Let_syntax in
         let%bind decode_result =
           Backend.decode_events
+            ?perf_maps
             decode_opts
             ~debug_print_perf_commands
             ~record_dir
-            ~perf_map
         in
         let%bind () = write_event_sexps writer decode_result in
         return ())
@@ -187,10 +187,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
         let%bind decode_result =
           Backend.decode_events
+            ?perf_maps
             decode_opts
             ~debug_print_perf_commands
             ~record_dir
-            ~perf_map
         in
         let%bind () =
           write_trace_from_events
@@ -226,8 +226,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
       }
   end
 
-  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pid =
+  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pids =
     Process_info.read_all_proc_info ();
+    let head_pid = List.hd_exn pids in
     let%bind.Deferred.Or_error snap_loc =
       match elf with
       | None -> return (Ok None)
@@ -254,7 +255,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                 Deferred.Or_error.errorf "Snapshot symbol not found: %s" symbol_name
               | Some symbol -> return (Ok symbol))
           in
-          let snap_loc = Elf.symbol_stop_info elf pid snap_sym in
+          let snap_loc = Elf.symbol_stop_info elf head_pid snap_sym in
           return (Ok (Some snap_loc)))
     in
     let%map.Deferred.Or_error recording =
@@ -266,7 +267,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         ~trace_mode:opts.trace_mode
         ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir
-        pid
+        pids
     in
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
@@ -298,7 +299,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
         let single_hit = not opts.multi_snapshot in
-        let bp = Breakpoint.breakpoint_fd pid ~addr ~single_hit in
+        let bp = Breakpoint.breakpoint_fd head_pid ~addr ~single_hit in
         let bp = Or_error.ok_exn bp in
         let fd =
           Async_unix.Fd.create
@@ -342,7 +343,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
     let%bind attachment =
-      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Run pid
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Run [ pid ]
     in
     Ptrace.resume pid;
     (* Forward ^C to the child, unless it has already exited. *)
@@ -375,9 +376,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return pid
   ;;
 
-  let attach_and_record record_opts ~elf ~debug_print_perf_commands pid =
+  let attach_and_record record_opts ~elf ~debug_print_perf_commands pids =
     let%bind.Deferred.Or_error attachment =
-      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Attach pid
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Attach pids
     in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
@@ -487,15 +488,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
                let argv = prog :: List.concat (Option.to_list argv) in
                run_and_record opts ~elf ~debug_print_perf_commands ~prog ~argv
              in
-             let%bind.Deferred perf_map =
-               Perf_map.load (Perf_map.default_filename ~pid)
-             in
+             let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
              decode_to_trace
+               ~perf_maps
                ~elf
                ~trace_mode:opts.trace_mode
                ~debug_print_perf_commands
                ~record_dir:opts.record_dir
-               ~perf_map
                decode_opts))
   ;;
 
@@ -555,44 +554,47 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
-       and pid =
+       and pids =
          flag
            "-pid"
-           (optional int)
+           (optional (Arg_type.comma_separated int))
            ~aliases:[ "-p" ]
            ~doc:
-             "PID Process to attach to. Required if you don't have the \"fzf\" \
-              application available in your PATH."
+             "PID Processes to attach to as a comma separated list. Required if you \
+              don't have the \"fzf\" application available in your PATH."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
          let%bind () = check_for_processor_trace_support () in
          let%bind () = check_for_perf () in
-         let%bind pid =
-           match pid with
-           | Some pid -> return (Pid.of_int pid)
-           | None -> select_pid ()
+         let%bind (pids : Pid.t list) =
+           match pids with
+           | None -> select_pid () |> Deferred.Or_error.map ~f:(fun pid -> [ pid ])
+           | Some pids -> return (List.map ~f:Pid.of_int pids)
          in
-         let executable = Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"] in
-         record_opt_fn ~executable ~f:(fun opts ->
-             let { Record_opts.executable; when_to_snapshot; _ } = opts in
-             let%bind elf = create_elf ~executable ~when_to_snapshot in
-             let%bind () = attach_and_record opts ~elf ~debug_print_perf_commands pid in
-             let%bind.Deferred perf_map =
-               Perf_map.load (Perf_map.default_filename ~pid)
-             in
-             decode_to_trace
-               ~elf
-               ~trace_mode:opts.trace_mode
-               ~debug_print_perf_commands
-               ~record_dir:opts.record_dir
-               ~perf_map
-               decode_opts))
-  ;;
-
-  let maybe_load_perf_map = function
-    | None -> return None
-    | Some file -> Perf_map.load file
+         if List.contains_dup pids ~compare:Pid.compare
+         then Deferred.Or_error.error_string "Duplicate PIDs were passed"
+         else (
+           (* Always use the head PID for locating triggers since only a single
+              trigger can be passed currently. *)
+           let executable =
+             List.hd_exn pids
+             |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
+           in
+           record_opt_fn ~executable ~f:(fun opts ->
+               let { Record_opts.executable; when_to_snapshot; _ } = opts in
+               let%bind elf = create_elf ~executable ~when_to_snapshot in
+               let%bind () =
+                 attach_and_record opts ~elf ~debug_print_perf_commands pids
+               in
+               let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
+               decode_to_trace
+                 ~perf_maps
+                 ~elf
+                 ~trace_mode:opts.trace_mode
+                 ~debug_print_perf_commands
+                 ~record_dir:opts.record_dir
+                 decode_opts)))
   ;;
 
   let decode_command =
@@ -606,23 +608,28 @@ module Make_commands (Backend : Backend_intf.S) = struct
            "-executable"
            (required Filename_unix.arg_type)
            ~doc:"FILE Executable to extract debug symbols from."
-       and perf_map_file =
+       and perf_map_files =
          flag
            "-perf-map-file"
-           (optional Filename_unix.arg_type)
+           (optional (Arg_type.comma_separated Filename_unix.arg_type))
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
        and debug_print_perf_commands = debug_print_perf_commands in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
          let elf = Elf.create executable in
-         let%bind perf_map = maybe_load_perf_map perf_map_file in
+         let%bind perf_maps =
+           match perf_map_files with
+           | None -> Deferred.return None
+           | Some files ->
+             Perf_map.Table.load_by_files files |> Deferred.map ~f:Option.some
+         in
          decode_to_trace
+           ?perf_maps
            ~elf
            ~trace_mode
            ~debug_print_perf_commands
            ~record_dir
-           ~perf_map
            decode_opts)
   ;;
 

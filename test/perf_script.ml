@@ -81,7 +81,7 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_mode file =
       List.iter lines ~f:(fun line ->
           if not (String.is_empty line)
           then (
-            let event = Perf_tool_backend.Perf_line.to_event line ~perf_map:None in
+            let event = Perf_tool_backend.Perf_line.to_event line in
             let event = adjust_event_time event in
             (* Most of a trace is just jumps within a single function. Those are basically
            uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)

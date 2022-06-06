@@ -22,7 +22,7 @@ module type S = sig
       -> trace_mode:Trace_mode.t
       -> timer_resolution:Timer_resolution.t
       -> record_dir:string
-      -> Pid.t
+      -> Pid.t list
       -> t Deferred.Or_error.t
 
     val maybe_take_snapshot : t -> source:[ `ctrl_c | `function_call ] -> unit
@@ -36,9 +36,9 @@ module type S = sig
   end
 
   val decode_events
-    :  Decode_opts.t
+    :  ?perf_maps:Perf_map.Table.t
     -> debug_print_perf_commands:bool
     -> record_dir:string
-    -> perf_map:Perf_map.t option
+    -> Decode_opts.t
     -> Decode_result.t Deferred.Or_error.t
 end
