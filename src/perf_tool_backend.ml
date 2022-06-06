@@ -102,7 +102,7 @@ module Recording = struct
       ~(trace_mode : Trace_mode.t)
       ~(timer_resolution : Timer_resolution.t)
       ~record_dir
-      pid
+      pids
     =
     let%bind capabilities = Perf_capabilities.detect_exn () in
     let%bind.Deferred.Or_error () =
@@ -136,7 +136,7 @@ module Recording = struct
       | false -> [ "--per-thread"; "-t" ]
       | true -> [ "-p" ]
     in
-    let pid_opt = [ Pid.to_string pid ] in
+    let pid_opt = [ List.map pids ~f:Pid.to_string |> String.concat ~sep:"," ] in
     let ev_arg =
       let timer_resolution : Timer_resolution.t =
         match
@@ -376,7 +376,7 @@ module Perf_line = struct
           "Regex of trace error did not match expected fields" (results : string array)]
   ;;
 
-  let ok_perf_line_to_event line ~(perf_map : Perf_map.t option) : Event.Ok.t =
+  let ok_perf_line_to_event ?perf_maps line : Event.Ok.t =
     match Re.Group.all (Re.exec ok_perf_line_re line) with
     | [| _
        ; pid
@@ -399,7 +399,7 @@ module Perf_line = struct
         | [| _; symbol; offset |] -> Symbol.From_perf symbol, Int.Hex.of_string offset
         | _ | (exception _) ->
           let failed = Symbol.Unknown, 0 in
-          (match perf_map with
+          (match perf_maps with
           | None ->
             (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
             | [| _; dso |] ->
@@ -408,7 +408,7 @@ module Perf_line = struct
               Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
             | _ | (exception _) -> failed)
           | Some perf_map ->
-            (match Perf_map.symbol perf_map ~addr with
+            (match Perf_map.Table.symbol ~pid:(Pid.of_int pid) perf_map ~addr with
             | None -> failed
             | Some location ->
               (* It's strange that perf isn't resolving these symbols. It says on the tin that
@@ -481,11 +481,11 @@ module Perf_line = struct
         [%message "Regex of expected perf output did not match." (results : string array)]
   ;;
 
-  let to_event line ~perf_map : Event.t =
+  let to_event ?perf_maps line : Event.t =
     try
       match classify line with
       | Trace_error -> Error (trace_error_to_event line)
-      | Ok_perf_line -> Ok (ok_perf_line_to_event line ~perf_map)
+      | Ok_perf_line -> Ok (ok_perf_line_to_event ?perf_maps line)
     with
     | exn ->
       raise_s
@@ -500,7 +500,7 @@ module Perf_line = struct
     (module struct
       open Core
 
-      let check s = to_event s ~perf_map:None |> [%sexp_of: Event.t] |> print_s
+      let check s = to_event s |> [%sexp_of: Event.t] |> print_s
 
       let%expect_test "C symbol" =
         check
@@ -712,7 +712,7 @@ module Perf_line = struct
   ;;
 end
 
-let decode_events () ~debug_print_perf_commands ~record_dir ~perf_map =
+let decode_events ?perf_maps ~debug_print_perf_commands ~record_dir () =
   let args =
     [ "script"
     ; "-i"
@@ -738,7 +738,7 @@ let decode_events () ~debug_print_perf_commands ~record_dir ~perf_map =
        including converting to pipes which says that the stream creation should be
        switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
        can't see a reason why filter_map would lead to memory leaks. *)
-    Pipe.map line_pipe ~f:(Perf_line.to_event ~perf_map)
+    Pipe.map line_pipe ~f:(Perf_line.to_event ?perf_maps)
   in
   let close_result =
     let%map exit_or_signal = Process.wait perf_script_proc in

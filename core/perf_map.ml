@@ -139,7 +139,36 @@ let%test_module _ =
   end)
 ;;
 
+let default_filename_re = Re.Perl.re {|^perf-([0-9]+)\.map$|} |> Re.compile
 let default_filename ~pid = [%string "/tmp/perf-%{pid#Pid}.map"]
+
+let pid_of_filename filename =
+  try
+    Re.Group.get (Re.exec default_filename_re (Filename.basename filename)) 1
+    |> Pid.of_string
+  with
+  | _ ->
+    raise_s [%message "Perf map filename did not match default format [perf-%{pid}.map]"]
+;;
+
+let%expect_test "pid_of_filename success" =
+  print_s [%message "" ~pid:(pid_of_filename "/tmp/perf-512.map" : Pid.t)];
+  [%expect {| (pid 512) |}] |> Deferred.return
+;;
+
+let%expect_test "pid_of_filename failure 1" =
+  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+      print_s [%message "" ~pid:(pid_of_filename "/tmp/per-512.map" : Pid.t)]);
+  [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
+  |> Deferred.return
+;;
+
+let%expect_test "pid_of_filename failure 2" =
+  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+      print_s [%message "" ~pid:(pid_of_filename "/tmp/perf-512" : Pid.t)]);
+  [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
+  |> Deferred.return
+;;
 
 let map_of_sequence_prefer_later sequence =
   Sequence.fold sequence ~init:Int64.Map.empty ~f:(fun map (key, data) ->
@@ -173,3 +202,32 @@ let symbol (t : t) ~addr =
     assert (Int64.(location.start_addr <= addr));
     Option.some_if Int64.(location.start_addr + of_int location.size < addr) location
 ;;
+
+module Table = struct
+  type nonrec t = (Pid.t, t) Hashtbl.t
+
+  let create maps =
+    List.filter_map maps ~f:(function
+        | _, None -> None
+        | pid, Some map -> Some (pid, map))
+    |> Hashtbl.of_alist_exn (module Pid)
+  ;;
+
+  let load_by_files files =
+    Deferred.List.map files ~f:(fun filename ->
+        load filename |> Deferred.map ~f:(fun map -> pid_of_filename filename, map))
+    >>| create
+  ;;
+
+  let load_by_pids pids =
+    Deferred.List.map pids ~f:(fun pid ->
+        load (default_filename ~pid) |> Deferred.map ~f:(fun map -> pid, map))
+    >>| create
+  ;;
+
+  let symbol t ~pid ~addr =
+    match Hashtbl.find t pid with
+    | None -> None
+    | Some map -> symbol map ~addr
+  ;;
+end

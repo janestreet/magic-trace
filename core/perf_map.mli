@@ -20,3 +20,19 @@ val load : Filename.t -> t option Deferred.t
 (* Looks up an address, returning the function that address is for. Returns `None` if that address
    is not in the perf-map file. *)
 val symbol : t -> addr:int64 -> Perf_map_location.t option
+
+(** Load multiple perf maps in a table. Used when tracing multiple PIDs. *)
+module Table : sig
+  type t
+
+  (** Uses default filenames for PID of [/tmp/perf-%{pid}.map]. Ignores perf
+     maps which don't exist. *)
+  val load_by_pids : Pid.t list -> t Deferred.t
+
+  (** Requires filenames to be in [perf-%{pid}.map] format in order to infer
+      PIDs and raises if any filename is not. Ignores perf maps which don't
+      exist. *)
+  val load_by_files : Filename.t list -> t Deferred.t
+
+  val symbol : t -> pid:Pid.t -> addr:int64 -> Perf_map_location.t option
+end
