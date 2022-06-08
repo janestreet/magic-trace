@@ -266,8 +266,8 @@ module Decode_opts = struct
 end
 
 module Perf_line = struct
-  let report_itraces = "be"
-  let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff,dso"
+  let report_itraces = "bep"
+  let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso"
 
   let saturating_sub_i64 a b =
     match Int64.(to_int (a - b)) with
@@ -316,6 +316,13 @@ module Perf_line = struct
     |> Re.compile
   ;;
 
+  (* This matches exactly the power events which contain either [cbr] or [psb offs]. *)
+  let ok_perf_power_line_re =
+    Re.Perl.re
+      {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z]*)? +(cbr|psb offs): ([0-9]+ freq: ([0-9]+) MHz)?(.*)$|}
+    |> Re.compile
+  ;;
+
   let trace_error_re =
     Re.Posix.re
       {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+|0) code [0-9]+: (.*)$|}
@@ -328,11 +335,14 @@ module Perf_line = struct
   type classification =
     | Trace_error
     | Ok_perf_line
+    | Ok_perf_power_line
 
   let classify line =
     if String.is_prefix line ~prefix:" instruction trace error"
-    then Trace_error
-    else Ok_perf_line
+    then Re.Group.all (Re.exec trace_error_re line), Trace_error
+    else (
+      try Re.Group.all (Re.exec ok_perf_line_re line), Ok_perf_line with
+      | _ -> Re.Group.all (Re.exec ok_perf_power_line_re line), Ok_perf_power_line)
   ;;
 
   let parse_time ~time_hi ~time_lo =
@@ -349,11 +359,16 @@ module Perf_line = struct
     time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
   ;;
 
-  let trace_error_to_event line : Event.Decode_error.t =
-    match Re.Group.all (Re.exec trace_error_re line) with
+  let maybe_pid_of_string = function
+    | "0" -> None
+    | pid -> Some (Pid.of_string pid)
+  ;;
+
+  let trace_error_to_event matches : Event.Decode_error.t =
+    match matches with
     | [| _; _; time_hi; time_lo; pid; tid; ip; message |] ->
-      let pid = Int.of_string pid in
-      let tid = Int.of_string tid in
+      let pid = maybe_pid_of_string pid in
+      let tid = maybe_pid_of_string tid in
       let instruction_pointer =
         if String.( = ) ip "0" then None else Some (Int64.Hex.of_string ip)
       in
@@ -362,22 +377,36 @@ module Perf_line = struct
         then Time_ns_unix.Span.Option.none
         else Time_ns_unix.Span.Option.some (parse_time ~time_hi ~time_lo)
       in
-      { thread =
-          { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-          ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
-          }
-      ; instruction_pointer
-      ; message
-      ; time
-      }
+      { thread = { pid; tid }; instruction_pointer; message; time }
     | results ->
       raise_s
         [%message
           "Regex of trace error did not match expected fields" (results : string array)]
   ;;
 
-  let ok_perf_line_to_event ?perf_maps line : Event.Ok.t =
-    match Re.Group.all (Re.exec ok_perf_line_re line) with
+  let ok_perf_power_line_to_event matches : Event.Ok.t option =
+    match matches with
+    | [| _; pid; tid; time_hi; time_lo; _; kind; _; freq; _ |] ->
+      let pid = maybe_pid_of_string pid in
+      let tid = maybe_pid_of_string tid in
+      let time = parse_time ~time_hi ~time_lo in
+      (match kind with
+      | "cbr" ->
+        (* cbr (core-to-bus ratio) are events which show frequency changes. *)
+        Some (Power { thread = { pid; tid }; time; freq = Int.of_string freq })
+      | "psb offs" ->
+        (* Ignore psb (packet stream boundary) packets *)
+        None
+      | _ -> raise_s [%message "Saw unexpected power event" (matches : string array)])
+    | results ->
+      raise_s
+        [%message
+          "Regex of perf power event did not match expected fields"
+            (results : string array)]
+  ;;
+
+  let ok_perf_line_to_event ?perf_maps matches line : Event.Ok.t =
+    match matches with
     | [| _
        ; pid
        ; tid
@@ -458,34 +487,37 @@ module Perf_line = struct
           printf "Warning: skipping unrecognized perf output: %s\n%!" line;
           None
       in
-      { thread =
-          { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-          ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
-          }
-      ; time
-      ; trace_state_change
-      ; kind
-      ; src =
-          { instruction_pointer = src_instruction_pointer
-          ; symbol = src_symbol
-          ; symbol_offset = src_symbol_offset
-          }
-      ; dst =
-          { instruction_pointer = dst_instruction_pointer
-          ; symbol = dst_symbol
-          ; symbol_offset = dst_symbol_offset
-          }
-      }
+      Trace
+        { thread =
+            { pid = (if pid = 0 then None else Some (Pid.of_int pid))
+            ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
+            }
+        ; time
+        ; trace_state_change
+        ; kind
+        ; src =
+            { instruction_pointer = src_instruction_pointer
+            ; symbol = src_symbol
+            ; symbol_offset = src_symbol_offset
+            }
+        ; dst =
+            { instruction_pointer = dst_instruction_pointer
+            ; symbol = dst_symbol
+            ; symbol_offset = dst_symbol_offset
+            }
+        }
     | results ->
       raise_s
         [%message "Regex of expected perf output did not match." (results : string array)]
   ;;
 
-  let to_event ?perf_maps line : Event.t =
+  let to_event ?perf_maps line : Event.t option =
     try
       match classify line with
-      | Trace_error -> Error (trace_error_to_event line)
-      | Ok_perf_line -> Ok (ok_perf_line_to_event ?perf_maps line)
+      | matches, Trace_error -> Some (Error (trace_error_to_event matches))
+      | matches, Ok_perf_line -> Some (Ok (ok_perf_line_to_event matches ?perf_maps line))
+      | matches, Ok_perf_power_line ->
+        ok_perf_power_line_to_event matches |> Option.map ~f:(fun event -> Ok event)
     with
     | exn ->
       raise_s
@@ -500,22 +532,23 @@ module Perf_line = struct
     (module struct
       open Core
 
-      let check s = to_event s |> [%sexp_of: Event.t] |> print_s
+      let check s = to_event s |> [%sexp_of: Event.t option] |> print_s
 
       let%expect_test "C symbol" =
         check
           {| 25375/25375 4509191.343298468:   call                     7f6fce0b71f4 __clock_gettime+0x24 (foo.so) =>     7ffd193838e0 __vdso_clock_gettime+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x7f6fce0b71f4) (symbol (From_perf __clock_gettime))
-              (symbol_offset 0x24)))
-            (dst
-             ((instruction_pointer 0x7ffd193838e0)
-              (symbol (From_perf __vdso_clock_gettime)) (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x7f6fce0b71f4)
+                (symbol (From_perf __clock_gettime)) (symbol_offset 0x24)))
+              (dst
+               ((instruction_pointer 0x7ffd193838e0)
+                (symbol (From_perf __vdso_clock_gettime)) (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "C symbol trace start" =
@@ -523,15 +556,16 @@ module Perf_line = struct
           {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-            (trace_state_change Start)
-            (src
-             ((instruction_pointer 0x0) (symbol (From_perf "[unknown @ 0x0 (foo.so)]"))
-              (symbol_offset 0x0)))
-            (dst
-             ((instruction_pointer 0x7f6fce0b71d0) (symbol (From_perf __clock_gettime))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+              (trace_state_change Start)
+              (src
+               ((instruction_pointer 0x0)
+                (symbol (From_perf "[unknown @ 0x0 (foo.so)]")) (symbol_offset 0x0)))
+              (dst
+               ((instruction_pointer 0x7f6fce0b71d0)
+                (symbol (From_perf __clock_gettime)) (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "C++ symbol" =
@@ -539,17 +573,18 @@ module Perf_line = struct
           {| 7166/7166  4512623.871133092:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb (foo.so) =>           9f68b0 J::K<int, std::string>+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x9bc6db)
-              (symbol
-               (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
-              (symbol_offset 0x1eb)))
-            (dst
-             ((instruction_pointer 0x9f68b0)
-              (symbol (From_perf "J::K<int, std::string>")) (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x9bc6db)
+                (symbol
+                 (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
+                (symbol_offset 0x1eb)))
+              (dst
+               ((instruction_pointer 0x9f68b0)
+                (symbol (From_perf "J::K<int, std::string>")) (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "OCaml symbol" =
@@ -557,15 +592,16 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b Base.Comparable.=_2352+0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b)
-              (symbol (From_perf Base.Comparable.=_2352)) (symbol_offset 0xb)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b)
+                (symbol (From_perf Base.Comparable.=_2352)) (symbol_offset 0xb)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
@@ -585,15 +621,16 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
-              (symbol_offset 0xb)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+                (symbol_offset 0xb)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "manufactured example 2" =
@@ -601,15 +638,16 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 => +0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
-              (symbol_offset 0xb)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf "=> "))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+                (symbol_offset 0xb)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf "=> "))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "manufactured example 3" =
@@ -617,15 +655,16 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b + +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
-              (symbol_offset 0xb)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
+                (symbol_offset 0xb)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "unknown symbol in DSO" =
@@ -633,16 +672,17 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b)
-              (symbol (From_perf "[unknown @ 0x56234f77576b (foo.so)]"))
-              (symbol_offset 0x0)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b)
+                (symbol (From_perf "[unknown @ 0x56234f77576b (foo.so)]"))
+                (symbol_offset 0x0)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "DSO with spaces in it" =
@@ -650,17 +690,18 @@ module Perf_line = struct
           {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (this is a spaced dso.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
         [%expect
           {|
-          (Ok
-           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-            (kind Call)
-            (src
-             ((instruction_pointer 0x56234f77576b)
-              (symbol
-               (From_perf "[unknown @ 0x56234f77576b (this is a spaced dso.so)]"))
-              (symbol_offset 0x0)))
-            (dst
-             ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-              (symbol_offset 0x0))))) |}]
+          ((Ok
+            (Trace
+             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+              (kind Call)
+              (src
+               ((instruction_pointer 0x56234f77576b)
+                (symbol
+                 (From_perf "[unknown @ 0x56234f77576b (this is a spaced dso.so)]"))
+                (symbol_offset 0x0)))
+              (dst
+               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                (symbol_offset 0x0))))))) |}]
       ;;
 
       let%expect_test "decode error with a timestamp" =
@@ -669,9 +710,9 @@ module Perf_line = struct
            293415 ip 0x7ffff7327730 code 7: Overflow packet";
         [%expect
           {|
-          (Error
-           ((thread ((pid (293415)) (tid (293415)))) (time (13h6m10.086912826s))
-            (instruction_pointer (0x7ffff7327730)) (message "Overflow packet"))) |}]
+          ((Error
+            ((thread ((pid (293415)) (tid (293415)))) (time (13h6m10.086912826s))
+             (instruction_pointer (0x7ffff7327730)) (message "Overflow packet")))) |}]
       ;;
 
       let%expect_test "decode error without a timestamp" =
@@ -680,9 +721,9 @@ module Perf_line = struct
            0x7ffff7327730 code 7: Overflow packet";
         [%expect
           {|
-          (Error
-           ((thread ((pid (293415)) (tid (293415)))) (time ())
-            (instruction_pointer (0x7ffff7327730)) (message "Overflow packet"))) |}]
+          ((Error
+            ((thread ((pid (293415)) (tid (293415)))) (time ())
+             (instruction_pointer (0x7ffff7327730)) (message "Overflow packet")))) |}]
       ;;
 
       let%expect_test "lost trace data" =
@@ -691,9 +732,9 @@ module Perf_line = struct
            1801680 ip 0 code 8: Lost trace data";
         [%expect
           {|
-          (Error
-           ((thread ((pid (1801680)) (tid (1801680)))) (time (30d16h25m15.104731379s))
-            (instruction_pointer ()) (message "Lost trace data"))) |}]
+          ((Error
+            ((thread ((pid (1801680)) (tid (1801680)))) (time (30d16h25m15.104731379s))
+             (instruction_pointer ()) (message "Lost trace data")))) |}]
       ;;
 
       let%expect_test "never-ending loop" =
@@ -703,10 +744,31 @@ module Perf_line = struct
            intel-pt.max-loops)";
         [%expect
           {|
-          (Error
-           ((thread ((pid (114362)) (tid (114362)))) (time (4d16h47m16.830210719s))
-            (instruction_pointer (-0x4f66612b))
-            (message "Never-ending loop (refer perf config intel-pt.max-loops)"))) |}]
+          ((Error
+            ((thread ((pid (114362)) (tid (114362)))) (time (4d16h47m16.830210719s))
+             (instruction_pointer (-0x4f66612b))
+             (message "Never-ending loop (refer perf config intel-pt.max-loops)")))) |}]
+      ;;
+
+      let%expect_test "power event csb" =
+        check
+          "2937048/2937048 448556.689322817:                        cbr: 46 freq: 4606 \
+           MHz (159%)                   0                0 [unknown] ([unknown])";
+        [%expect
+          {|
+          ((Ok
+            (Power
+             ((thread ((pid (2937048)) (tid (2937048)))) (time 5d4h35m56.689322817s)
+              (freq 4606))))) |}]
+      ;;
+
+      (* Expected [None] because we ignore these events currently. *)
+      let%expect_test "power event psb offs" =
+        check
+          "2937048/2937048 448556.689403475:                        psb offs: \
+           0x4be8                                0     7f068fbfd330 mmap64+0x50 \
+           (/usr/lib64/ld-2.28.so)";
+        [%expect {| () |}]
       ;;
     end)
   ;;
@@ -727,7 +789,7 @@ let decode_events ?perf_maps ~debug_print_perf_commands ~record_dir () =
   then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
   (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
      the [perf script] process from outliving the parent. *)
-  let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
+  let%bind perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
   let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
   don't_wait_for
     (Reader.transfer
@@ -738,11 +800,11 @@ let decode_events ?perf_maps ~debug_print_perf_commands ~record_dir () =
        including converting to pipes which says that the stream creation should be
        switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
        can't see a reason why filter_map would lead to memory leaks. *)
-    Pipe.map line_pipe ~f:(Perf_line.to_event ?perf_maps)
+    Pipe.map line_pipe ~f:(Perf_line.to_event ?perf_maps) |> Pipe.filter_map ~f:Fn.id
   in
   let close_result =
     let%map exit_or_signal = Process.wait perf_script_proc in
     perf_exit_to_or_error exit_or_signal
   in
-  Ok { Decode_result.events; close_result }
+  Ok { Decode_result.events; close_result } |> Deferred.return
 ;;

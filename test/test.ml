@@ -47,8 +47,8 @@ end = struct
     { instruction_pointer = addr (); symbol = From_perf ""; symbol_offset = offset () }
   ;;
 
-  let random_ok_event () : Event.Ok.t =
-    { thread
+  let random_ok_event () : Event.Ok.Trace.t =
+    { Event.Ok.Trace.thread
     ; time = time ()
     ; trace_state_change = None
     ; kind = Some Call
@@ -61,7 +61,7 @@ end = struct
 
   let random_event' kind symbol : Event.t =
     let event = random_ok_event () in
-    Ok { event with kind = Some kind; dst = { event.dst with symbol } }
+    Ok (Trace { event with kind = Some kind; dst = { event.dst with symbol } })
   ;;
 
   let call () =
@@ -81,13 +81,14 @@ end = struct
     Queue.enqueue
       events
       (Ok
-         { thread
-         ; time
-         ; trace_state_change = None
-         ; kind = Some kind
-         ; src = loc
-         ; dst = loc
-         })
+         (Trace
+            { thread
+            ; time
+            ; trace_state_change = None
+            ; kind = Some kind
+            ; src = loc
+            ; dst = loc
+            }))
   ;;
 
   let ret () =

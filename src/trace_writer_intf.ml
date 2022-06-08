@@ -35,4 +35,11 @@ module type S_trace = sig
     -> name:string
     -> time:Time_ns.Span.t
     -> unit
+
+  val write_counter
+    :  args:Tracing.Trace.Arg.t list
+    -> thread:thread
+    -> name:string
+    -> time:Time_ns.Span.t
+    -> unit
 end

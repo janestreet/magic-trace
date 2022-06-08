@@ -81,7 +81,8 @@ let write_trace_from_events
   let%bind.Deferred earliest_time =
     let%map.Deferred _wait_for_first = Pipe.values_available events in
     match Pipe.peek events with
-    | Some (Ok earliest) -> earliest.time
+    | Some (Ok (Trace earliest)) -> earliest.time
+    | Some (Ok (Power earliest)) -> earliest.time
     | None | Some (Error _) -> Time_ns.Span.zero
   in
   let trace =
