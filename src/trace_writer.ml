@@ -198,6 +198,19 @@ let write_duration_instant
   T.write_duration_instant ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
+let write_counter
+    (type thread)
+    (t : thread inner)
+    ~args
+    ~thread
+    ~name
+    ~(time : Mapped_time.t)
+    : unit
+  =
+  let module T = (val t.trace) in
+  T.write_counter ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+;;
+
 let map_time t time = Mapped_time.create time ~base_time:t.base_time
 
 let write_hits (T t) hits =
@@ -808,8 +821,15 @@ let write_event (T t) event =
       | Some ip -> is_kernel_address ip
     in
     end_of_thread t thread_info ~time ~is_kernel_address
-  | Ok event ->
-    let { Event.Ok.thread = _ (* Already used this to look up thread info. *)
+  | Ok (Power { thread = _; time = _; freq }) ->
+    write_counter
+      t
+      ~thread
+      ~name:"CPU"
+      ~time
+      ~args:Tracing.Trace.Arg.[ "freq (MHz)", Int freq ]
+  | Ok (Trace event) ->
+    let { Event.Ok.Trace.thread = _ (* Already used this to look up thread info. *)
         ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
         ; kind
         ; trace_state_change
@@ -835,7 +855,7 @@ let write_event (T t) event =
           "BUG: magic-trace devs thought this event was impossible, but you just proved \
            them wrong. Please report this to \
            https://github.com/janestreet/magic-trace/issues/"
-            (event : Event.Ok.t)]
+            (event : Event.Ok.Trace.t)]
     | None, Some End -> call t thread_info ~time ~location:Event.Location.untraced
     | Some Syscall, Some End ->
       (* We should only be getting these under /u *)

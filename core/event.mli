@@ -35,14 +35,30 @@ module Location : sig
 end
 
 module Ok : sig
+  module Trace : sig
+    type t =
+      { thread : Thread.t
+      ; time : Time_ns.Span.t
+      ; trace_state_change : Trace_state_change.t option
+      ; kind : Kind.t option
+      ; src : Location.t
+      ; dst : Location.t
+      }
+    [@@deriving sexp]
+  end
+
+  module Power : sig
+    type t =
+      { thread : Thread.t
+      ; time : Time_ns.Span.t
+      ; freq : int
+      }
+    [@@deriving sexp]
+  end
+
   type t =
-    { thread : Thread.t
-    ; time : Time_ns.Span.t
-    ; trace_state_change : Trace_state_change.t option
-    ; kind : Kind.t option
-    ; src : Location.t
-    ; dst : Location.t
-    }
+    | Trace of Trace.t
+    | Power of Power.t
   [@@deriving sexp]
 end
 

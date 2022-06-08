@@ -41,6 +41,8 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_mode file =
       write_duration_begin ~args ~thread ~name ~time;
       printf "->          END   %s\n" name
     ;;
+
+    let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   end
   in
   Magic_trace_lib.Trace_writer.debug := debug;
@@ -72,16 +74,17 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_mode file =
       in
       let should_print_perf_line (event : Event.t) =
         match event with
-        | Ok event ->
+        | Ok (Trace event) ->
           (* Most of a trace is just jumps within a single function. Those are basically
          uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
           not ([%compare.equal: Symbol.t] event.src.symbol event.dst.symbol)
         | Error _ -> true
+        | Ok (Power _) -> true
       in
       List.iter lines ~f:(fun line ->
           if not (String.is_empty line)
           then (
-            let event = Perf_tool_backend.Perf_line.to_event line in
+            let event = Perf_tool_backend.Perf_line.to_event line |> Option.value_exn in
             let event = adjust_event_time event in
             (* Most of a trace is just jumps within a single function. Those are basically
            uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
