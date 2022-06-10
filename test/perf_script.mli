@@ -1,4 +1,5 @@
 open! Core
+open! Async
 open! Magic_trace_core
 
 (* Runs some perf script end-to-end through the perf_tool_backend and the trace_writer, printing
@@ -18,4 +19,4 @@ val run
   -> ?ocaml_exception_info:Ocaml_exception_info.t
   -> trace_scope:Trace_scope.t
   -> Filename.t
-  -> unit
+  -> unit Deferred.t

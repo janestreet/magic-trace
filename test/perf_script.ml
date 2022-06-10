@@ -1,4 +1,5 @@
 open! Core
+open! Async
 open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
@@ -74,22 +75,27 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
       in
       let should_print_perf_line (event : Event.t) =
         match event with
-        | Ok (Trace event) ->
+        | Ok { data = Trace data; _ } ->
           (* Most of a trace is just jumps within a single function. Those are basically
-         uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
-          not ([%compare.equal: Symbol.t] event.src.symbol event.dst.symbol)
-        | Error _ -> true
-        | Ok (Power _) -> true
+             uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
+          not ([%compare.equal: Symbol.t] data.src.symbol data.dst.symbol)
+        | Error _ | Ok _ -> true
       in
-      List.iter lines ~f:(fun line ->
-          if not (String.is_empty line)
+      let%map split_lines =
+        Perf_decode.For_testing.split_line_pipe (Pipe.of_list lines) |> Pipe.to_list
+      in
+      List.iter split_lines ~f:(fun lines ->
+          let event =
+            Perf_decode.For_testing.to_event lines
+            |> Option.value_exn
+            |> adjust_event_time
+          in
+          if should_print_perf_line event
           then (
-            let event = Perf_decode.to_event line |> Option.value_exn in
-            let event = adjust_event_time event in
-            (* Most of a trace is just jumps within a single function. Those are basically
-           uninteresting to magic-trace, so skip them to keep tests a little cleaner. *)
-            if should_print_perf_line event then printf "%s\n" line;
-            Trace_writer.write_event trace_writer event));
+            match lines with
+            | [ line ] -> printf "%s\n" line
+            | lines -> print_s [%message (lines : string list)]);
+          Trace_writer.write_event trace_writer event);
       printf "END\n";
       Trace_writer.end_of_trace trace_writer)
 ;;

@@ -1,7 +1,8 @@
 open! Core
+open! Async
 
 let%expect_test "an mcall/gogo pair from a small go program" =
-  Perf_script.run ~trace_scope:Userspace "simple_gogo.perf";
+  let%map () = Perf_script.run ~trace_scope:Userspace "simple_gogo.perf" in
   [%expect
     {|
     3109264/3109264 3363099.849998148:   tr strt                             0 [unknown] (foo.so) =>           404bf2 runtime.chanrecv+0x372 (foo.so)

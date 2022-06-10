@@ -1,7 +1,8 @@
 open! Core
+open! Async
 
 let%expect_test "decode error during memmove" =
-  Perf_script.run ~trace_scope:Userspace "memmove_decode_error.perf";
+  let%map () = Perf_script.run ~trace_scope:Userspace "memmove_decode_error.perf" in
   [%expect
     {|
     293415/293415 47170.086912824:   call                           40b06c itch_bbo::book::Book::add_order+0x51c (foo.so) =>     7ffff7327730 __memmove_avx_unaligned_erms+0x0 (foo.so)
@@ -26,7 +27,9 @@ let%expect_test "decode error during memmove" =
 ;;
 
 let%expect_test "decode error during rust B-tree rebalance" =
-  Perf_script.run ~trace_scope:Userspace "btree_rebalance_decode_error.perf";
+  let%map () =
+    Perf_script.run ~trace_scope:Userspace "btree_rebalance_decode_error.perf"
+  in
   [%expect
     {|
     364691/364691 62709.735347729:   call                           40bc5a itch_bbo::book::Book::delete_order+0x3ca (foo.so) =>           40a550 remove_leaf_kv+0x0 (foo.so)

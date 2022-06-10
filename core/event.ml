@@ -38,30 +38,24 @@ module Location = struct
 end
 
 module Ok = struct
-  module Trace = struct
+  module Data = struct
     type t =
-      { thread : Thread.t
-      ; time : Time_ns.Span.t
-      ; trace_state_change : Trace_state_change.t option [@sexp.option]
-      ; kind : Kind.t option [@sexp.option]
-      ; src : Location.t
-      ; dst : Location.t
-      }
-    [@@deriving sexp]
-  end
-
-  module Power = struct
-    type t =
-      { thread : Thread.t
-      ; time : Time_ns.Span.t
-      ; freq : int
-      }
+      | Trace of
+          { trace_state_change : Trace_state_change.t option [@sexp.option]
+          ; kind : Kind.t option [@sexp.option]
+          ; src : Location.t
+          ; dst : Location.t
+          }
+      | Power of { freq : int }
+      | Sample of { callstack : Location.t list }
     [@@deriving sexp]
   end
 
   type t =
-    | Trace of Trace.t
-    | Power of Power.t
+    { thread : Thread.t
+    ; time : Time_ns.Span.t
+    ; data : Data.t
+    }
   [@@deriving sexp]
 end
 
@@ -82,19 +76,18 @@ type t = (Ok.t, Decode_error.t) Result.t [@@deriving sexp]
 
 let thread (t : t) =
   match t with
-  | Ok (Trace { thread; _ }) | Ok (Power { thread; _ }) | Error { thread; _ } -> thread
+  | Ok { thread; _ } | Error { thread; _ } -> thread
 ;;
 
 let time (t : t) =
   match t with
-  | Ok (Trace { time; _ }) | Ok (Power { time; _ }) -> Time_ns_unix.Span.Option.some time
+  | Ok { time; _ } -> Time_ns_unix.Span.Option.some time
   | Error { time; _ } -> time
 ;;
 
 let change_time (t : t) ~f : t =
   match t with
-  | Ok (Trace ({ time; _ } as t)) -> Ok (Trace { t with time = f time })
-  | Ok (Power ({ time; _ } as t)) -> Ok (Power { t with time = f time })
+  | Ok ({ time; _ } as t) -> Ok { t with time = f time }
   | Error ({ time; _ } as u) ->
     (match%optional.Time_ns_unix.Span.Option time with
     | None -> t

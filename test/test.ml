@@ -43,26 +43,28 @@ end = struct
       |> String.of_char_list)
   ;;
 
-  let random_location () : Event.Location.t =
-    { instruction_pointer = addr (); symbol = From_perf ""; symbol_offset = offset () }
+  let random_location ?symbol () : Event.Location.t =
+    { instruction_pointer = addr ()
+    ; symbol = Option.value symbol ~default:(Symbol.From_perf "")
+    ; symbol_offset = offset ()
+    }
   ;;
 
-  let random_ok_event () : Event.Ok.Trace.t =
-    { Event.Ok.Trace.thread
+  let random_ok_event ?kind ?symbol () : Event.Ok.t =
+    { thread
     ; time = time ()
-    ; trace_state_change = None
-    ; kind = Some Call
-    ; src = random_location ()
-    ; dst = random_location ()
+    ; data =
+        Trace
+          { trace_state_change = None
+          ; kind = Some (Option.value kind ~default:Event.Kind.Call)
+          ; src = random_location ()
+          ; dst = random_location ?symbol ()
+          }
     }
   ;;
 
   let start_recording () = Queue.clear events
-
-  let random_event' kind symbol : Event.t =
-    let event = random_ok_event () in
-    Ok (Trace { event with kind = Some kind; dst = { event.dst with symbol } })
-  ;;
+  let random_event' kind symbol : Event.t = Ok (random_ok_event ~kind ~symbol ())
 
   let call () =
     let symbol = symbol () in
@@ -81,14 +83,11 @@ end = struct
     Queue.enqueue
       events
       (Ok
-         (Trace
-            { thread
-            ; time
-            ; trace_state_change = None
-            ; kind = Some kind
-            ; src = loc
-            ; dst = loc
-            }))
+         { thread
+         ; time
+         ; data =
+             Trace { trace_state_change = None; kind = Some kind; src = loc; dst = loc }
+         })
   ;;
 
   let ret () =
@@ -131,7 +130,9 @@ module With = struct
 end
 
 let dump_using_file events =
-  let decode_result = { Decode_result.events; close_result = return (Ok ()) } in
+  let decode_result =
+    { Decode_result.events = [ events ]; close_result = return (Ok ()) }
+  in
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in

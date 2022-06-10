@@ -6,6 +6,7 @@ let configurable_psb_period = bit 0
 let kernel_tracing = bit 1
 let kcore = bit 2
 let snapshot_on_exit = bit 3
+let last_branch_record = bit 4
 
 include Flags.Make (struct
   let allow_intersecting = false
@@ -16,6 +17,7 @@ include Flags.Make (struct
     [ configurable_psb_period, "configurable_psb_period"
     ; kernel_tracing, "kernel_tracing"
     ; kcore, "kcore"
+    ; last_branch_record, "last_branch_record"
     ]
   ;;
 end)
@@ -41,10 +43,35 @@ module Version = struct
 end
 
 let supports_configurable_psb_period () =
-  let cyc_cap =
-    In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc"
+  try
+    let cyc_cap =
+      In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc"
+    in
+    String.( = ) cyc_cap "1\n"
+  with
+  (* Even if this file is not present (i.e. when Intel PT isn't present), we
+     don't want capability checking to fail. *)
+  | Sys_error _ -> false
+;;
+
+(* This checks if pdcm flag is present in /proc/cpuinfo. This is necessary for
+   LBR to work. Although I couldn't ascertain that it is also sufficient.
+   However it seems unlikely this would fail on most machines. *)
+let supports_last_branch_record () =
+  let cpuinfo = In_channel.read_lines "/proc/cpuinfo" in
+  let flag_re = Re.Perl.re {|^flags\s*:\s+(\S.*)$|} |> Re.compile in
+  let flags =
+    List.filter_map cpuinfo ~f:(fun line ->
+        try
+          match Re.Group.all (Re.exec flag_re line) with
+          | [| _; flags |] -> Some (String.split ~on:' ' flags)
+          | _ -> None
+        with
+        | _ -> None)
   in
-  String.( = ) cyc_cap "1\n"
+  (* Check if pdcm in intersection of all processor flags *)
+  let contains_pdcm flags = List.exists flags ~f:(fun flag -> String.(flag = "pdcm")) in
+  List.fold flags ~init:true ~f:(fun acc flags -> acc && contains_pdcm flags)
 ;;
 
 let supports_tracing_kernel () =
@@ -77,4 +104,5 @@ let detect_exn () =
   |> set_if (supports_tracing_kernel ()) kernel_tracing
   |> set_if (supports_kcore version) kcore
   |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
+  |> set_if (supports_last_branch_record ()) last_branch_record
 ;;

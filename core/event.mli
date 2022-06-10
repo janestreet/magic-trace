@@ -35,30 +35,25 @@ module Location : sig
 end
 
 module Ok : sig
-  module Trace : sig
+  module Data : sig
     type t =
-      { thread : Thread.t
-      ; time : Time_ns.Span.t
-      ; trace_state_change : Trace_state_change.t option
-      ; kind : Kind.t option
-      ; src : Location.t
-      ; dst : Location.t
-      }
-    [@@deriving sexp]
-  end
-
-  module Power : sig
-    type t =
-      { thread : Thread.t
-      ; time : Time_ns.Span.t
-      ; freq : int
-      }
+      | Trace of
+          { trace_state_change : Trace_state_change.t option
+          ; kind : Kind.t option
+          ; src : Location.t
+          ; dst : Location.t
+          } (** Represents an event collected from Intel PT. *)
+      | Power of { freq : int } (** Power event collected by Intel PT. *)
+      | Sample of { callstack : Location.t list }
+          (** Represents event collected through sampling. *)
     [@@deriving sexp]
   end
 
   type t =
-    | Trace of Trace.t
-    | Power of Power.t
+    { thread : Thread.t
+    ; time : Time_ns.Span.t
+    ; data : Data.t
+    }
   [@@deriving sexp]
 end
 

@@ -45,20 +45,6 @@ let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
   | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
 ;;
 
-(* Other parts of the process would fail after this without IPT, but by checking directly
-   we can give a more helpful error message regardless of backend. *)
-let check_for_processor_trace_support () =
-  match Core_unix.access "/sys/bus/event_source/devices/intel_pt" [ `Exists ] with
-  | Ok () -> return (Ok ())
-  | Error _ ->
-    Deferred.Or_error.error_string
-      "Error: This machine doesn't support Intel Processor Trace, which is a hardware \
-       feature essential for magic-trace to work.\n\
-       This may be because it's a virtual machine or it's a physical machine that isn't \
-       new enough or uses an AMD processor.\n\
-       Try again on a physical Intel machine."
-;;
-
 let debug_flag flag = if Env_vars.debug then flag else Command.Param.return false
 
 let debug_print_perf_commands =
@@ -79,10 +65,10 @@ let write_trace_from_events
   let { Decode_result.events; close_result } = decode_result in
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
+    let events = List.hd_exn events in
     let%map.Deferred _wait_for_first = Pipe.values_available events in
     match Pipe.peek events with
-    | Some (Ok (Trace earliest)) -> earliest.time
-    | Some (Ok (Power earliest)) -> earliest.time
+    | Some (Ok earliest) -> earliest.time
     | None | Some (Error _) -> Time_ns.Span.zero
   in
   let trace =
@@ -92,12 +78,13 @@ let write_trace_from_events
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
   let events =
-    if print_events
-    then
-      Pipe.map events ~f:(fun (event : Event.t) ->
-          Core.print_s ~mach:() (Event.sexp_of_t event);
-          event)
-    else events
+    List.map events ~f:(fun events ->
+        if print_events
+        then
+          Pipe.map events ~f:(fun (event : Event.t) ->
+              Core.print_s ~mach:() (Event.sexp_of_t event);
+              event)
+        else events)
   in
   let writer =
     Trace_writer.create
@@ -109,8 +96,22 @@ let write_trace_from_events
       ~annotate_inferred_start_times:Env_vars.debug
       trace
   in
-  let process_event ev = Trace_writer.write_event writer ev in
-  let%bind () = Pipe.iter_without_pushback events ~f:process_event in
+  let last_index = ref 0 in
+  let process_event index ev =
+    (* When processing a new snapshot, clear all [Trace_writer] data in order to
+       avoid sharing callstacks, start times, etc. *)
+    if index > 0 && not (index = !last_index)
+    then (
+      match%optional.Time_ns_unix.Span.Option Event.time ev with
+      | None -> Trace_writer.end_of_trace writer
+      | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
+    last_index := index;
+    Trace_writer.write_event writer ev
+  in
+  let%bind () =
+    Deferred.List.iteri events ~f:(fun index events ->
+        Pipe.iter_without_pushback events ~f:(process_event index))
+  in
   Trace_writer.end_of_trace writer;
   Tracing.Trace.close trace;
   close_result
@@ -118,10 +119,11 @@ let write_trace_from_events
 
 let write_event_sexps writer decode_result =
   let { Decode_result.events; close_result } = decode_result in
-  Writer.write_line writer "(V1 (";
+  Writer.write_line writer "(V3 (";
   let%bind () =
-    Pipe.iter_without_pushback events ~f:(fun (event : Event.t) ->
-        Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event))
+    Deferred.List.iter events ~f:(fun events ->
+        Pipe.iter_without_pushback events ~f:(fun (event : Event.t) ->
+            Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
   in
   Writer.write_line writer "))";
   close_result
@@ -148,6 +150,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~trace_scope
       ~debug_print_perf_commands
       ~record_dir
+      ~collection_mode
       { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
@@ -161,6 +164,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             decode_opts
             ~debug_print_perf_commands
             ~record_dir
+            ~collection_mode
         in
         let%bind () = write_event_sexps writer decode_result in
         return ())
@@ -192,6 +196,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             decode_opts
             ~debug_print_perf_commands
             ~record_dir
+            ~collection_mode
         in
         let%bind () =
           write_trace_from_events
@@ -215,6 +220,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; executable : string
       ; trace_scope : Trace_scope.t
       ; timer_resolution : Timer_resolution.t
+      ; collection_mode : Collection_mode.t
       }
   end
 
@@ -227,7 +233,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
       }
   end
 
-  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pids =
+  let attach
+      (opts : Record_opts.t)
+      ~elf
+      ~debug_print_perf_commands
+      ~subcommand
+      ~collection_mode
+      pids
+    =
     Process_info.read_all_proc_info ();
     let head_pid = List.hd_exn pids in
     let%bind.Deferred.Or_error snap_loc =
@@ -241,6 +254,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
             match which_function with
             | Use_fzf_to_select_one ->
               let all_symbols = Elf.all_symbols elf in
+              let symbols = List.map all_symbols ~f:(fun (x, _) -> x) in
+              print_s [%message "" (symbols : string list)];
               if force supports_fzf
               then (
                 match%bind.Deferred.Or_error Fzf.pick_one (Assoc all_symbols) with
@@ -266,8 +281,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
         ~subcommand
         ~when_to_snapshot:opts.when_to_snapshot
         ~trace_scope:opts.trace_scope
+        ~multi_snapshot:opts.multi_snapshot
         ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir
+        ~collection_mode
         pids
     in
     let done_ivar = Ivar.create () in
@@ -340,11 +357,24 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return (Ok ())
   ;;
 
-  let run_and_record record_opts ~elf ~debug_print_perf_commands ~prog ~argv =
+  let run_and_record
+      record_opts
+      ~elf
+      ~debug_print_perf_commands
+      ~prog
+      ~argv
+      ~collection_mode
+    =
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
     let%bind attachment =
-      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Run [ pid ]
+      attach
+        record_opts
+        ~elf
+        ~debug_print_perf_commands
+        ~subcommand:Run
+        ~collection_mode
+        [ pid ]
     in
     Ptrace.resume pid;
     (* Forward ^C to the child, unless it has already exited. *)
@@ -377,9 +407,15 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return pid
   ;;
 
-  let attach_and_record record_opts ~elf ~debug_print_perf_commands pids =
+  let attach_and_record record_opts ~elf ~debug_print_perf_commands ~collection_mode pids =
     let%bind.Deferred.Or_error attachment =
-      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Attach pids
+      attach
+        record_opts
+        ~elf
+        ~debug_print_perf_commands
+        ~subcommand:Attach
+        ~collection_mode
+        pids
     in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
@@ -421,7 +457,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            files may crash the trace viewer."
     and trace_scope = Trace_scope.param
     and timer_resolution = Timer_resolution.param
-    and backend_opts = Backend.Record_opts.param in
+    and backend_opts = Backend.Record_opts.param
+    and collection_mode = Collection_mode.param in
     fun ~executable ~f ->
       let record_dir, cleanup =
         match record_dir with
@@ -443,6 +480,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; executable
             ; trace_scope
             ; timer_resolution
+            ; collection_mode
             })
   ;;
 
@@ -476,7 +514,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let%bind () = check_for_processor_trace_support () in
          let%bind () = check_for_perf () in
          let executable =
            match Shell.which prog with
@@ -487,7 +524,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
              let elf = Elf.create opts.executable in
              let%bind pid =
                let argv = prog :: List.concat (Option.to_list argv) in
-               run_and_record opts ~elf ~debug_print_perf_commands ~prog ~argv
+               run_and_record
+                 opts
+                 ~elf
+                 ~debug_print_perf_commands
+                 ~prog
+                 ~argv
+                 ~collection_mode:opts.collection_mode
              in
              let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
              decode_to_trace
@@ -496,6 +539,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                ~trace_scope:opts.trace_scope
                ~debug_print_perf_commands
                ~record_dir:opts.record_dir
+               ~collection_mode:opts.collection_mode
                decode_opts))
   ;;
 
@@ -566,7 +610,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let%bind () = check_for_processor_trace_support () in
          let%bind () = check_for_perf () in
          let%bind (pids : Pid.t list) =
            match pids with
@@ -583,10 +626,17 @@ module Make_commands (Backend : Backend_intf.S) = struct
              |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
            in
            record_opt_fn ~executable ~f:(fun opts ->
-               let { Record_opts.executable; when_to_snapshot; _ } = opts in
+               let { Record_opts.executable; when_to_snapshot; collection_mode; _ } =
+                 opts
+               in
                let%bind elf = create_elf ~executable ~when_to_snapshot in
                let%bind () =
-                 attach_and_record opts ~elf ~debug_print_perf_commands pids
+                 attach_and_record
+                   opts
+                   ~elf
+                   ~debug_print_perf_commands
+                   ~collection_mode
+                   pids
                in
                let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
                decode_to_trace
@@ -595,6 +645,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                  ~trace_scope:opts.trace_scope
                  ~debug_print_perf_commands
                  ~record_dir:opts.record_dir
+                 ~collection_mode
                  decode_opts)))
   ;;
 
@@ -614,6 +665,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            "-perf-map-file"
            (optional (Arg_type.comma_separated Filename_unix.arg_type))
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
+       and collection_mode = Collection_mode.param
        and debug_print_perf_commands = debug_print_perf_commands in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
@@ -631,6 +683,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            ~trace_scope
            ~debug_print_perf_commands
            ~record_dir
+           ~collection_mode
            decode_opts)
   ;;
 

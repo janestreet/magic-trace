@@ -62,8 +62,8 @@ end
 
 module Callstack = struct
   type t =
-    { stack : Symbol.t Stack.t
-    ; create_time : Mapped_time.t
+    { stack : Event.Location.t Stack.t
+    ; mutable create_time : Mapped_time.t
     }
   [@@deriving sexp_of]
 
@@ -72,6 +72,20 @@ module Callstack = struct
   let pop t = Stack.pop t.stack
   let top t = Stack.top t.stack
   let is_empty t = Stack.is_empty t.stack
+
+  let how_many_match { stack; create_time = _ } (future_callstack : Event.Location.t list)
+    =
+    let zipped_stacks, _ =
+      List.zip_with_remainder (Stack.to_list stack |> List.rev) future_callstack
+    in
+    let ans =
+      List.take_while zipped_stacks ~f:(fun (current_location, future_location) ->
+          Int64.(
+            current_location.instruction_pointer = future_location.instruction_pointer))
+      |> List.length
+    in
+    ans
+  ;;
 end
 
 module Thread_info = struct
@@ -516,12 +530,12 @@ let create_thread t event =
 let call t thread_info ~time ~location =
   let ev = Pending_event.create_call location ~from_untraced:false in
   add_event t thread_info time ev;
-  Callstack.push thread_info.callstack location.symbol
+  Callstack.push thread_info.callstack location
 ;;
 
 let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
-  | Some symbol -> add_event t thread_info time { symbol; kind = Ret }
+  | Some location -> add_event t thread_info time { symbol = location.symbol; kind = Ret }
   | None ->
     (* No known stackframe was popped --- could occur if the start of the snapshot
        started in the middle of a tracing region *)
@@ -594,14 +608,16 @@ end = struct
   ;;
 
   let current_stack_contains_known_gogo_destination (thread_info : _ Thread_info.t) =
-    Stack.find thread_info.callstack.stack ~f:is_known_gogo_destination |> Option.is_some
+    Stack.find thread_info.callstack.stack ~f:(fun location ->
+        is_known_gogo_destination location.symbol)
+    |> Option.is_some
   ;;
 
   let rec pop_until_gogo_destination t (thread_info : _ Thread_info.t) ~time =
     let ret = ret_without_checking_for_go_hacks in
     match Callstack.top thread_info.callstack with
     | None -> ()
-    | Some symbol ->
+    | Some location ->
       ret t thread_info ~time;
       (* Return one past the known gogo destination. This hack is necessary because:
 
@@ -613,7 +629,7 @@ end = struct
          This is a little janky because you see a stack frame momentarily end then start back
          up again on every [gogo]. I think that's a small price to pay to keep all the Go hacks
          in one place. *)
-      if is_known_gogo_destination symbol
+      if is_known_gogo_destination location.symbol
       then ret t thread_info ~time
       else pop_until_gogo_destination t thread_info ~time
   ;;
@@ -629,7 +645,9 @@ end = struct
 end
 
 let ret t (thread_info : _ Thread_info.t) ~time : unit =
-  let returned_from = Callstack.top thread_info.callstack in
+  let returned_from =
+    Callstack.top thread_info.callstack |> Option.map ~f:(fun location -> location.symbol)
+  in
   ret_without_checking_for_go_hacks t thread_info ~time;
   Go_hacks.ret_track_gogo t thread_info ~time ~returned_from
 ;;
@@ -645,7 +663,7 @@ let check_current_symbol
      with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
      known function, so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
-  | Some known when not ([%compare.equal: Symbol.t] known location.symbol) ->
+  | Some known when not ([%compare.equal: Symbol.t] known.symbol location.symbol) ->
     ret t thread_info ~time;
     call t thread_info ~time ~location
   | Some _ -> ()
@@ -659,7 +677,7 @@ let check_current_symbol
        time. *)
     let ev = Pending_event.create_call location ~from_untraced:true in
     write_pending_event t thread_info thread_info.callstack.create_time ev;
-    Callstack.push thread_info.callstack location.symbol
+    Callstack.push thread_info.callstack location
 ;;
 
 (* OCaml-specific hacks around tracking exception control flow. Supports two
@@ -709,7 +727,7 @@ end = struct
     | With_exception_info _ -> ()
     | Without_exception_info { frames_to_unwind } ->
       (match Callstack.top callstack with
-      | Some (From_perf symbol) ->
+      | Some { symbol = From_perf symbol; _ } ->
         (match symbol with
         | "caml_next_frame_descriptor" -> incr frames_to_unwind
         | "caml_raise_exn" -> unwind_stack t thread_info ~time ~frames_to_unwind (-2)
@@ -789,7 +807,7 @@ let assert_trace_scope t event trace_scopes =
           (event : Event.t)]
 ;;
 
-let end_of_trace (T t) =
+let end_of_trace ?to_time (T t) =
   (* CR-someday cgaebel: I wish this iteration had a defined order; it'd make magic-trace
      a little bit more deterministic. *)
   Hashtbl.iter t.thread_info ~f:(fun thread_info ->
@@ -797,7 +815,14 @@ let end_of_trace (T t) =
         t
         thread_info
         ~time:thread_info.last_event_time
-        ~is_kernel_address:false)
+        ~is_kernel_address:false;
+      match to_time with
+      | Some time ->
+        let mapped_time = map_time t time in
+        thread_info.pending_time <- mapped_time;
+        thread_info.last_event_time <- mapped_time;
+        thread_info.callstack.create_time <- mapped_time
+      | None -> ())
 ;;
 
 (* Write perf_events into a file as a Fuschia trace (stack events). Events should be
@@ -821,24 +846,34 @@ let write_event (T t) event =
       | Some ip -> is_kernel_address ip
     in
     end_of_thread t thread_info ~time ~is_kernel_address
-  | Ok (Power { thread = _; time = _; freq }) ->
+  | Ok
+      { Event.Ok.thread = _ (* Already used this to look up thread info. *)
+      ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
+      ; data = Power { freq }
+      } ->
     write_counter
       t
       ~thread
       ~name:"CPU"
       ~time
       ~args:Tracing.Trace.Arg.[ "freq (MHz)", Int freq ]
-  | Ok (Trace event) ->
-    let { Event.Ok.Trace.thread = _ (* Already used this to look up thread info. *)
-        ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
-        ; kind
-        ; trace_state_change
-        ; src
-        ; dst
-        }
-      =
-      event
+  | Ok
+      { Event.Ok.thread = _ (* Already used this to look up thread info. *)
+      ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
+      ; data = Sample { callstack }
+      } ->
+    let how_many_ret =
+      Stack.length thread_info.callstack.stack
+      - Callstack.how_many_match thread_info.callstack callstack
     in
+    List.init how_many_ret ~f:Fn.id |> List.iter ~f:(fun _ -> ret t thread_info ~time);
+    let calls = List.drop callstack (Stack.length thread_info.callstack.stack) in
+    List.iter calls ~f:(fun location -> call t thread_info ~time ~location)
+  | Ok
+      { Event.Ok.thread = _ (* Already used this to look up thread info. *)
+      ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
+      ; data = Trace { kind; trace_state_change; src; dst }
+      } ->
     Ocaml_hacks.track_executed_pushtraps_and_poptraps_in_range
       t
       thread_info
@@ -855,7 +890,7 @@ let write_event (T t) event =
           "BUG: magic-trace devs thought this event was impossible, but you just proved \
            them wrong. Please report this to \
            https://github.com/janestreet/magic-trace/issues/"
-            (event : Event.Ok.Trace.t)]
+            (event : Event.t)]
     | None, Some End -> call t thread_info ~time ~location:Event.Location.untraced
     | Some Syscall, Some End ->
       (* We should only be getting these under /u *)
