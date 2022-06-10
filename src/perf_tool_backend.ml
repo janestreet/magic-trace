@@ -12,6 +12,7 @@ module Record_opts = struct
     { multi_thread : bool
     ; full_execution : bool
     ; snapshot_size : Pow2_pages.t option
+    ; callgraph_mode : Callgraph_mode.t option
     }
 
   let param =
@@ -37,10 +38,11 @@ module Record_opts = struct
         "-snapshot-size"
         ~doc:
           " Tunes the amount of data captured in a trace. Default: 4M if root or \
-           perf_event_paranoid < 0, 256K otherwise. For more info visit \
+           perf_event_paranoid < 0, 256K otherwise. When running with sampling,  \
+           defaults to 512K, but cannot be changed. For more info: \
            https://magic-trace.org/w/s"
-    in
-    { multi_thread; full_execution; snapshot_size }
+    and callgraph_mode = Callgraph_mode.param in
+    { multi_thread; full_execution; snapshot_size; callgraph_mode }
   ;;
 end
 
@@ -63,6 +65,12 @@ let perf_fork_exec ?env ~prog ~argv () =
   | `In_the_parent pid -> pid
 ;;
 
+let max_sampling_frequency () =
+  In_channel.read_all "/proc/sys/kernel/perf_event_max_sample_rate"
+  |> String.rstrip (* Strip off newline *)
+  |> Int.of_string
+;;
+
 module Recording = struct
   type t =
     { pid : Pid.t
@@ -75,10 +83,16 @@ module Recording = struct
     | Userspace_and_kernel -> "uk"
   ;;
 
-  let perf_intel_pt_config_of_timer_resolution : Timer_resolution.t -> string = function
-    | Low -> ""
-    | Normal -> "cyc=1,cyc_thresh=1,mtc_period=0"
-    | High -> "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
+  let perf_intel_pt_config_of_timer_resolution
+      : Timer_resolution.t -> string Deferred.Or_error.t
+    = function
+    | Low -> Deferred.Or_error.return ""
+    | Normal -> Deferred.Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0"
+    | High -> Deferred.Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
+    | Sample _ ->
+      Deferred.Or_error.error_string
+        "[-timer-resolution Sample] can only be used in sampling mode. (Did you forget \
+         [-sampling]?)"
     | Custom { cyc; cyc_thresh; mtc; mtc_period; noretcomp; psb_period } ->
       let make_config key = function
         | None -> None
@@ -93,18 +107,33 @@ module Recording = struct
       ]
       |> List.filter_opt
       |> String.concat ~sep:","
+      |> Deferred.Or_error.return
+  ;;
+
+  let init_record_dir record_dir =
+    Core_unix.mkdir_p record_dir;
+    Sys.readdir record_dir
+    |> Deferred.bind
+         ~f:
+           (Deferred.Array.iter ~f:(fun file ->
+                if String.is_prefix file ~prefix:"perf.data"
+                then Sys.remove (record_dir ^/ file)
+                else Deferred.return ()))
   ;;
 
   let attach_and_record
-      { Record_opts.multi_thread; full_execution; snapshot_size }
+      { Record_opts.multi_thread; full_execution; snapshot_size; callgraph_mode }
       ~debug_print_perf_commands
       ~(subcommand : Subcommand.t)
       ~(when_to_snapshot : When_to_snapshot.t)
       ~(trace_scope : Trace_scope.t)
+      ~multi_snapshot
       ~(timer_resolution : Timer_resolution.t)
       ~record_dir
+      ~(collection_mode : Collection_mode.t)
       pids
     =
+    let%bind () = init_record_dir record_dir in
     let%bind capabilities = Perf_capabilities.detect_exn () in
     let%bind.Deferred.Or_error () =
       match trace_scope, Perf_capabilities.(do_intersect capabilities kernel_tracing) with
@@ -138,23 +167,76 @@ module Recording = struct
       | true -> [ "-p" ]
     in
     let pid_opt = [ List.map pids ~f:Pid.to_string |> String.concat ~sep:"," ] in
-    let ev_arg =
-      let timer_resolution : Timer_resolution.t =
-        match
-          ( timer_resolution
-          , Perf_capabilities.(do_intersect capabilities configurable_psb_period) )
-        with
-        | (Normal | High), false ->
-          Core.eprintf
-            "Warning: This machine has an older generation processor, timing granularity \
-             will be ~1us instead of ~10ns. Consider using a newer machine.\n\
-             %!";
-          Low
-        | _, _ -> timer_resolution
-      in
-      let intel_pt_config = perf_intel_pt_config_of_timer_resolution timer_resolution in
+    let%bind.Deferred.Or_error freq_opts =
+      let open Deferred.Or_error in
+      match collection_mode with
+      | Intel_processor_trace -> return []
+      | Stacktrace_sampling ->
+        (match timer_resolution with
+        | Low -> return [ "-F"; "1000" ]
+        | Normal -> return [ "-F"; "10000" ]
+        | High -> return [ "-F"; Int.to_string (max_sampling_frequency ()) ]
+        | Sample { freq } -> return [ "-F"; Int.to_string freq ]
+        | Custom _ ->
+          error_string
+            "[-timer-resolution Custom] can only be used with Intel PT. (Are you running \
+             on a physical Intel machine without [-sampling]?)")
+    in
+    let%bind.Deferred.Or_error callgraph_opts =
+      let open Deferred.Or_error.Let_syntax in
+      match collection_mode with
+      | Intel_processor_trace ->
+        (match callgraph_mode with
+        | None -> return []
+        | Some _ ->
+          Deferred.Or_error.error_string
+            "[-callgraph-mode] is only configurable when running magic-trace with \
+             sampling.")
+      | Stacktrace_sampling ->
+        let%map mode =
+          match
+            ( callgraph_mode
+            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
+          with
+          (* We choose to default to dwarf if lbr is not available. This is
+             because dwarf will work on any setup, while frame pointers requires
+             compilation with [-fno-omit-frame-pointers]. Although decoding is
+             slow and perf.data file sizes are larger. *)
+          | None, false -> return Callgraph_mode.Dwarf
+          | None, true -> return Callgraph_mode.Last_branch_record
+          | Some Last_branch_record, false ->
+            Deferred.Or_error.error_string
+              "[-callgraph-mode Last_branch_record] is only supported on an Intel \
+               machine which supports LBR. Try passing [Frame_pointers] or [Dwarf] \
+               instead."
+          | Some mode, false -> return mode
+          | Some mode, true -> return mode
+        in
+        [ "--call-graph"; Callgraph_mode.to_perf_string mode ]
+    in
+    let%bind.Deferred.Or_error ev_arg =
       let selector = perf_selector_of_trace_scope trace_scope in
-      [%string "--event=intel_pt/%{intel_pt_config}/%{selector}"]
+      match collection_mode with
+      | Intel_processor_trace ->
+        let timer_resolution : Timer_resolution.t =
+          match
+            ( timer_resolution
+            , Perf_capabilities.(do_intersect capabilities configurable_psb_period) )
+          with
+          | (Normal | High), false ->
+            Core.eprintf
+              "Warning: This machine has an older generation processor, timing \
+               granularity will be ~1us instead of ~10ns. Consider using a newer machine.\n\
+               %!";
+            Low
+          | _, _ -> timer_resolution
+        in
+        let%map.Deferred.Or_error intel_pt_config =
+          perf_intel_pt_config_of_timer_resolution timer_resolution
+        in
+        [%string "--event=intel_pt/%{intel_pt_config}/%{selector}"]
+      | Stacktrace_sampling ->
+        Deferred.Or_error.return [%string "--event=cycles:%{selector}"]
     in
     let kcore_opts =
       match trace_scope, Perf_capabilities.(do_intersect capabilities kcore) with
@@ -175,9 +257,14 @@ module Recording = struct
         []
     in
     let snapshot_size_opt =
-      match snapshot_size with
-      | None -> []
-      | Some snapshot_size -> [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
+      match snapshot_size, collection_mode with
+      | Some snapshot_size, Intel_processor_trace ->
+        [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
+      | Some _, Stacktrace_sampling ->
+        Core.eprintf
+          "Warning: -snapshot-size is ignored when not running with Intel PT.\n";
+        []
+      | None, Intel_processor_trace | None, Stacktrace_sampling -> []
     in
     let when_to_snapshot =
       if full_execution
@@ -189,19 +276,36 @@ module Recording = struct
         | Application_calls_a_function _ -> `function_call)
     in
     let snapshot_opt =
-      match when_to_snapshot with
-      | `never -> []
-      | `at_exit `sigint -> [ "--snapshot=e" ]
-      | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ]
+      match collection_mode with
+      | Stacktrace_sampling -> []
+      | Intel_processor_trace ->
+        (match when_to_snapshot with
+        | `never -> []
+        | `at_exit `sigint -> [ "--snapshot=e" ]
+        | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ])
+    in
+    let overwrite_opts =
+      match collection_mode, full_execution with
+      | Stacktrace_sampling, false -> [ "--overwrite" ]
+      | Stacktrace_sampling, true | Intel_processor_trace, _ -> []
+    in
+    let switch_opts =
+      match multi_snapshot with
+      | true -> [ "--switch-output=signal" ]
+      | false -> []
     in
     let argv =
       List.concat
         [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
+        ; overwrite_opts
+        ; switch_opts
         ; thread_opts
         ; pid_opt
         ; snapshot_opt
         ; kcore_opts
         ; snapshot_size_opt
+        ; callgraph_opts
+        ; freq_opts
         ]
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
@@ -266,40 +370,64 @@ module Decode_opts = struct
   let param = Command.Param.return ()
 end
 
-let report_itraces = "bep"
-let report_fields = "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso"
-
-let decode_events ?perf_maps ~debug_print_perf_commands ~record_dir () =
-  let args =
-    [ "script"
-    ; "-i"
-    ; record_dir ^/ "perf.data"
-    ; "--ns"
-    ; [%string "--itrace=%{report_itraces}"]
-    ; "-F"
-    ; report_fields
-    ]
+let decode_events
+    ?perf_maps
+    ~debug_print_perf_commands
+    ~record_dir
+    ~(collection_mode : Collection_mode.t)
+    ()
+  =
+  let%bind files =
+    Sys.readdir record_dir
+    >>| Array.to_list
+    >>| List.filter ~f:(String.is_prefix ~prefix:"perf.data")
   in
-  if debug_print_perf_commands
-  then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
-  (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
-     the [perf script] process from outliving the parent. *)
-  let%bind perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
-  let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
-  don't_wait_for
-    (Reader.transfer
-       (Process.stderr perf_script_proc)
-       (Writer.pipe (force Writer.stderr)));
-  let events =
-    (* Every route of filtering on streams in an async way seems to be deprecated,
-       including converting to pipes which says that the stream creation should be
-       switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
-       can't see a reason why filter_map would lead to memory leaks. *)
-    Pipe.map line_pipe ~f:(Perf_decode.to_event ?perf_maps) |> Pipe.filter_map ~f:Fn.id
+  let%map result =
+    Deferred.List.map files ~f:(fun perf_data_file ->
+        let itrace_opts =
+          match collection_mode with
+          | Intel_processor_trace -> [ "--itrace=bep" ]
+          | Stacktrace_sampling -> []
+        in
+        let fields_opts =
+          match collection_mode with
+          | Intel_processor_trace ->
+            [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso" ]
+          | Stacktrace_sampling -> [ "-F"; "pid,tid,time,ip,sym,symoff,dso" ]
+        in
+        let args =
+          List.concat
+            [ [ "script"; "-i"; record_dir ^/ perf_data_file; "--ns" ]
+            ; itrace_opts
+            ; fields_opts
+            ]
+        in
+        if debug_print_perf_commands
+        then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
+        (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
+      the [perf script] process from outliving the parent. *)
+        let%map perf_script_proc =
+          Process.create_exn ~env:perf_env ~prog:"perf" ~args ()
+        in
+        let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
+        don't_wait_for
+          (Reader.transfer
+             (Process.stderr perf_script_proc)
+             (Writer.pipe (force Writer.stderr)));
+        let events = Perf_decode.to_events ?perf_maps line_pipe in
+        let close_result =
+          let%map exit_or_signal = Process.wait perf_script_proc in
+          perf_exit_to_or_error exit_or_signal
+        in
+        events, close_result)
   in
+  let events = List.map result ~f:(fun (events, _close_result) -> events) in
+  (* Force [close_result] to wait on [Pipe.t]s in order. *)
   let close_result =
-    let%map exit_or_signal = Process.wait perf_script_proc in
-    perf_exit_to_or_error exit_or_signal
+    List.map result ~f:(fun (_events, close_result) -> close_result)
+    |> Deferred.List.fold ~init:(Ok ()) ~f:(fun acc close_result ->
+           let%bind.Deferred.Or_error () = close_result in
+           Deferred.return acc)
   in
-  Ok { Decode_result.events; close_result } |> Deferred.return
+  Ok { Decode_result.events; close_result }
 ;;

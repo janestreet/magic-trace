@@ -1,7 +1,8 @@
 open! Core
+open! Async
 
 let%expect_test "C hello world, userspace only, gcc" =
-  Perf_script.run ~trace_scope:Userspace "hello_world_userspace.perf";
+  let%map () = Perf_script.run ~trace_scope:Userspace "hello_world_userspace.perf" in
   [%expect
     {|
     30549/30549 174427.938460376:   tr strt                             0 [unknown] ([unknown]) =>     7ffff7ddc140 _start+0x0 (/usr/lib64/ld-2.17.so)

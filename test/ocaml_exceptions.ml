@@ -1,4 +1,5 @@
 open! Core
+open! Async
 
 (* Generated as per this program:
 
@@ -31,7 +32,9 @@ let%expect_test "A raise_notrace OCaml exception" =
       ~pushtraps:[| 0x41100bL |]
       ~poptraps:[| 0x411026L |]
   in
-  Perf_script.run ~ocaml_exception_info ~trace_scope:Userspace "ocaml_exceptions.perf";
+  let%map () =
+    Perf_script.run ~ocaml_exception_info ~trace_scope:Userspace "ocaml_exceptions.perf"
+  in
   [%expect
     {|
     23860/23860 426567.068172167:   call                           411021 camlRaise_test__entry+0x71 (foo.so) =>           410f70 camlRaise_test__raise_after_265+0x0 (foo.so)

@@ -1,4 +1,5 @@
 open! Core
+open! Async
 open! Import
 
 let saturating_sub_i64 a b =
@@ -42,13 +43,20 @@ let%test_module _ =
   end)
 ;;
 
+let ok_perf_sample_line_re =
+  Re.Perl.re {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): *$|} |> Re.compile
+;;
+
+let ok_perf_sample_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
+
 let ok_perf_line_re =
   Re.Perl.re
     {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
-(* This matches exactly the power events which contain either [cbr] or [psb offs]. *)
+(* This matches exactly the power events which contain either [cbr] or [psb
+   offs]. *)
 let ok_perf_power_line_re =
   Re.Perl.re
     {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z]*)? +(cbr|psb offs): ([0-9]+ freq: ([0-9]+) MHz)?(.*)$|}
@@ -67,14 +75,19 @@ let unknown_symbol_dso_re = Re.Perl.re {|^\[unknown\]\s+\((.*)\)|} |> Re.compile
 type classification =
   | Trace_error
   | Ok_perf_line
+  | Ok_perf_sample_line
   | Ok_perf_power_line
 
 let classify line =
+  (* CR-someday alamoreaux: [perf script] outputs an 'event' field which would
+     avoid running this extra regex. *)
   if String.is_prefix line ~prefix:" instruction trace error"
   then Re.Group.all (Re.exec trace_error_re line), Trace_error
   else (
     try Re.Group.all (Re.exec ok_perf_line_re line), Ok_perf_line with
-    | _ -> Re.Group.all (Re.exec ok_perf_power_line_re line), Ok_perf_power_line)
+    | _ ->
+      (try Re.Group.all (Re.exec ok_perf_power_line_re line), Ok_perf_power_line with
+      | _ -> Re.Group.all (Re.exec ok_perf_sample_line_re line), Ok_perf_sample_line))
 ;;
 
 let parse_time ~time_hi ~time_lo =
@@ -89,6 +102,29 @@ let parse_time ~time_hi ~time_lo =
   in
   let time_hi = Int.of_string time_hi in
   time_lo + (time_hi * 1_000_000_000) |> Time_ns.Span.of_int_ns
+;;
+
+let parse_symbol_and_offset ?perf_maps pid str ~addr =
+  match Re.Group.all (Re.exec symbol_and_offset_re str) with
+  | [| _; symbol; offset |] -> Symbol.From_perf symbol, Int.Hex.of_string offset
+  | _ | (exception _) ->
+    let failed = Symbol.Unknown, 0 in
+    (match perf_maps, pid with
+    | None, _ | _, None ->
+      (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
+      | [| _; dso |] ->
+        (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
+           from [offset] here. *)
+        Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
+      | _ | (exception _) -> failed)
+    | Some perf_map, Some pid ->
+      (match Perf_map.Table.symbol ~pid perf_map ~addr with
+      | None -> failed
+      | Some location ->
+        (* It's strange that perf isn't resolving these symbols. It says on the
+           tin that it supports perf map files! *)
+        let offset = saturating_sub_i64 addr location.start_addr in
+        From_perf_map location, offset))
 ;;
 
 let maybe_pid_of_string = function
@@ -125,7 +161,7 @@ let ok_perf_power_line_to_event matches : Event.Ok.t option =
     (match kind with
     | "cbr" ->
       (* cbr (core-to-bus ratio) are events which show frequency changes. *)
-      Some (Power { thread = { pid; tid }; time; freq = Int.of_string freq })
+      Some { thread = { pid; tid }; time; data = Power { freq = Int.of_string freq } }
     | "psb offs" ->
       (* Ignore psb (packet stream boundary) packets *)
       None
@@ -134,6 +170,38 @@ let ok_perf_power_line_to_event matches : Event.Ok.t option =
     raise_s
       [%message
         "Regex of perf power event did not match expected fields" (results : string array)]
+;;
+
+let ok_perf_sample_line_to_event ?perf_maps matches lines : Event.Ok.t =
+  match matches with
+  | [| _; pid; tid; time_hi; time_lo |] ->
+    let pid = maybe_pid_of_string pid in
+    let tid = maybe_pid_of_string tid in
+    let time = parse_time ~time_hi ~time_lo in
+    let callstack =
+      List.map lines ~f:(fun line ->
+          match Re.Group.all (Re.exec ok_perf_sample_callstack_entry_re line) with
+          | [| _; instruction_pointer; symbol_and_offset |] ->
+            let instruction_pointer = int64_of_hex_string instruction_pointer in
+            let symbol, symbol_offset =
+              parse_symbol_and_offset
+                ?perf_maps
+                pid
+                symbol_and_offset
+                ~addr:instruction_pointer
+            in
+            { Event.Location.instruction_pointer; symbol; symbol_offset }
+          | results ->
+            raise_s
+              [%message
+                "Perf output did not match expected regex when parsing callstack entry."
+                  (results : string array)])
+    in
+    let callstack = List.rev callstack in
+    { thread = { pid; tid }; time; data = Sample { callstack } }
+  | results ->
+    raise_s
+      [%message "Perf output did not match expected regex." (results : string array)]
 ;;
 
 let ok_perf_line_to_event ?perf_maps matches line : Event.Ok.t =
@@ -149,38 +217,24 @@ let ok_perf_line_to_event ?perf_maps matches line : Event.Ok.t =
      ; dst_instruction_pointer
      ; dst_symbol_and_offset
     |] ->
-    let pid = Int.of_string pid in
-    let tid = Int.of_string tid in
+    let pid = maybe_pid_of_string pid in
+    let tid = maybe_pid_of_string tid in
     let time = parse_time ~time_hi ~time_lo in
     let src_instruction_pointer = int64_of_hex_string src_instruction_pointer in
     let dst_instruction_pointer = int64_of_hex_string dst_instruction_pointer in
-    let parse_symbol_and_offset str ~addr =
-      match Re.Group.all (Re.exec symbol_and_offset_re str) with
-      | [| _; symbol; offset |] -> Symbol.From_perf symbol, Int.Hex.of_string offset
-      | _ | (exception _) ->
-        let failed = Symbol.Unknown, 0 in
-        (match perf_maps with
-        | None ->
-          (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
-          | [| _; dso |] ->
-            (* CR-someday tbrindus: ideally, we would subtract the DSO base
-               offset from [offset] here. *)
-            Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
-          | _ | (exception _) -> failed)
-        | Some perf_map ->
-          (match Perf_map.Table.symbol ~pid:(Pid.of_int pid) perf_map ~addr with
-          | None -> failed
-          | Some location ->
-            (* It's strange that perf isn't resolving these symbols. It says on
-               the tin that it supports perf map files! *)
-            let offset = saturating_sub_i64 addr location.start_addr in
-            From_perf_map location, offset))
-    in
     let src_symbol, src_symbol_offset =
-      parse_symbol_and_offset src_symbol_and_offset ~addr:src_instruction_pointer
+      parse_symbol_and_offset
+        ?perf_maps
+        pid
+        src_symbol_and_offset
+        ~addr:src_instruction_pointer
     in
     let dst_symbol, dst_symbol_offset =
-      parse_symbol_and_offset dst_symbol_and_offset ~addr:dst_instruction_pointer
+      parse_symbol_and_offset
+        ?perf_maps
+        pid
+        dst_symbol_and_offset
+        ~addr:dst_instruction_pointer
     in
     let starts_trace, kind =
       match String.chop_prefix kind ~prefix:"tr strt" with
@@ -218,37 +272,42 @@ let ok_perf_line_to_event ?perf_maps matches line : Event.Ok.t =
         printf "Warning: skipping unrecognized perf output: %s\n%!" line;
         None
     in
-    Trace
-      { thread =
-          { pid = (if pid = 0 then None else Some (Pid.of_int pid))
-          ; tid = (if tid = 0 then None else Some (Pid.of_int tid))
+    { thread = { pid; tid }
+    ; time
+    ; data =
+        Trace
+          { trace_state_change
+          ; kind
+          ; src =
+              { instruction_pointer = src_instruction_pointer
+              ; symbol = src_symbol
+              ; symbol_offset = src_symbol_offset
+              }
+          ; dst =
+              { instruction_pointer = dst_instruction_pointer
+              ; symbol = dst_symbol
+              ; symbol_offset = dst_symbol_offset
+              }
           }
-      ; time
-      ; trace_state_change
-      ; kind
-      ; src =
-          { instruction_pointer = src_instruction_pointer
-          ; symbol = src_symbol
-          ; symbol_offset = src_symbol_offset
-          }
-      ; dst =
-          { instruction_pointer = dst_instruction_pointer
-          ; symbol = dst_symbol
-          ; symbol_offset = dst_symbol_offset
-          }
-      }
+    }
   | results ->
     raise_s
       [%message "Regex of expected perf output did not match." (results : string array)]
 ;;
 
-let to_event ?perf_maps line : Event.t option =
+let to_event ?perf_maps lines : Event.t option =
   try
-    match classify line with
-    | matches, Trace_error -> Some (Error (trace_error_to_event matches))
-    | matches, Ok_perf_line -> Some (Ok (ok_perf_line_to_event matches ?perf_maps line))
-    | matches, Ok_perf_power_line ->
-      ok_perf_power_line_to_event matches |> Option.map ~f:(fun event -> Ok event)
+    match lines with
+    | first_line :: lines ->
+      (match classify first_line with
+      | matches, Trace_error -> Some (Error (trace_error_to_event matches))
+      | matches, Ok_perf_line ->
+        Some (Ok (ok_perf_line_to_event ?perf_maps matches first_line))
+      | matches, Ok_perf_sample_line ->
+        Some (Ok (ok_perf_sample_line_to_event ?perf_maps matches lines))
+      | matches, Ok_perf_power_line ->
+        ok_perf_power_line_to_event matches |> Option.map ~f:(fun event -> Ok event))
+    | [] -> raise_s [%message "Unexpected line while parsing perf output."]
   with
   | exn ->
     raise_s
@@ -256,14 +315,51 @@ let to_event ?perf_maps line : Event.t option =
         "BUG: exception raised while parsing perf output. Please report this to \
          https://github.com/janestreet/magic-trace/issues/"
           (exn : exn)
-          ~perf_output:(line : string)]
+          ~perf_output:(lines : string list)]
+;;
+
+let split_line_pipe pipe : string list Pipe.Reader.t =
+  let reader, writer = Pipe.create () in
+  don't_wait_for
+    (let%bind acc =
+       Pipe.fold pipe ~init:[] ~f:(fun acc line ->
+           let should_acc = not String.(line = "") in
+           let should_write =
+             String.(line = "") || not (Char.equal (String.get line 0) '\t')
+           in
+           let%map () =
+             if List.length acc > 0 && should_write
+             then Pipe.write writer (List.rev acc)
+             else Deferred.return ()
+           in
+           let prev_acc = if should_write then [] else acc in
+           if should_acc then line :: prev_acc else prev_acc)
+     in
+     let%map () =
+       if List.length acc > 0
+       then Pipe.write writer (List.rev acc)
+       else Deferred.return ()
+     in
+     Pipe.close writer);
+  reader
+;;
+
+let to_events ?perf_maps pipe =
+  let pipe = split_line_pipe pipe in
+  (* Every route of filtering on streams in an async way seems to be deprecated,
+     including converting to pipes which says that the stream creation should be
+     switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
+     can't see a reason why filter_map would lead to memory leaks. *)
+  Pipe.map pipe ~f:(to_event ?perf_maps) |> Pipe.filter_map ~f:Fn.id
 ;;
 
 let%test_module _ =
   (module struct
     open Core
 
-    let check s = to_event s |> [%sexp_of: Event.t option] |> print_s
+    let check s =
+      to_event (String.split ~on:'\n' s) |> [%sexp_of: Event.t option] |> print_s
+    ;;
 
     let%expect_test "C symbol" =
       check
@@ -271,15 +367,15 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x7f6fce0b71f4)
-                (symbol (From_perf __clock_gettime)) (symbol_offset 0x24)))
-              (dst
-               ((instruction_pointer 0x7ffd193838e0)
-                (symbol (From_perf __vdso_clock_gettime)) (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x7f6fce0b71f4)
+                 (symbol (From_perf __clock_gettime)) (symbol_offset 0x24)))
+               (dst
+                ((instruction_pointer 0x7ffd193838e0)
+                 (symbol (From_perf __vdso_clock_gettime)) (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "C symbol trace start" =
@@ -287,16 +383,16 @@ let%test_module _ =
         {| 25375/25375 4509191.343298468:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
       [%expect
         {|
-          ((Ok
-            (Trace
-             ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
-              (trace_state_change Start)
-              (src
-               ((instruction_pointer 0x0)
-                (symbol (From_perf "[unknown @ 0x0 (foo.so)]")) (symbol_offset 0x0)))
-              (dst
-               ((instruction_pointer 0x7f6fce0b71d0)
-                (symbol (From_perf __clock_gettime)) (symbol_offset 0x0))))))) |}]
+        ((Ok
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (data
+            (Trace (trace_state_change Start)
+             (src
+              ((instruction_pointer 0x0)
+               (symbol (From_perf "[unknown @ 0x0 (foo.so)]")) (symbol_offset 0x0)))
+             (dst
+              ((instruction_pointer 0x7f6fce0b71d0)
+               (symbol (From_perf __clock_gettime)) (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "C++ symbol" =
@@ -305,17 +401,17 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x9bc6db)
-                (symbol
-                 (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
-                (symbol_offset 0x1eb)))
-              (dst
-               ((instruction_pointer 0x9f68b0)
-                (symbol (From_perf "J::K<int, std::string>")) (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x9bc6db)
+                 (symbol
+                  (From_perf "a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run"))
+                 (symbol_offset 0x1eb)))
+               (dst
+                ((instruction_pointer 0x9f68b0)
+                 (symbol (From_perf "J::K<int, std::string>")) (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "OCaml symbol" =
@@ -324,15 +420,15 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b)
-                (symbol (From_perf Base.Comparable.=_2352)) (symbol_offset 0xb)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-                (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x56234f77576b)
+                 (symbol (From_perf Base.Comparable.=_2352)) (symbol_offset 0xb)))
+               (dst
+                ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                 (symbol_offset 0x0)))))))) |}]
     ;;
 
     (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
@@ -353,15 +449,15 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
-                (symbol_offset 0xb)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-                (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+                 (symbol_offset 0xb)))
+               (dst
+                ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                 (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "manufactured example 2" =
@@ -370,15 +466,15 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
-                (symbol_offset 0xb)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf "=> "))
-                (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x56234f77576b) (symbol (From_perf "x => "))
+                 (symbol_offset 0xb)))
+               (dst
+                ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf "=> "))
+                 (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "manufactured example 3" =
@@ -387,15 +483,15 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
-                (symbol_offset 0xb)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-                (symbol_offset 0x0))))))) |}]
+            ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+             (data
+              (Trace (kind Call)
+               (src
+                ((instruction_pointer 0x56234f77576b) (symbol (From_perf "+ "))
+                 (symbol_offset 0xb)))
+               (dst
+                ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+                 (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "unknown symbol in DSO" =
@@ -403,17 +499,17 @@ let%test_module _ =
         {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
       [%expect
         {|
-          ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b)
-                (symbol (From_perf "[unknown @ 0x56234f77576b (foo.so)]"))
-                (symbol_offset 0x0)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-                (symbol_offset 0x0))))))) |}]
+        ((Ok
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (data
+            (Trace (kind Call)
+             (src
+              ((instruction_pointer 0x56234f77576b)
+               (symbol (From_perf "[unknown @ 0x56234f77576b (foo.so)]"))
+               (symbol_offset 0x0)))
+             (dst
+              ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+               (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "DSO with spaces in it" =
@@ -421,18 +517,18 @@ let%test_module _ =
         {|2017001/2017001 761439.053336670:   call                     56234f77576b [unknown] (this is a spaced dso.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
       [%expect
         {|
-          ((Ok
-            (Trace
-             ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
-              (kind Call)
-              (src
-               ((instruction_pointer 0x56234f77576b)
-                (symbol
-                 (From_perf "[unknown @ 0x56234f77576b (this is a spaced dso.so)]"))
-                (symbol_offset 0x0)))
-              (dst
-               ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
-                (symbol_offset 0x0))))))) |}]
+        ((Ok
+          ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
+           (data
+            (Trace (kind Call)
+             (src
+              ((instruction_pointer 0x56234f77576b)
+               (symbol
+                (From_perf "[unknown @ 0x56234f77576b (this is a spaced dso.so)]"))
+               (symbol_offset 0x0)))
+             (dst
+              ((instruction_pointer 0x56234f4bc7a0) (symbol (From_perf caml_apply2))
+               (symbol_offset 0x0)))))))) |}]
     ;;
 
     let%expect_test "decode error with a timestamp" =
@@ -488,9 +584,8 @@ let%test_module _ =
       [%expect
         {|
           ((Ok
-            (Power
-             ((thread ((pid (2937048)) (tid (2937048)))) (time 5d4h35m56.689322817s)
-              (freq 4606))))) |}]
+            ((thread ((pid (2937048)) (tid (2937048)))) (time 5d4h35m56.689322817s)
+             (data (Power (freq 4606)))))) |}]
     ;;
 
     (* Expected [None] because we ignore these events currently. *)
@@ -499,7 +594,71 @@ let%test_module _ =
         "2937048/2937048 448556.689403475:                        psb offs: \
          0x4be8                                0     7f068fbfd330 mmap64+0x50 \
          (/usr/lib64/ld-2.28.so)";
-      [%expect {| () |}]
+      [%expect {|
+        () |}]
+    ;;
+
+    let%expect_test "sampled callstack" =
+      check
+        "2060126/2060126 178090.391624068: \n\
+         \tffffffff97201100 [unknown] ([unknown])\n\
+         \t7f9bd48c1d80 _dl_setup_hash+0x0 (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd48bd18f _dl_map_object_from_fd+0xb8f (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd48bf6b0 _dl_map_object+0x1e0 (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd48ca184 dl_open_worker_begin+0xa4 (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+         \t7f9bd48c9ac2 dl_open_worker+0x32 (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+         \t7f9bd48c9d0c _dl_open+0xac (/usr/lib64/ld-2.28.so)\n\
+         \t7f9bd46ae1e8 dlopen_doit+0x58 (/usr/lib64/libdl-2.28.so)\n\
+         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+         \t7f9bd445225e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
+         \t7f9bd46ae964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
+         \t7f9bd46ae285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so)\n\
+         \t4008de main+0x87 (/home/alamoreaux/Documents/demo)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (2060126)) (tid (2060126)))) (time 2d1h28m10.391624068s)
+           (data
+            (Sample
+             (callstack
+              (((instruction_pointer 0x4008de) (symbol (From_perf main))
+                (symbol_offset 0x87))
+               ((instruction_pointer 0x7f9bd46ae285)
+                (symbol (From_perf dlopen@@GLIBC_2.2.5)) (symbol_offset 0x45))
+               ((instruction_pointer 0x7f9bd46ae964)
+                (symbol (From_perf _dlerror_run)) (symbol_offset 0x64))
+               ((instruction_pointer 0x7f9bd445225e)
+                (symbol (From_perf _dl_catch_error)) (symbol_offset 0x2e))
+               ((instruction_pointer 0x7f9bd44521a2)
+                (symbol (From_perf _dl_catch_exception)) (symbol_offset 0x82))
+               ((instruction_pointer 0x7f9bd46ae1e8) (symbol (From_perf dlopen_doit))
+                (symbol_offset 0x58))
+               ((instruction_pointer 0x7f9bd48c9d0c) (symbol (From_perf _dl_open))
+                (symbol_offset 0xac))
+               ((instruction_pointer 0x7f9bd44521a2)
+                (symbol (From_perf _dl_catch_exception)) (symbol_offset 0x82))
+               ((instruction_pointer 0x7f9bd48c9ac2)
+                (symbol (From_perf dl_open_worker)) (symbol_offset 0x32))
+               ((instruction_pointer 0x7f9bd44521a2)
+                (symbol (From_perf _dl_catch_exception)) (symbol_offset 0x82))
+               ((instruction_pointer 0x7f9bd48ca184)
+                (symbol (From_perf dl_open_worker_begin)) (symbol_offset 0xa4))
+               ((instruction_pointer 0x7f9bd48bf6b0)
+                (symbol (From_perf _dl_map_object)) (symbol_offset 0x1e0))
+               ((instruction_pointer 0x7f9bd48bd18f)
+                (symbol (From_perf _dl_map_object_from_fd)) (symbol_offset 0xb8f))
+               ((instruction_pointer 0x7f9bd48c1d80)
+                (symbol (From_perf _dl_setup_hash)) (symbol_offset 0x0))
+               ((instruction_pointer -0x68dfef00)
+                (symbol (From_perf "[unknown @ -0x68dfef00 ([unknown])]"))
+                (symbol_offset 0x0))))))))) |}]
     ;;
   end)
 ;;
+
+module For_testing = struct
+  let to_event = to_event
+  let split_line_pipe = split_line_pipe
+end

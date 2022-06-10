@@ -1,5 +1,5 @@
-(** Backends, which do the Processor Trace recording, present this unified
-    interface in order to be exposed as commands which can generate traces. *)
+(** Backends, which do the trace recording, present this unified interface in
+    order to be exposed as commands which can generate traces. *)
 
 open! Core
 open! Async
@@ -20,8 +20,10 @@ module type S = sig
       -> subcommand:Subcommand.t
       -> when_to_snapshot:When_to_snapshot.t
       -> trace_scope:Trace_scope.t
+      -> multi_snapshot:bool
       -> timer_resolution:Timer_resolution.t
       -> record_dir:string
+      -> collection_mode:Collection_mode.t
       -> Pid.t list
       -> t Deferred.Or_error.t
 
@@ -39,6 +41,7 @@ module type S = sig
     :  ?perf_maps:Perf_map.Table.t
     -> debug_print_perf_commands:bool
     -> record_dir:string
+    -> collection_mode:Collection_mode.t
     -> Decode_opts.t
     -> Decode_result.t Deferred.Or_error.t
 end
