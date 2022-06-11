@@ -37,7 +37,8 @@ module Record_opts = struct
         "-snapshot-size"
         ~doc:
           " Tunes the amount of data captured in a trace. Default: 4M if root or \
-           perf_event_paranoid < 0, 256K otherwise. More info: magic-trace.org/w/s"
+           perf_event_paranoid < 0, 256K otherwise. For more info visit \
+           https://magic-trace.org/w/s"
     in
     { multi_thread; full_execution; snapshot_size }
   ;;

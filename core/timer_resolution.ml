@@ -23,5 +23,5 @@ let param =
        (Command.Arg_type.create (fun str -> t_of_sexp (Sexp.of_string str))))
     ~doc:
       "RESOLUTION How granular timing information should be, one of Low, Normal, High, \
-       or Custom (default: Normal). More info: magic-trace.org/w/t"
+       or Custom (default: Normal). For more info visit https://magic-trace.org/w/t"
 ;;
