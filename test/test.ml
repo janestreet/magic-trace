@@ -1,18 +1,28 @@
 open! Core
 open! Async
 open! Magic_trace_lib.Trace.For_testing
-module Event = Magic_trace_core.Backend_intf.Event
+
+include struct
+  open Magic_trace_core
+  module Decode_result = Decode_result
+  module Event = Event
+  module Symbol = Symbol
+end
 
 module Trace_helpers : sig
   val events : unit -> Event.t list
   val start_recording : unit -> unit
   val call : unit -> unit
-  val add : Event.kind -> int -> string -> unit
+  val add : Event.Kind.t -> int -> string -> unit
   val ret : unit -> unit
   val jmp : unit -> unit
 end = struct
   let start_time = Time_ns.Span.of_int_ns 12345
-  let thread : Event.Thread.t = { pid = Pid.of_int 1234; tid = 456 }
+
+  let thread : Event.Thread.t =
+    { pid = Some (Pid.of_int 1234); tid = Some (Pid.of_int 456) }
+  ;;
+
   let stack = Stack.create ()
   let events = Queue.create ()
   let cur_time = ref start_time
@@ -24,35 +34,60 @@ end = struct
     !cur_time
   ;;
 
-  let addr () = Random.State.int_incl !rng 0 0x7fffffffffff
+  let addr () = Random.State.int64_incl !rng 0L 0x7fffffffffffL
   let offset () = Random.State.int_incl !rng 0 0x1000
 
   let symbol () =
-    List.init (Random.State.int_incl !rng 1 10) ~f:(fun _ -> Random.State.ascii !rng)
-    |> String.of_char_list
+    Symbol.From_perf
+      (List.init (Random.State.int_incl !rng 1 10) ~f:(fun _ -> Random.State.ascii !rng)
+      |> String.of_char_list)
   ;;
 
-  let random_event () : Event.t =
+  let random_location () : Event.Location.t =
+    { instruction_pointer = addr (); symbol = From_perf ""; symbol_offset = offset () }
+  ;;
+
+  let random_ok_event () : Event.Ok.t =
     { thread
     ; time = time ()
-    ; kind = Call
-    ; addr = addr ()
-    ; symbol = ""
-    ; offset = offset ()
+    ; trace_state_change = None
+    ; kind = Some Call
+    ; src = random_location ()
+    ; dst = random_location ()
     }
   ;;
 
   let start_recording () = Queue.clear events
 
+  let random_event' kind symbol : Event.t =
+    let event = random_ok_event () in
+    Ok { event with kind = Some kind; dst = { event.dst with symbol } }
+  ;;
+
   let call () =
     let symbol = symbol () in
-    Queue.enqueue events { (random_event ()) with kind = Call; symbol };
+    Queue.enqueue events (random_event' Call symbol);
     Stack.push stack symbol
   ;;
 
   let add kind ns symbol =
     let time = Time_ns.Span.of_int_ns ns in
-    Queue.enqueue events { thread; time; kind; symbol; addr = 0; offset = 0 }
+    let loc =
+      { Event.Location.instruction_pointer = 0L
+      ; symbol = From_perf symbol
+      ; symbol_offset = 0
+      }
+    in
+    Queue.enqueue
+      events
+      (Ok
+         { thread
+         ; time
+         ; trace_state_change = None
+         ; kind = Some kind
+         ; src = loc
+         ; dst = loc
+         })
   ;;
 
   let ret () =
@@ -61,13 +96,13 @@ end = struct
       | Some symbol -> symbol
       | None -> symbol ()
     in
-    Queue.enqueue events { (random_event ()) with kind = Return; symbol }
+    Queue.enqueue events (random_event' Return symbol)
   ;;
 
   let jmp () =
     let symbol = symbol () in
-    Queue.enqueue events { (random_event ()) with kind = Call; symbol };
-    ignore (Stack.pop stack : string option);
+    Queue.enqueue events (random_event' Jump symbol);
+    ignore (Stack.pop stack : Symbol.t option);
     Stack.push stack symbol
   ;;
 
@@ -84,17 +119,34 @@ end = struct
   let () = ignore (events () : Event.t list)
 end
 
+module With = struct
+  let bind with_ ~f = with_ f
+
+  module Let_syntax = struct
+    module Let_syntax = struct
+      let bind = bind
+    end
+  end
+end
+
 let dump_using_file events =
+  let decode_result = { Decode_result.events; close_result = return (Ok ()) } in
   let buf = Iobuf.create ~len:500_000 in
   let destination = Tracing_zero.Destinations.iobuf_destination buf in
   let writer = Tracing_zero.Writer.Expert.create ~destination () in
-  let trace = Tracing.Trace.Expert.create ~base_time:None writer in
-  let%bind () = write_trace_from_events trace [] events in
-  Tracing.Trace.close trace;
+  let%bind or_error =
+    write_trace_from_events ~debug_info:None ~trace_mode:Userspace writer [] decode_result
+  in
+  ok_exn or_error;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in
   while%bind_open.Result Ok true do
     let%bind.Result cur = Tracing.Parser.parse_next parser in
-    Result.return (print_s [%sexp (cur : Tracing.Parser.Record.t)])
+    (match cur with
+    | Tick_initialization { ticks_per_second; base_time = _ } ->
+      (* Elide [base_time], since it isn't stable. *)
+      print_s [%message "Tick_initialization" (ticks_per_second : int)]
+    | _ -> print_s [%sexp (cur : Tracing.Parser.Record.t)]);
+    Result.return ()
   done
   |> [%sexp_of: (unit, Tracing.Parser.Parse_error.t) Result.t]
   |> print_s;
@@ -122,142 +174,199 @@ let%expect_test "random perfs" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
-    (Interned_string (index 102) (value 1234/456))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value address))
-    (Interned_string (index 105) (value "E{3\tST]'i"))
+    (Interned_string (index 105) (value S))
     (Interned_string (index 106) (value symbol))
     (Interned_string (index 107) (value ""))
     (Event
      ((timestamp 100ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 117693177829825)) (106 (String 105))))
+      (arguments ((104 (Pointer 0x663ee233c233)) (106 (String 105))))
       (event_type Duration_begin)))
     (Interned_string (index 108) (value "+d8;mv5\026j"))
     (Event
-     ((timestamp 156ns) (thread 1) (category 107) (name 108)
-      (arguments ((104 (Int 70347080186905)) (106 (String 108))))
-      (event_type Duration_begin)))
-    (Interned_string (index 109) (value J0))
-    (Event
-     ((timestamp 234ns) (thread 1) (category 107) (name 109)
-      (arguments ((104 (Int 40368494698790)) (106 (String 109))))
-      (event_type Duration_begin)))
-    (Interned_string (index 110) (value [unknown]))
-    (Event
-     ((timestamp 0s) (thread 1) (category 107) (name 110) (arguments ())
-      (event_type (Duration_complete (end_time 0s)))))
-    (Interned_string (index 111) (value "\025J\015\018\023\018"))
-    (Event
-     ((timestamp 0s) (thread 1) (category 107) (name 111)
-      (arguments ((104 (Int 138189158431799)) (106 (String 111))))
-      (event_type Duration_begin)))
-    (Error No_more_words) |}];
-  let%bind () = dump_one "2" in
-  [%expect
-    {|
-(Interned_string (index 1) (value process))
-(Interned_string (index 102) (value 1234/456))
-(Process_name_change (name 102) (pid 1))
-(Interned_string (index 103) (value main))
-(Thread_name_change (name 103) (pid 1) (tid 2))
-(Interned_thread (index 1)
- (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
-(Interned_string (index 104) (value address))
-(Interned_string (index 105) (value "\025J\015\018\023\018"))
-(Interned_string (index 106) (value symbol))
-(Interned_string (index 107) (value ""))
-(Event
- ((timestamp 0s) (thread 1) (category 107) (name 105)
-  (arguments ((104 (Int 138189158431799)) (106 (String 105))))
-  (event_type Duration_begin)))
-(Error No_more_words) |}];
-  let%bind () = dump_one "3" in
-  [%expect
-    {|
-    (Interned_string (index 1) (value process))
-    (Interned_string (index 102) (value 1234/456))
-    (Process_name_change (name 102) (pid 1))
-    (Interned_string (index 103) (value main))
-    (Thread_name_change (name 103) (pid 1) (tid 2))
-    (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
-    (Interned_string (index 104) (value address))
-    (Interned_string (index 105) (value "E{3\tST]'i"))
-    (Interned_string (index 106) (value symbol))
-    (Interned_string (index 107) (value ""))
-    (Event
-     ((timestamp 100ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 117693177829825)) (106 (String 105))))
-      (event_type Duration_begin)))
-    (Interned_string (index 108) (value "+d8;mv5\026j"))
-    (Event
-     ((timestamp 156ns) (thread 1) (category 107) (name 108)
-      (arguments ((104 (Int 70347080186905)) (106 (String 108))))
+     ((timestamp 152ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x3ffaf4b9bc19)) (106 (String 108))))
       (event_type Duration_begin)))
     (Interned_string (index 109) (value [unknown]))
     (Event
      ((timestamp 0s) (thread 1) (category 107) (name 109) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
     (Interned_string (index 110) (value "\025J\015\018\023\018"))
+    (Interned_string (index 111) (value true))
+    (Interned_string (index 112) (value inferred_start_time))
     (Event
      ((timestamp 0s) (thread 1) (category 107) (name 110)
-      (arguments ((104 (Int 138189158431799)) (106 (String 110))))
+      (arguments
+       ((104 (Pointer 0x7daeabb33c37)) (106 (String 110)) (112 (String 111))))
       (event_type Duration_begin)))
+    (Event
+     ((timestamp 185ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 113) (value "_\025dd;?\\"))
+    (Event
+     ((timestamp 185ns) (thread 1) (category 107) (name 113)
+      (arguments ((104 (Pointer 0xcb71f4a7934)) (106 (String 113))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 185ns) (thread 1) (category 107) (name 113) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 185ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 185ns) (thread 1) (category 107) (name 110) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words) |}];
+  let%bind () = dump_one "2" in
+  [%expect
+    {|
+(Interned_string (index 1) (value process))
+(Tick_initialization (ticks_per_second 1000000000))
+(Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+(Process_name_change (name 102) (pid 1))
+(Interned_string (index 103) (value main))
+(Thread_name_change (name 103) (pid 1) (tid 2))
+(Interned_thread (index 1)
+ (value
+  ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+   (thread_name (main)))))
+(Interned_string (index 104) (value address))
+(Interned_string (index 105) (value "\025J\015\018\023\018"))
+(Interned_string (index 106) (value symbol))
+(Interned_string (index 107) (value true))
+(Interned_string (index 108) (value inferred_start_time))
+(Interned_string (index 109) (value ""))
+(Event
+ ((timestamp 0s) (thread 1) (category 109) (name 105)
+  (arguments
+   ((104 (Pointer 0x7daeabb33c37)) (106 (String 105)) (108 (String 107))))
+  (event_type Duration_begin)))
+(Event
+ ((timestamp 0s) (thread 1) (category 109) (name 105) (arguments ())
+  (event_type Duration_end)))
+(Error No_more_words) |}];
+  let%bind () = dump_one "3" in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value "\025J\015\018\023\018"))
+    (Interned_string (index 105) (value ""))
+    (Event
+     ((timestamp 100ns) (thread 1) (category 105) (name 104) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 106) (value address))
+    (Interned_string (index 107) (value S))
+    (Interned_string (index 108) (value symbol))
+    (Event
+     ((timestamp 100ns) (thread 1) (category 105) (name 107)
+      (arguments ((106 (Pointer 0x663ee233c233)) (108 (String 107))))
+      (event_type Duration_begin)))
+    (Interned_string (index 109) (value [unknown]))
+    (Event
+     ((timestamp 0s) (thread 1) (category 105) (name 109) (arguments ())
+      (event_type (Duration_complete (end_time 0s)))))
+    (Interned_string (index 110) (value true))
+    (Interned_string (index 111) (value inferred_start_time))
+    (Event
+     ((timestamp 0s) (thread 1) (category 105) (name 104)
+      (arguments
+       ((106 (Pointer 0x7daeabb33c37)) (108 (String 104)) (111 (String 110))))
+      (event_type Duration_begin)))
+    (Interned_string (index 112) (value "+d8;mv5\026j"))
+    (Event
+     ((timestamp 152ns) (thread 1) (category 105) (name 112)
+      (arguments ((106 (Pointer 0x3ffaf4b9bc19)) (108 (String 112))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 152ns) (thread 1) (category 105) (name 112) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 152ns) (thread 1) (category 105) (name 107) (arguments ())
+      (event_type Duration_end)))
     (Error No_more_words) |}];
   let%bind () = dump_one "4" in
   [%expect
     {|
 (Interned_string (index 1) (value process))
-(Interned_string (index 102) (value 1234/456))
+(Tick_initialization (ticks_per_second 1000000000))
+(Interned_string (index 102) (value "[pid=1234] [tid=456]"))
 (Process_name_change (name 102) (pid 1))
 (Interned_string (index 103) (value main))
 (Thread_name_change (name 103) (pid 1) (tid 2))
 (Interned_thread (index 1)
- (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+ (value
+  ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+   (thread_name (main)))))
 (Interned_string (index 104) (value address))
-(Interned_string (index 105) (value "E{3\tST]'i"))
+(Interned_string (index 105) (value S))
 (Interned_string (index 106) (value symbol))
 (Interned_string (index 107) (value ""))
 (Event
  ((timestamp 100ns) (thread 1) (category 107) (name 105)
-  (arguments ((104 (Int 117693177829825)) (106 (String 105))))
+  (arguments ((104 (Pointer 0x663ee233c233)) (106 (String 105))))
   (event_type Duration_begin)))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 105) (arguments ())
+ ((timestamp 147ns) (thread 1) (category 107) (name 105) (arguments ())
   (event_type Duration_end)))
 (Interned_string (index 108) (value "\025J\015\018\023\018"))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 108) (arguments ())
+ ((timestamp 147ns) (thread 1) (category 107) (name 108) (arguments ())
   (event_type Duration_end)))
 (Event
- ((timestamp 138ns) (thread 1) (category 107) (name 105)
-  (arguments ((104 (Int 68335834690794)) (106 (String 105))))
+ ((timestamp 147ns) (thread 1) (category 107) (name 105)
+  (arguments ((104 (Pointer 0x3e26ad26f4ea)) (106 (String 105))))
   (event_type Duration_begin)))
 (Event
- ((timestamp 170ns) (thread 1) (category 107) (name 105) (arguments ())
+ ((timestamp 202ns) (thread 1) (category 107) (name 105) (arguments ())
   (event_type Duration_end)))
-(Interned_string (index 109) (value ":k\025"))
+(Interned_string (index 109) (value "\025dd;?\\&"))
 (Event
- ((timestamp 222ns) (thread 1) (category 107) (name 109)
-  (arguments ((104 (Int 18056637561335)) (106 (String 109))))
+ ((timestamp 237ns) (thread 1) (category 107) (name 109)
+  (arguments ((104 (Pointer 0x1e4d335982f9)) (106 (String 109))))
   (event_type Duration_begin)))
-(Interned_string (index 110) (value "_\025dd;?\\"))
+(Interned_string (index 110) (value true))
+(Interned_string (index 111) (value inferred_start_time))
 (Event
- ((timestamp 245ns) (thread 1) (category 107) (name 110)
-  (arguments ((104 (Int 13980643522868)) (106 (String 110))))
+ ((timestamp 0s) (thread 1) (category 107) (name 108)
+  (arguments
+   ((104 (Pointer 0x6f066a246864)) (106 (String 108)) (111 (String 110))))
   (event_type Duration_begin)))
 (Event
  ((timestamp 0s) (thread 1) (category 107) (name 108)
-  (arguments ((104 (Int 95718477123387)) (106 (String 108))))
+  (arguments ((104 (Pointer 0x7daeabb33c37)) (106 (String 108))))
+  (event_type Duration_begin)))
+(Interned_string (index 112) (value "GGCP!p\015"))
+(Event
+ ((timestamp 274ns) (thread 1) (category 107) (name 112)
+  (arguments ((104 (Pointer 0x66a5ef2d0303)) (106 (String 112))))
   (event_type Duration_begin)))
 (Event
- ((timestamp 0s) (thread 1) (category 107) (name 108)
-  (arguments ((104 (Int 138189158431799)) (106 (String 108))))
-  (event_type Duration_begin)))
+ ((timestamp 274ns) (thread 1) (category 107) (name 112) (arguments ())
+  (event_type Duration_end)))
+(Event
+ ((timestamp 274ns) (thread 1) (category 107) (name 109) (arguments ())
+  (event_type Duration_end)))
+(Event
+ ((timestamp 274ns) (thread 1) (category 107) (name 108) (arguments ())
+  (event_type Duration_end)))
 (Error No_more_words) |}];
   return ()
 ;;
@@ -283,102 +392,116 @@ let%expect_test "with initial returns" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
-    (Interned_string (index 102) (value 1234/456))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value "\025J\015\018\023\018"))
     (Interned_string (index 105) (value ""))
     (Event
      ((timestamp 100ns) (thread 1) (category 105) (name 104) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 106) (value "E{3\tST]'i"))
+    (Interned_string (index 106) (value S))
     (Event
-     ((timestamp 156ns) (thread 1) (category 105) (name 106) (arguments ())
+     ((timestamp 152ns) (thread 1) (category 105) (name 106) (arguments ())
       (event_type Duration_end)))
     (Interned_string (index 107) (value "+d8;mv5\026j"))
     (Event
-     ((timestamp 234ns) (thread 1) (category 105) (name 107) (arguments ())
+     ((timestamp 185ns) (thread 1) (category 105) (name 107) (arguments ())
       (event_type Duration_end)))
     (Interned_string (index 108) (value address))
-    (Interned_string (index 109) (value "\017\\4y_\025d"))
+    (Interned_string (index 109) (value GGCP!p))
     (Interned_string (index 110) (value symbol))
     (Event
-     ((timestamp 267ns) (thread 1) (category 105) (name 109)
-      (arguments ((108 (Int 132616083027461)) (110 (String 109))))
+     ((timestamp 222ns) (thread 1) (category 105) (name 109)
+      (arguments ((108 (Pointer 0x66a5ef2d0303)) (110 (String 109))))
       (event_type Duration_begin)))
-    (Interned_string (index 111) (value GGCP!p))
+    (Interned_string (index 111) (value "\031q\0212\002\016"))
     (Event
-     ((timestamp 320ns) (thread 1) (category 105) (name 111)
-      (arguments ((108 (Int 112862868341507)) (110 (String 111))))
-      (event_type Duration_begin)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 111) (arguments ())
-      (event_type Duration_end)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 109) (arguments ())
-      (event_type Duration_end)))
-    (Event
-     ((timestamp 418ns) (thread 1) (category 105) (name 111)
-      (arguments ((108 (Int 88716997803698)) (110 (String 111))))
-      (event_type Duration_begin)))
-    (Interned_string (index 112) (value "\002"))
-    (Event
-     ((timestamp 448ns) (thread 1) (category 105) (name 112)
-      (arguments ((108 (Int 86021545478677)) (110 (String 112))))
+     ((timestamp 319ns) (thread 1) (category 105) (name 111)
+      (arguments ((108 (Pointer 0x1ad09e985c3)) (110 (String 111))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 112) (arguments ())
+     ((timestamp 329ns) (thread 1) (category 105) (name 111) (arguments ())
       (event_type Duration_end)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 111) (arguments ())
+     ((timestamp 329ns) (thread 1) (category 105) (name 109) (arguments ())
       (event_type Duration_end)))
     (Event
-     ((timestamp 523ns) (thread 1) (category 105) (name 112)
-      (arguments ((108 (Int 67678953014964)) (110 (String 112))))
+     ((timestamp 329ns) (thread 1) (category 105) (name 111)
+      (arguments ((108 (Pointer 0x48db129b7fa)) (110 (String 111))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 112) (arguments ())
+     ((timestamp 365ns) (thread 1) (category 105) (name 111) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 113) (value J0))
+    (Interned_string (index 112) (value I))
     (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 113) (arguments ())
-      (event_type Duration_end)))
-    (Interned_string (index 114) (value y))
-    (Event
-     ((timestamp 617ns) (thread 1) (category 105) (name 114)
-      (arguments ((108 (Int 120939934736912)) (110 (String 114))))
+     ((timestamp 365ns) (thread 1) (category 105) (name 112)
+      (arguments ((108 (Pointer 0x60c10fa613cc)) (110 (String 112))))
       (event_type Duration_begin)))
     (Event
-     ((timestamp 658ns) (thread 1) (category 105) (name 114) (arguments ())
+     ((timestamp 436ns) (thread 1) (category 105) (name 112) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 115) (value [4))
+    (Interned_string (index 113) (value "_\025dd;?\\"))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 115)
-      (arguments ((108 (Int 84055102840523)) (110 (String 115))))
+     ((timestamp 436ns) (thread 1) (category 105) (name 113) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 436ns) (thread 1) (category 105) (name 112)
+      (arguments ((108 (Pointer 0x43e592cf2b67)) (110 (String 112))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 521ns) (thread 1) (category 105) (name 112) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 114) (value ";|\025K?\029A\025"))
+    (Interned_string (index 115) (value true))
+    (Interned_string (index 116) (value inferred_start_time))
+    (Event
+     ((timestamp 0s) (thread 1) (category 105) (name 114)
+      (arguments
+       ((108 (Pointer 0x4bafaf95a3ed)) (110 (String 114)) (116 (String 115))))
+      (event_type Duration_begin)))
+    (Interned_string (index 117) (value "N8\016$>"))
+    (Event
+     ((timestamp 0s) (thread 1) (category 105) (name 117)
+      (arguments
+       ((108 (Pointer 0x63cc6c84106a)) (110 (String 117)) (116 (String 115))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 113)
-      (arguments ((108 (Int 40368494698790)) (110 (String 113))))
+      (arguments
+       ((108 (Pointer 0xcb71f4a7934)) (110 (String 113)) (116 (String 115))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 107)
-      (arguments ((108 (Int 70347080186905)) (110 (String 107))))
+      (arguments
+       ((108 (Pointer 0x3ffaf4b9bc19)) (110 (String 107)) (116 (String 115))))
       (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 106)
-      (arguments ((108 (Int 117693177829825)) (110 (String 106))))
+      (arguments
+       ((108 (Pointer 0x663ee233c233)) (110 (String 106)) (116 (String 115))))
       (event_type Duration_begin)))
-    (Interned_string (index 116) (value [unknown]))
+    (Interned_string (index 118) (value [unknown]))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 116) (arguments ())
+     ((timestamp 0s) (thread 1) (category 105) (name 118) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 104)
-      (arguments ((108 (Int 138189158431799)) (110 (String 104))))
+      (arguments
+       ((108 (Pointer 0x7daeabb33c37)) (110 (String 104)) (116 (String 115))))
       (event_type Duration_begin)))
+    (Event
+     ((timestamp 562ns) (thread 1) (category 105) (name 117) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 562ns) (thread 1) (category 105) (name 114) (arguments ())
+      (event_type Duration_end)))
     (Error No_more_words) |}];
   return ()
 ;;
@@ -406,49 +529,75 @@ let%expect_test "time batch spreading" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
-    (Interned_string (index 102) (value 1234/456))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value address))
     (Interned_string (index 105) (value sub))
     (Interned_string (index 106) (value symbol))
     (Interned_string (index 107) (value ""))
     (Event
      ((timestamp 1ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 50ns) (thread 1) (category 107) (name 105) (arguments ())
       (event_type Duration_end)))
     (Event
      ((timestamp 50ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 100ns) (thread 1) (category 107) (name 105) (arguments ())
       (event_type Duration_end)))
     (Event
      ((timestamp 100ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 100ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 101ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 102ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
-    (Event
-     ((timestamp 103ns) (thread 1) (category 107) (name 105)
-      (arguments ((104 (Int 0)) (106 (String 105)))) (event_type Duration_begin)))
-    (Event
-     ((timestamp 113ns) (thread 1) (category 107) (name 105) (arguments ())
-      (event_type Duration_end)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 107) (name 103)
-      (arguments ((104 (Int 0)) (106 (String 103)))) (event_type Duration_begin)))
+      (arguments ((104 (Pointer 0x0)) (106 (String 103))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 103ns) (thread 1) (category 107) (name 103) (arguments ())
+      (event_type Duration_end)))
     (Error No_more_words) |}];
   return ()
 ;;
@@ -472,12 +621,15 @@ let%expect_test "enqueing events at start" =
   [%expect
     {|
     (Interned_string (index 1) (value process))
-    (Interned_string (index 102) (value 1234/456))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
     (Process_name_change (name 102) (pid 1))
     (Interned_string (index 103) (value main))
     (Thread_name_change (name 103) (pid 1) (tid 2))
     (Interned_thread (index 1)
-     (value ((pid 1) (tid 2) (process_name (1234/456)) (thread_name (main)))))
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
     (Interned_string (index 104) (value fn3))
     (Interned_string (index 105) (value ""))
     (Event
@@ -487,29 +639,38 @@ let%expect_test "enqueing events at start" =
     (Event
      ((timestamp 2ns) (thread 1) (category 105) (name 106) (arguments ())
       (event_type Duration_end)))
-    (Interned_string (index 107) (value fn1))
+    (Interned_string (index 107) (value address))
+    (Interned_string (index 108) (value fn0))
+    (Interned_string (index 109) (value symbol))
+    (Interned_string (index 110) (value true))
+    (Interned_string (index 111) (value inferred_start_time))
     (Event
-     ((timestamp 3ns) (thread 1) (category 105) (name 107) (arguments ())
-      (event_type Duration_end)))
-    (Interned_string (index 108) (value address))
-    (Interned_string (index 109) (value fn0))
-    (Interned_string (index 110) (value symbol))
+     ((timestamp 0s) (thread 1) (category 105) (name 108)
+      (arguments ((107 (Pointer 0x0)) (109 (String 108)) (111 (String 110))))
+      (event_type Duration_begin)))
+    (Interned_string (index 112) (value [unknown]))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 109)
-      (arguments ((108 (Int 0)) (110 (String 109)))) (event_type Duration_begin)))
-    (Interned_string (index 111) (value [unknown]))
-    (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 111) (arguments ())
+     ((timestamp 0s) (thread 1) (category 105) (name 112) (arguments ())
       (event_type (Duration_complete (end_time 0s)))))
+    (Interned_string (index 113) (value fn1))
     (Event
-     ((timestamp 0s) (thread 1) (category 105) (name 107)
-      (arguments ((108 (Int 0)) (110 (String 107)))) (event_type Duration_begin)))
+     ((timestamp 0s) (thread 1) (category 105) (name 113)
+      (arguments ((107 (Pointer 0x0)) (109 (String 113)) (111 (String 110))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 106)
-      (arguments ((108 (Int 0)) (110 (String 106)))) (event_type Duration_begin)))
+      (arguments ((107 (Pointer 0x0)) (109 (String 106))))
+      (event_type Duration_begin)))
     (Event
      ((timestamp 0s) (thread 1) (category 105) (name 104)
-      (arguments ((108 (Int 0)) (110 (String 104)))) (event_type Duration_begin)))
+      (arguments ((107 (Pointer 0x0)) (109 (String 104))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 3ns) (thread 1) (category 105) (name 113) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 3ns) (thread 1) (category 105) (name 108) (arguments ())
+      (event_type Duration_end)))
     (Error No_more_words) |}];
   return ()
 ;;
@@ -519,13 +680,13 @@ let%expect_test "get debug information from ELF" =
   let debug_table =
     Magic_trace_core.Elf.addr_table (Option.value_exn elf)
     |> Hashtbl.filter ~f:(fun info ->
-      match info.filename with
-      | Some "sample.ml" -> true
-      | _ -> false)
+           match info.filename with
+           | Some "sample.ml" -> true
+           | _ -> false)
   in
   let raise_after_col =
     Hashtbl.filter_map debug_table ~f:(fun info ->
-      if info.line = 5 then Some info.col else None)
+        if info.line = 5 then Some info.col else None)
     |> Hashtbl.data
     |> List.hd_exn
   in

@@ -1,0 +1,3 @@
+(library (name tracing_probes) (public_name tracing.tracing_probes)
+ (libraries core tracing_zero core_unix.time_stamp_counter)
+ (preprocess (pps ppx_jane)))

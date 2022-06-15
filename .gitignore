@@ -2,4 +2,5 @@ _build
 *.install
 *.merlin
 _opam
-
+.vscode/*
+!.vscode/tasks.json

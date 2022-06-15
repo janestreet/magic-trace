@@ -1,3 +1,0 @@
-(library (name magic_trace_test)
- (libraries core expect_test_helpers_core magic_trace)
- (preprocess (pps ppx_jane)))

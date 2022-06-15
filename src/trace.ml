@@ -1,16 +1,57 @@
-(** Runs a program under Intel ProcessorTrace in Snapshot mode *)
+(** Runs a program under Intel Processor Trace in Snapshot mode *)
 open! Core
 
 open! Async
 open! Import
 
+let supports_command command =
+  Lazy.from_fun (fun () ->
+      match Core_unix.fork () with
+      | `In_the_child ->
+        Core_unix.close Core_unix.stdout;
+        Core_unix.close Core_unix.stderr;
+        Core_unix.exec ~prog:command ~argv:[ command; "--version" ] ~use_path:true ()
+        |> never_returns
+      | `In_the_parent pid ->
+        let exit_or_signal = Core_unix.waitpid pid in
+        (match Core_unix.Exit_or_signal.or_error exit_or_signal with
+        | Error _ -> false
+        | Ok () -> true))
+;;
+
+let supports_fzf = supports_command "fzf"
+let supports_perf = supports_command "perf"
+
+let check_for_perf () =
+  if force supports_perf
+  then return (Ok ())
+  else
+    Deferred.Or_error.errorf
+      "magic-trace relies on \"perf\", but it is not present in your path. You may need \
+       to install it."
+;;
+
+let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
+  let elf = Elf.create executable in
+  match when_to_snapshot, elf with
+  | Application_calls_a_function _, None ->
+    Deferred.Or_error.errorf
+      "Cannot select a snapshot symbol because magic-trace can't find that executable's \
+       symbol table. Was it built without debug info, or with debug info magic-trace \
+       doesn't understand?\n\
+       See \
+       https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+       for more info."
+  | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
+;;
+
 (* Other parts of the process would fail after this without IPT, but by checking directly
    we can give a more helpful error message regardless of backend. *)
 let check_for_processor_trace_support () =
   match Core_unix.access "/sys/bus/event_source/devices/intel_pt" [ `Exists ] with
-  | Ok () -> Ok ()
+  | Ok () -> return (Ok ())
   | Error _ ->
-    Or_error.error_string
+    Deferred.Or_error.error_string
       "Error: This machine doesn't support Intel Processor Trace, which is a hardware \
        feature essential for magic-trace to work.\n\
        This may be because it's a virtual machine or it's a physical machine that isn't \
@@ -18,180 +59,247 @@ let check_for_processor_trace_support () =
        Try again on a physical Intel machine."
 ;;
 
-let hits_file record_dir = record_dir ^/ "hits.sexp"
+let debug_flag flag = if Env_vars.debug then flag else Command.Param.return false
+
+let debug_print_perf_commands =
+  let open Command.Param in
+  flag "-z-print-perf-commands" no_arg ~doc:"Prints perf commands when they're executed."
+  |> debug_flag
+;;
 
 let write_trace_from_events
-      ~verbose
-      ?debug_info
-      trace
-      hits
-      (events : Backend_intf.Event.t Pipe.Reader.t)
+    ?ocaml_exception_info
+    ~print_events
+    ~trace_mode
+    ~debug_info
+    writer
+    hits
+    decode_result
   =
+  let { Decode_result.events; close_result } = decode_result in
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
     let%map.Deferred _wait_for_first = Pipe.values_available events in
     match Pipe.peek events with
-    | Some earliest -> earliest.time
-    | None -> Time_ns.Span.zero
+    | Some (Ok earliest) -> earliest.time
+    | None | Some (Error _) -> Time_ns.Span.zero
+  in
+  let trace =
+    let base_time =
+      Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
+    in
+    Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
   let events =
-    Pipe.map events ~f:(fun (event : Backend_intf.Event.t) ->
-      if verbose then Core.print_s (Backend_intf.Event.sexp_of_t event);
-      { event with time = event.time })
+    if print_events
+    then
+      Pipe.map events ~f:(fun (event : Event.t) ->
+          Core.print_s ~mach:() (Event.sexp_of_t event);
+          event)
+    else events
   in
-  let writer = Trace_writer.create ~debug_info ~earliest_time ~hits trace in
+  let writer =
+    Trace_writer.create
+      ~trace_mode
+      ~debug_info
+      ~ocaml_exception_info
+      ~earliest_time
+      ~hits
+      ~annotate_inferred_start_times:Env_vars.debug
+      trace
+  in
   let process_event ev = Trace_writer.write_event writer ev in
-  let%map () = Pipe.iter_without_pushback events ~f:process_event in
-  Trace_writer.flush_all writer
+  let%bind () = Pipe.iter_without_pushback events ~f:process_event in
+  Trace_writer.end_of_trace writer;
+  Tracing.Trace.close trace;
+  close_result
+;;
+
+let write_event_sexps writer decode_result =
+  let { Decode_result.events; close_result } = decode_result in
+  Writer.write_line writer "(V1 (";
+  let%bind () =
+    Pipe.iter_without_pushback events ~f:(fun (event : Event.t) ->
+        Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event))
+  in
+  Writer.write_line writer "))";
+  close_result
 ;;
 
 module Make_commands (Backend : Backend_intf.S) = struct
-  type decode_opts =
-    { output_config : Tracing.Tool_output.t
-    ; decode_opts : Backend.decode_opts
-    ; verbose : bool
-    }
+  module Decode_opts = struct
+    type t =
+      { output_config : Tracing_tool_output.t
+      ; decode_opts : Backend.Decode_opts.t
+      ; print_events : bool
+      }
+  end
 
-  type hits_file = (string * Breakpoint.Hit.t) list [@@deriving sexp]
+  module Hits_file = struct
+    type t = (string * Breakpoint.Hit.t) list [@@deriving sexp]
 
-  let decode_to_trace { output_config; decode_opts; verbose } ~record_dir elf =
-    Core.eprintf "[Decoding, this may take 30s or so...]\n%!";
-    Tracing.Tool_output.write_and_view
+    let filename ~record_dir = record_dir ^/ "hits.sexp"
+  end
+
+  let decode_to_trace
+      ?perf_maps
+      ~elf
+      ~trace_mode
+      ~debug_print_perf_commands
+      ~record_dir
+      { Decode_opts.output_config; decode_opts; print_events }
+    =
+    Core.eprintf "[ Decoding, this takes a while... ]\n%!";
+    Tracing_tool_output.write_and_maybe_view
       output_config
-      ~default_name:"magic_trace"
-      ~f:(fun w ->
+      ~f_sexp:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
-        let trace_writer = Tracing.Trace.Expert.create ~base_time:None w in
+        let%bind decode_result =
+          Backend.decode_events
+            ?perf_maps
+            decode_opts
+            ~debug_print_perf_commands
+            ~record_dir
+        in
+        let%bind () = write_event_sexps writer decode_result in
+        return ())
+      ~f_fuchsia:(fun writer ->
+        let open Deferred.Or_error.Let_syntax in
         let hits =
-          In_channel.read_all (hits_file record_dir)
+          In_channel.read_all (Hits_file.filename ~record_dir)
           |> Sexp.of_string
-          |> [%of_sexp: hits_file]
+          |> [%of_sexp: Hits_file.t]
         in
-        let debug_info = Elf.addr_table elf in
-        let%bind event_pipe = Backend.decode_events decode_opts ~record_dir in
+        let debug_info =
+          match
+            Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
+          with
+          | None ->
+            eprintf
+              "Warning: Debug info is unavailable, so filenames and line numbers will \
+               not be available in the trace.\n\
+               See \
+               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+               for more info.\n";
+            None
+          | Some _ as x -> x
+        in
+        let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
+        let%bind decode_result =
+          Backend.decode_events
+            ?perf_maps
+            decode_opts
+            ~debug_print_perf_commands
+            ~record_dir
+        in
         let%bind () =
-          write_trace_from_events ~verbose ~debug_info trace_writer hits event_pipe
-          |> Deferred.ok
+          write_trace_from_events
+            ?ocaml_exception_info
+            ~debug_info
+            ~trace_mode
+            ~print_events
+            writer
+            hits
+            decode_result
         in
-        Tracing.Trace.close trace_writer;
         return ())
   ;;
 
-  type record_opts =
-    { backend_opts : Backend.record_opts
-    ; use_filter : bool
-    ; multi_snapshot : bool
-    ; snap_symbol : Re.re
-    ; record_dir : string
-    ; executable : string
-    ; snap_on_delay_over : Time_ns.Span.t option
-    ; duration_thresh : Time_ns.Span.t option
-    }
+  module Record_opts = struct
+    type t =
+      { backend_opts : Backend.Record_opts.t
+      ; multi_snapshot : bool
+      ; when_to_snapshot : When_to_snapshot.t
+      ; record_dir : string
+      ; executable : string
+      ; trace_mode : Trace_mode.t
+      ; timer_resolution : Timer_resolution.t
+      }
+  end
 
-  type attachment =
-    { recording : Backend.recording
-    ; done_ivar : unit Ivar.t
-    ; breakpoint_done : unit Deferred.t
-    ; finalize_recording : unit -> unit
-    }
+  module Attachment = struct
+    type t =
+      { recording : Backend.Recording.t
+      ; done_ivar : unit Ivar.t
+      ; breakpoint_done : unit Deferred.t
+      ; finalize_recording : unit -> unit
+      }
+  end
 
-  let attach opts elf pid =
-    let%bind.Deferred.Or_error () =
-      check_for_processor_trace_support () |> Deferred.return
-    in
-    let snap_syms = Elf.matching_functions elf opts.snap_symbol in
-    let%bind.Deferred.Or_error snap_sym =
-      match Map.length snap_syms, Map.min_elt snap_syms with
-      | 0, _ -> Deferred.Or_error.return None
-      | 1, Some (_, s) -> Deferred.Or_error.return (Some s)
-      | _ -> Fzf.pick_one (Fzf.Pick_from.Map snap_syms)
-    in
-    let snap_loc = Option.map snap_sym ~f:(fun sym -> Elf.symbol_stop_info elf sym) in
-    let filter =
-      match opts.use_filter, snap_loc with
-      | true, Some { Elf.Stop_info.filter; _ } -> Some filter
-      | _, _ -> None
+  let attach (opts : Record_opts.t) ~elf ~debug_print_perf_commands ~subcommand pids =
+    Process_info.read_all_proc_info ();
+    let head_pid = List.hd_exn pids in
+    let%bind.Deferred.Or_error snap_loc =
+      match elf with
+      | None -> return (Ok None)
+      | Some elf ->
+        (match opts.when_to_snapshot with
+        | Magic_trace_or_the_application_terminates -> return (Ok None)
+        | Application_calls_a_function which_function ->
+          let%bind.Deferred.Or_error snap_sym =
+            match which_function with
+            | Use_fzf_to_select_one ->
+              let all_symbols = Elf.all_symbols elf in
+              if force supports_fzf
+              then (
+                match%bind.Deferred.Or_error Fzf.pick_one (Assoc all_symbols) with
+                | None -> Deferred.Or_error.error_string "No symbol selected"
+                | Some symbol -> return (Ok symbol))
+              else
+                Deferred.Or_error.error_string
+                  "magic-trace could show you a fuzzy-finding selector here if \"fzf\" \
+                   were in your PATH, but it is not."
+            | User_selected symbol_name ->
+              (match Elf.find_symbol elf symbol_name with
+              | None ->
+                Deferred.Or_error.errorf "Snapshot symbol not found: %s" symbol_name
+              | Some symbol -> return (Ok symbol))
+          in
+          let snap_loc = Elf.symbol_stop_info elf head_pid snap_sym in
+          return (Ok (Some snap_loc)))
     in
     let%map.Deferred.Or_error recording =
-      Backend.attach_and_record opts.backend_opts ~record_dir:opts.record_dir ?filter pid
+      Backend.Recording.attach_and_record
+        opts.backend_opts
+        ~debug_print_perf_commands
+        ~subcommand
+        ~when_to_snapshot:opts.when_to_snapshot
+        ~trace_mode:opts.trace_mode
+        ~timer_resolution:opts.timer_resolution
+        ~record_dir:opts.record_dir
+        pids
     in
     let done_ivar = Ivar.create () in
     let snapshot_taken = ref false in
-    let take_snapshot () =
-      match Backend.take_snapshot recording with
-      | Ok () ->
-        snapshot_taken := true;
-        Core.eprintf "[Snapshot taken!]\n%!";
-        if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
-      | Error e -> Core.eprint_s [%message "failed to take snapshot" (e : Error.t)]
+    let take_snapshot ~source =
+      Backend.Recording.maybe_take_snapshot recording ~source;
+      snapshot_taken := true;
+      Core.eprintf "[ Snapshot taken. ]\n%!";
+      if not opts.multi_snapshot then Ivar.fill_if_empty done_ivar ()
     in
     let hits = ref [] in
     let finalize_recording () =
-      if not !snapshot_taken then take_snapshot ();
+      if not !snapshot_taken then take_snapshot ~source:`ctrl_c;
       Out_channel.write_all
-        (hits_file opts.record_dir)
-        ~data:([%sexp (!hits : hits_file)] |> Sexp.to_string)
-    in
-    let last_hit = ref Time_ns_unix.Option.none in
-    let last_report = ref Time_ns.epoch in
-    let max_since_last_report = ref Time_ns.Span.zero in
-    let report_interval = Time_ns.Span.of_int_sec 5 in
-    let print_report () =
-      Core.eprintf
-        !"[Waiting for delay over threshold. Max delay since last report: %{Time_ns.Span}]\n\
-          %!"
-        !max_since_last_report;
-      max_since_last_report := Time_ns.Span.zero
+        (Hits_file.filename ~record_dir:opts.record_dir)
+        ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string)
     in
     let take_snapshot_on_hit hit =
       hits := hit :: !hits;
-      take_snapshot ()
-    in
-    let maybe_take_snapshot' hit =
-      match opts.snap_on_delay_over with
-      | None -> take_snapshot_on_hit hit
-      | Some span_thresh ->
-        let now = Time_ns.now () in
-        let open Time_ns_unix.Option.Optional_syntax in
-        (match%optional !last_hit with
-         | Some t ->
-           let interval = Time_ns.diff now t in
-           max_since_last_report := Time_ns.Span.max !max_since_last_report interval;
-           if Time_ns.Span.( > ) interval span_thresh
-           then take_snapshot_on_hit hit
-           else if Time_ns.( > ) now (Time_ns.add !last_report report_interval)
-           then (
-             print_report ();
-             last_report := now)
-         | _ -> ());
-        last_hit := Time_ns_unix.Option.some now
-    in
-    let maybe_take_snapshot hit =
-      match opts.duration_thresh with
-      | None -> maybe_take_snapshot' hit
-      | Some duration_thresh ->
-        let _, { Breakpoint.Hit.timestamp; passed_timestamp; _ } = hit in
-        let duration = Time_ns.Span.of_int_ns (timestamp - passed_timestamp) in
-        if Time_ns.Span.( > ) duration duration_thresh then maybe_take_snapshot' hit
+      take_snapshot ~source:`function_call
     in
     let breakpoint_done =
       match snap_loc with
-      | None ->
-        Core.eprintf "[Couldn't find symbol. Will still snapshot on end]\n%!";
-        Deferred.unit
+      | None -> Deferred.unit
       | Some { Elf.Stop_info.name; addr; _ } ->
-        Core.eprintf "[Attaching to %Ld]\n%!" addr;
+        Core.eprintf "[ Attaching to %s @ 0x%016Lx ]\n%!" name addr;
         (* This is a safety feature so that if you accidentally attach to a symbol that
            gets called very frequently, in single snapshot mode it will only trigger the
            breakpoint once before the breakpoint gets disabled. In [multi_snapshot] mode
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
-        let single_hit =
-          (not opts.multi_snapshot)
-          && Option.is_none opts.snap_on_delay_over
-          && Option.is_none opts.duration_thresh
-        in
-        let bp = Breakpoint.breakpoint_fd pid ~addr:(Int.of_int64_exn addr) ~single_hit in
+        let single_hit = not opts.multi_snapshot in
+        let bp = Breakpoint.breakpoint_fd head_pid ~addr ~single_hit in
         let bp = Or_error.ok_exn bp in
         let fd =
           Async_unix.Fd.create
@@ -202,7 +310,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         let rec read_evs snapshot_enabled =
           match Breakpoint.next_hit bp with
           | Some hit ->
-            if snapshot_enabled then maybe_take_snapshot (name, hit);
+            if snapshot_enabled then take_snapshot_on_hit (name, hit);
             read_evs false
           | None -> ()
         in
@@ -216,38 +324,68 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ()
         in
         (match res with
-         | `Interrupted -> Breakpoint.destroy bp
-         | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
+        | `Interrupted -> Breakpoint.destroy bp
+        | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
     in
-    { recording; done_ivar; breakpoint_done; finalize_recording }
+    { Attachment.recording; done_ivar; breakpoint_done; finalize_recording }
   ;;
 
-  let detach { recording; done_ivar; breakpoint_done; finalize_recording } =
+  let detach { Attachment.recording; done_ivar; breakpoint_done; finalize_recording } =
     Ivar.fill_if_empty done_ivar ();
     let%bind () = breakpoint_done in
-    Core.eprintf "[Finished recording!]\n%!";
     finalize_recording ();
-    Backend.finish_recording recording
+    let%bind.Deferred.Or_error () = Backend.Recording.finish_recording recording in
+    Core.eprintf "[ Finished recording. ]\n%!";
+    return (Ok ())
   ;;
 
-  let run_and_record record_opts elf ~command =
+  let run_and_record record_opts ~elf ~debug_print_perf_commands ~prog ~argv =
     let open Deferred.Or_error.Let_syntax in
-    let argv = Array.of_list command in
-    let pid = Probes_lib.Raw_ptrace.start ~argv |> Pid.of_int in
-    let%bind attachment = attach record_opts elf pid in
-    Probes_lib.Raw_ptrace.detach (Pid.to_int pid);
-    let%bind.Deferred (_ : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid pid in
-    detach attachment
+    let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
+    let%bind attachment =
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Run [ pid ]
+    in
+    Ptrace.resume pid;
+    (* Forward ^C to the child, unless it has already exited. *)
+    let exited_ivar = Ivar.create () in
+    Async_unix.Signal.handle
+      ~stop:(Ivar.read exited_ivar)
+      Async_unix.Signal.terminating
+      ~f:(fun signal ->
+        try
+          UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
+        with
+        | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
+          (* We raced, but it's OK because the child still exited. *)
+          ());
+    (* [Monitor.try_with] because [waitpid] raises if perf died before we got here. *)
+    let%bind.Deferred (waitpid_result : (Core_unix.Exit_or_signal.t, exn) result) =
+      Monitor.try_with (fun () -> Async_unix.Unix.waitpid pid)
+    in
+    (match waitpid_result with
+    | Ok _ -> ()
+    | Error error ->
+      Core.eprintf
+        !"Warning: [perf] exited suspiciously quickly; it may have crashed.\n\
+          Error: %{Exn}\n\
+          %!"
+        error);
+    (* This is still a little racey, but it's the best we can do without pidfds. *)
+    Ivar.fill exited_ivar ();
+    let%bind () = detach attachment in
+    return pid
   ;;
 
-  let attach_and_record record_opts elf pid =
-    let%bind.Deferred.Or_error attachment = attach record_opts elf pid in
-    let { done_ivar; _ } = attachment in
+  let attach_and_record record_opts ~elf ~debug_print_perf_commands pids =
+    let%bind.Deferred.Or_error attachment =
+      attach record_opts ~elf ~debug_print_perf_commands ~subcommand:Attach pids
+    in
+    let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
-      Core.eprintf "[Got signal, detaching...]\n%!";
-      Ivar.fill_if_empty done_ivar ());
-    Core.eprintf "[Attached! Press Ctrl-C to stop recording]\n%!";
+        Core.eprintf "[ Got signal, detaching... ]\n%!";
+        Ivar.fill_if_empty done_ivar ());
+    Core.eprintf "[ Attached. Press Ctrl-C to stop recording. ]\n%!";
     let%bind () = stop in
     detach attachment
   ;;
@@ -255,63 +393,35 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let record_dir_flag mode =
     let open Command.Param in
     flag
-      "-record-dir"
+      "-working-directory"
       (mode Filename_unix.arg_type)
-      ~doc:"DIR create this directory if necessary and put raw trace data in it"
+      ~doc:
+        "DIR Where to store intermediate files (including raw perf.data files). If not \
+         provided, magic-trace stores them in a subdirectory of $TMPDIR and deletes them \
+         when it's done. If provided, files will be stored in the given directory, \
+         creating the directory if necessary, and magic-trace will not delete the \
+         directory when it's done."
   ;;
 
   let record_flags =
     let%map_open.Command record_dir = record_dir_flag optional
-    and executable_override =
-      flag
-        "-executable-override"
-        (optional Filename_unix.arg_type)
-        ~doc:
-          "FILE executable to extract information from, default is to use the first part \
-           of COMMAND"
-    and snap_symbol =
-      flag
-        "-symbol"
-        (optional string)
-        ~doc:
-          "SYMBOL take a snapshot when a symbol matching this regex is called, lets you \
-           pick a symbol with fzf if many match, use the empty string to show all \
-           symbols, defaults to Magic_trace.take_snapshot"
-    and snap_on_delay_over =
-      flag
-        "-delay-thresh"
-        (optional Time_ns_unix.Span.arg_type)
-        ~doc:"SPAN only snapshot when delay between symbol calls is longer than this"
-    and duration_thresh =
-      flag
-        "-duration-thresh"
-        (optional Time_ns_unix.Span.arg_type)
-        ~doc:"SPAN only snapshot intervals between mark_start and take_snapshot over this"
-    and use_filter =
-      flag
-        "-immediate-stop"
-        no_arg
-        ~doc:"stop immediately on snapshot, may crash kernel on EL8"
+    and when_to_snapshot = When_to_snapshot.param
     and multi_snapshot =
-      flag "-multi-snapshot" no_arg ~doc:"allow taking multiple snapshots if possible"
-    and backend_opts = Backend.record_param in
-    fun ~default_executable ~f ->
-      (match duration_thresh, snap_symbol with
-       | Some _, Some _ ->
-         failwith
-           "Can't use -duration-thresh while using -symbol, the duration only works with \
-            Magic_trace.take_snapshot, try -delay-thresh instead."
-       | _ -> ());
-      let executable =
-        match executable_override with
-        | Some path -> path
-        | None -> default_executable ()
-      in
-      let snap_symbol =
-        match snap_symbol with
-        | Some sym -> Re.Posix.re sym |> Re.compile
-        | None -> Re.str Magic_trace.Private.stop_symbol |> Re.whole_string |> Re.compile
-      in
+      flag
+        "-multi-snapshot"
+        no_arg
+        ~doc:
+          "Take a snapshot every time the trigger is hit, instead of only the first \
+           time. This flag has two caveats:\n\
+           (1) There's an ~8us performance hit every time the trigger symbol is hit. If \
+           snapshots trigger frequently, your application's performance may be \
+           materially impacted.\n\
+           (2) Each snapshot linearly increases the size of the trace file. Large trace \
+           files may crash the trace viewer."
+    and trace_mode = Trace_mode.param
+    and timer_resolution = Timer_resolution.param
+    and backend_opts = Backend.Record_opts.param in
+    fun ~executable ~f ->
       let record_dir, cleanup =
         match record_dir with
         | Some dir ->
@@ -324,124 +434,207 @@ module Make_commands (Backend : Backend_intf.S) = struct
           if cleanup then Shell.rm ~r:() ~f:() record_dir;
           Deferred.unit)
         (fun () ->
-           f
-             { backend_opts
-             ; use_filter
-             ; multi_snapshot
-             ; snap_symbol
-             ; record_dir
-             ; executable
-             ; snap_on_delay_over
-             ; duration_thresh
-             })
+          f
+            { Record_opts.backend_opts
+            ; multi_snapshot
+            ; when_to_snapshot
+            ; record_dir
+            ; executable
+            ; trace_mode
+            ; timer_resolution
+            })
   ;;
 
   let decode_flags =
-    let%map_open.Command output_config = Tracing.Tool_output.param
-    and verbose = flag "-verbose" no_arg ~doc:"print decoded events"
-    and decode_opts = Backend.decode_param in
-    { output_config; decode_opts; verbose }
+    let%map_open.Command output_config = Tracing_tool_output.param
+    and print_events =
+      flag "-z-print-events" no_arg ~doc:"Prints decoded [Event.t]s." |> debug_flag
+    and decode_opts = Backend.Decode_opts.param in
+    { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
-  let trace_command =
+  let run_command =
     Command.async_or_error
-      ~summary:
-        "Generate a trace for a command, and convert the results to a viewable Fuchsia \
-         trace."
+      ~summary:"Runs a command and traces it."
+      ~readme:(fun () ->
+        "=== examples ===\n\n\
+         # Run a process, snapshotting at ^C or exit\n\
+         magic-trace run ./program -- arg1 arg2\n\n\
+         # Run and trace all threads of a process, not just the main one, snapshotting \
+         at ^C or exit\n\
+         magic-trace run -multi-thread ./program -- arg1 arg2\n\n\
+         # Run a process, tracing its entire execution (only practical for short-lived \
+         processes)\n\
+         magic-trace run -full-execution ./program\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and command = anon ("COMMAND" %: string |> non_empty_sequence_as_list)
-       and command_extra = flag "--" escape ~doc:"ARGS additional arguments" in
+       and debug_print_perf_commands = debug_print_perf_commands
+       and prog = anon ("COMMAND" %: string)
+       and argv =
+         flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
+       in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let command =
-           match command_extra with
-           | None -> command
-           | Some l -> command @ l
-         in
-         let default_executable () =
-           let cmd = List.hd_exn command in
-           match Shell.which cmd with
+         let%bind () = check_for_processor_trace_support () in
+         let%bind () = check_for_perf () in
+         let executable =
+           match Shell.which prog with
            | Some path -> path
-           | None -> failwithf "Can't find executable for %s" cmd ()
+           | None -> failwithf "Can't find executable for %s" prog ()
          in
-         record_opt_fn ~default_executable ~f:(fun opts ->
-           let elf =
-             Elf.create opts.executable |> Option.value_exn ~message:"Invalid ELF"
-           in
-           let%bind () = run_and_record opts elf ~command in
-           decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+         record_opt_fn ~executable ~f:(fun opts ->
+             let elf = Elf.create opts.executable in
+             let%bind pid =
+               let argv = prog :: List.concat (Option.to_list argv) in
+               run_and_record opts ~elf ~debug_print_perf_commands ~prog ~argv
+             in
+             let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
+             decode_to_trace
+               ~perf_maps
+               ~elf
+               ~trace_mode:opts.trace_mode
+               ~debug_print_perf_commands
+               ~record_dir:opts.record_dir
+               decode_opts))
   ;;
 
   let select_pid () =
-    (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
+    if force supports_fzf
+    then (
+      let deselect_pid_args pid =
+        let pid = Pid.to_string pid in
+        [ "--ppid"; pid; "-p"; pid; "--deselect" ]
+      in
+      (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
        running processes. The [ps] command uses the /proc/ filesystem and is much easier
        than walking the /proc/ system and filtering ourselves. *)
-    let process_lines =
-      Shell.run_lines "ps" [ "x"; "-w"; "--no-headers"; "-o"; "pid,args" ]
-    in
-    let%bind.Deferred.Or_error sel_line =
-      Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
-    in
-    let pid =
-      let%bind.Option sel_line = sel_line in
-      let sel_line = String.lstrip sel_line in
-      let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
-      Pid.of_string first_part
-    in
-    match pid with
-    | Some s -> Deferred.return (Ok s)
-    | None -> Deferred.Or_error.error_string "No pid selected"
+      let process_lines =
+        [ [ "x"; "-w"; "--no-headers" ]
+        ; [ "-o"; "pid,args" ]
+          (* If running as root, allow tracing all processes, including those owned
+             by non-root users.
+
+             Hide kernel threads (PID 2 and children), since though we can trace them in
+             theory, in practice they don't have their image under /proc/$pid/exe, which
+             we currently rely on. *)
+        ; (if Core_unix.geteuid () = 0 then deselect_pid_args (Pid.of_int 2) else [])
+        ]
+        |> List.concat
+        |> Shell.run_lines "ps"
+      in
+      let%bind.Deferred.Or_error sel_line =
+        Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
+      in
+      let pid =
+        let%bind.Option sel_line = sel_line in
+        let sel_line = String.lstrip sel_line in
+        let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
+        Pid.of_string first_part
+      in
+      match pid with
+      | Some s -> Deferred.return (Ok s)
+      | None -> Deferred.Or_error.error_string "No pid selected")
+    else
+      Deferred.Or_error.error_string
+        "The [-pid] argument is mandatory. magic-trace could show you a fuzzy-finding \
+         selector here if \"fzf\" were in your PATH, but it is not."
   ;;
 
   let attach_command =
     Command.async_or_error
-      ~summary:
-        "Attach to a process and record it until Ctrl-C, then convert the results to a \
-         viewable Fuchsia trace."
+      ~summary:"Traces a running process."
+      ~readme:(fun () ->
+        "=== examples ===\n\n\
+         # Fuzzy-find to select a running process to trace the main thread of, \
+         snapshotting at ^C or exit\n\
+         magic-trace attach\n\n\
+         # Fuzzy-find to select a running process and symbol to trigger on, snapshotting \
+         the next time the symbol is called\n\
+         magic-trace attach -trigger ?\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and pid =
+       and debug_print_perf_commands = debug_print_perf_commands
+       and pids =
          flag
            "-pid"
-           (optional int)
-           ~doc:"PID Process to attach to, presents an fzf if omitted"
+           (optional (Arg_type.comma_separated int))
+           ~aliases:[ "-p" ]
+           ~doc:
+             "PID Processes to attach to as a comma separated list. Required if you \
+              don't have the \"fzf\" application available in your PATH."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
-         let%bind pid =
-           match pid with
-           | Some pid -> Pid.of_int pid |> Deferred.Or_error.return
-           | None -> select_pid ()
+         let%bind () = check_for_processor_trace_support () in
+         let%bind () = check_for_perf () in
+         let%bind (pids : Pid.t list) =
+           match pids with
+           | None -> select_pid () |> Deferred.Or_error.map ~f:(fun pid -> [ pid ])
+           | Some pids -> return (List.map ~f:Pid.of_int pids)
          in
-         let default_executable () =
-           Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
-         in
-         record_opt_fn ~default_executable ~f:(fun opts ->
-           let elf = Elf.create opts.executable |> Option.value_exn in
-           let%bind () = attach_and_record opts elf pid in
-           decode_to_trace decode_opts ~record_dir:opts.record_dir elf))
+         if List.contains_dup pids ~compare:Pid.compare
+         then Deferred.Or_error.error_string "Duplicate PIDs were passed"
+         else (
+           (* Always use the head PID for locating triggers since only a single
+              trigger can be passed currently. *)
+           let executable =
+             List.hd_exn pids
+             |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
+           in
+           record_opt_fn ~executable ~f:(fun opts ->
+               let { Record_opts.executable; when_to_snapshot; _ } = opts in
+               let%bind elf = create_elf ~executable ~when_to_snapshot in
+               let%bind () =
+                 attach_and_record opts ~elf ~debug_print_perf_commands pids
+               in
+               let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
+               decode_to_trace
+                 ~perf_maps
+                 ~elf
+                 ~trace_mode:opts.trace_mode
+                 ~debug_print_perf_commands
+                 ~record_dir:opts.record_dir
+                 decode_opts)))
   ;;
 
   let decode_command =
     Command.async_or_error
-      ~summary:
-        "Decode processor trace data and convert the results to a viewable Fuchsia trace."
+      ~summary:"Converts perf-script output to a trace. (expert)"
       (let%map_open.Command record_dir = record_dir_flag required
+       and trace_mode = Trace_mode.param
        and decode_opts = decode_flags
        and executable =
          flag
            "-executable"
            (required Filename_unix.arg_type)
-           ~doc:"FILE executable to extract information from"
-       in
+           ~doc:"FILE Executable to extract debug symbols from."
+       and perf_map_files =
+         flag
+           "-perf-map-file"
+           (optional (Arg_type.comma_separated Filename_unix.arg_type))
+           ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
+       and debug_print_perf_commands = debug_print_perf_commands in
        fun () ->
-         let elf = Elf.create executable |> Option.value_exn in
-         decode_to_trace decode_opts ~record_dir elf)
+         (* Doesn't use create_elf because there's no need to check that the binary has symbols if
+            we're trying to snapshot it. *)
+         let elf = Elf.create executable in
+         let%bind perf_maps =
+           match perf_map_files with
+           | None -> Deferred.return None
+           | Some files ->
+             Perf_map.Table.load_by_files files |> Deferred.map ~f:Option.some
+         in
+         decode_to_trace
+           ?perf_maps
+           ~elf
+           ~trace_mode
+           ~debug_print_perf_commands
+           ~record_dir
+           decode_opts)
   ;;
 
   let commands =
-    [ "trace", trace_command; "attach", attach_command; "decode", decode_command ]
+    [ "run", run_command; "attach", attach_command; "decode", decode_command ]
   ;;
 end
 
@@ -453,5 +646,5 @@ let command =
 ;;
 
 module For_testing = struct
-  let write_trace_from_events = write_trace_from_events ~verbose:false
+  let write_trace_from_events = write_trace_from_events ~print_events:false
 end
