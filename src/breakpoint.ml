@@ -4,8 +4,8 @@ open! Import
 type t
 
 external create
-  :  pid:Pid.t
-  -> addr:int64
+  :  pid:int
+  -> addr:int
   -> single_hit:bool
   -> (t, int) result
   = "magic_breakpoint_create_stub"
@@ -13,11 +13,11 @@ external create
 (* Keep in sync with magic_breakpoint_next_stub *)
 module Hit = struct
   type t =
-    { timestamp : Time_ns.Span.t
-    ; passed_timestamp : Time_ns.Span.t
+    { timestamp : int
+    ; passed_timestamp : int
     ; passed_val : int
-    ; tid : Pid.t
-    ; ip : Int64.Hex.t
+    ; tid : int
+    ; ip : int
     }
   [@@deriving sexp]
 end
@@ -27,7 +27,7 @@ external destroy : t -> unit = "magic_breakpoint_destroy_stub"
 external next_hit : t -> Hit.t option = "magic_breakpoint_next_stub"
 
 let breakpoint_fd pid ~addr ~single_hit =
-  match create ~pid ~addr ~single_hit with
+  match create ~pid:(Pid.to_int pid) ~addr ~single_hit with
   | Ok t -> Ok t
   | Error errno -> Errno.to_error errno
 ;;

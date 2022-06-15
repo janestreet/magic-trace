@@ -1,11 +1,10 @@
 INSTALL_ARGS := $(if $(PREFIX),--prefix $(PREFIX),)
-BUILD_ARGS := $(if $(PROFILE),--profile $(PROFILE),)
 
 default:
-	dune build $(BUILD_ARGS)
+	dune build
 
 install:
-	dune install $(INSTALL_ARGS) magic-trace
+	dune install $(INSTALL_ARGS)
 
 uninstall:
 	dune uninstall $(INSTALL_ARGS)

@@ -1,27 +1,30 @@
 opam-version: "2.0"
 maintainer: "Jane Street developers"
 authors: ["Jane Street Group, LLC"]
-homepage: "https://magic-trace.org"
+homepage: "https://github.com/janestreet/magic-trace"
 bug-reports: "https://github.com/janestreet/magic-trace/issues"
 dev-repo: "git+https://github.com/janestreet/magic-trace.git"
-doc: "https://github.com/janestreet/magic-trace/wiki"
+doc: "https://ocaml.janestreet.com/ocaml-core/latest/doc/magic-trace/index.html"
 license: "MIT"
 build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"        {>= "4.12"}
+  "ocaml" {>= "4.08.0"}
   "async"
-  "cohttp"
-  "cohttp_static_handler"
   "core"
   "core_unix"
-  "expect_test_helpers_async"
+  "fzf"
+  "ocaml-probes"
   "ppx_jane"
   "shell"
+  "tracing"
   "dune"         {>= "2.0.0"}
-  "owee"         {>= "0.6"}
+  "owee"
   "re"           {>= "1.8.0"}
 ]
-synopsis: "Collects and displays high-resolution traces of what a process is doing"
-description: "https://github.com/janestreet/magic-trace"
+synopsis: "Easy Intel Processor Trace Visualizer"
+description: "
+Magic-trace makes it easy to record and visualize Intel Processor Trace data for
+    debugging tricky performance issues.
+"

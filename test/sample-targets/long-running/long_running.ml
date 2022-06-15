@@ -48,8 +48,8 @@ let[@inline never] rec main_loop t n =
     if t.do_snap
     then Magic_trace.take_snapshot_with_time_and_arg (Time_stamp_counter.now ()) n;
     (match t.limit with
-    | Some limit when limit >= t.num_snaps -> ()
-    | _ -> main_loop { t with last_snap = now; num_snaps = t.num_snaps + 1 } (n + 1))
+     | Some limit when limit >= t.num_snaps -> ()
+     | _ -> main_loop { t with last_snap = now; num_snaps = t.num_snaps + 1 } (n + 1))
   | false ->
     if t.sleeps && n % 4000 = 0 then ignore (Core_unix.nanosleep 0.001 : float);
     main_loop t (n + 1)
@@ -85,8 +85,8 @@ let command =
            Core_thread.create
              ~on_uncaught_exn:`Kill_whole_process
              (fun () ->
-               let t2 = { t with do_snap = false } in
-               main_loop t2 0)
+                let t2 = { t with do_snap = false } in
+                main_loop t2 0)
              ()
            |> Some
        in

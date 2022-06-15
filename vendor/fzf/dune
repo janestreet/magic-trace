@@ -1,2 +1,0 @@
-(alias (name feature-subtree-build)
- (deps (alias %{workspace_root}/lib/fzf_selector/feature-subtree-build)))

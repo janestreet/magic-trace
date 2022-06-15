@@ -6,17 +6,17 @@ type t
     When that breakpoint is hit the resulting file descriptor will poll as readable.
 
     If [single_hit] is set the breakpoint will disable itself after being hit once. *)
-val breakpoint_fd : Pid.t -> addr:int64 -> single_hit:bool -> t Or_error.t
+val breakpoint_fd : Pid.t -> addr:int -> single_hit:bool -> t Or_error.t
 
 val destroy : t -> unit
 
 module Hit : sig
   type t =
-    { timestamp : Time_ns.Span.t
-    ; passed_timestamp : Time_ns.Span.t
+    { timestamp : int
+    ; passed_timestamp : int
     ; passed_val : int
-    ; tid : Pid.t
-    ; ip : int64
+    ; tid : int
+    ; ip : int
     }
   [@@deriving sexp]
 end

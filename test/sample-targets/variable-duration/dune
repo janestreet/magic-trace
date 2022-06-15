@@ -1,5 +1,3 @@
-(executables
- (names variable_duration)
+(executables (names variable_duration)
  (libraries core core_unix ocaml_intrinsics magic_trace)
- (preprocess
-  (pps ppx_jane)))
+ (preprocess (pps ppx_jane)))

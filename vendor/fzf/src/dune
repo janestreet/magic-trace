@@ -1,2 +1,0 @@
-(library (name fzf) (public_name fzf)
- (libraries async core_kernel.nonempty_list) (preprocess (pps ppx_jane)))

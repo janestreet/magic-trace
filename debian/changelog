@@ -1,5 +1,0 @@
-magic-trace (0.0-1) unstable; urgency=medium
-
-  * Base version to allow building in CI
-
- -- Jane Street <opensource-contacts@janestreet.com>  Sun, 20 Mar 2022 12:49:30 -0400

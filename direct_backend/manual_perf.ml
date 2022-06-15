@@ -104,13 +104,13 @@ module Tracing_state = struct
   type t = Stub.c_tracing_state
 
   let attach
-      ?(data_size = 0x400000)
-      ?(aux_size = 0x400000)
-      ?filter
-      ~pt_file
-      ~sideband_file
-      ~setup_file
-      pid
+        ?(data_size = 0x400000)
+        ?(aux_size = 0x400000)
+        ?filter
+        ~pt_file
+        ~sideband_file
+        ~setup_file
+        pid
     =
     let state = Stub.create_empty_state () in
     let trace_meta : Stub.Trace_meta.t =
@@ -130,9 +130,9 @@ module Tracing_state = struct
       setup_file
       ~data:
         ([%sexp
-           ({ initial_maps = read_current_maps pid; trace_meta; pid = Pid.to_int pid }
-             : Setup_info.t)]
-        |> Sexp.to_string);
+          ({ initial_maps = read_current_maps pid; trace_meta; pid = Pid.to_int pid }
+           : Setup_info.t)]
+         |> Sexp.to_string);
     state
   ;;
 
