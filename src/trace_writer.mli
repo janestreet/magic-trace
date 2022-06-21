@@ -11,7 +11,7 @@ val debug : bool ref
 type t [@@deriving sexp_of]
 
 val create
-  :  trace_mode:Trace_mode.t
+  :  trace_scope:Trace_scope.t
   -> debug_info:Elf.Addr_table.t option
   -> ocaml_exception_info:Ocaml_exception_info.t option
   -> earliest_time:Time_ns.Span.t
@@ -23,7 +23,7 @@ val create
 module type Trace = Trace_writer_intf.S_trace
 
 val create_expert
-  :  trace_mode:Trace_mode.t
+  :  trace_scope:Trace_scope.t
   -> debug_info:Elf.Addr_table.t option
   -> ocaml_exception_info:Ocaml_exception_info.t option
   -> earliest_time:Time_ns.Span.t

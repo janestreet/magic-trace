@@ -70,7 +70,7 @@ let debug_print_perf_commands =
 let write_trace_from_events
     ?ocaml_exception_info
     ~print_events
-    ~trace_mode
+    ~trace_scope
     ~debug_info
     writer
     hits
@@ -101,7 +101,7 @@ let write_trace_from_events
   in
   let writer =
     Trace_writer.create
-      ~trace_mode
+      ~trace_scope
       ~debug_info
       ~ocaml_exception_info
       ~earliest_time
@@ -145,7 +145,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let decode_to_trace
       ?perf_maps
       ~elf
-      ~trace_mode
+      ~trace_scope
       ~debug_print_perf_commands
       ~record_dir
       { Decode_opts.output_config; decode_opts; print_events }
@@ -197,7 +197,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           write_trace_from_events
             ?ocaml_exception_info
             ~debug_info
-            ~trace_mode
+            ~trace_scope
             ~print_events
             writer
             hits
@@ -213,7 +213,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; when_to_snapshot : When_to_snapshot.t
       ; record_dir : string
       ; executable : string
-      ; trace_mode : Trace_mode.t
+      ; trace_scope : Trace_scope.t
       ; timer_resolution : Timer_resolution.t
       }
   end
@@ -265,7 +265,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         ~debug_print_perf_commands
         ~subcommand
         ~when_to_snapshot:opts.when_to_snapshot
-        ~trace_mode:opts.trace_mode
+        ~trace_scope:opts.trace_scope
         ~timer_resolution:opts.timer_resolution
         ~record_dir:opts.record_dir
         pids
@@ -419,7 +419,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            materially impacted.\n\
            (2) Each snapshot linearly increases the size of the trace file. Large trace \
            files may crash the trace viewer."
-    and trace_mode = Trace_mode.param
+    and trace_scope = Trace_scope.param
     and timer_resolution = Timer_resolution.param
     and backend_opts = Backend.Record_opts.param in
     fun ~executable ~f ->
@@ -441,7 +441,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; when_to_snapshot
             ; record_dir
             ; executable
-            ; trace_mode
+            ; trace_scope
             ; timer_resolution
             })
   ;;
@@ -493,7 +493,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
              decode_to_trace
                ~perf_maps
                ~elf
-               ~trace_mode:opts.trace_mode
+               ~trace_scope:opts.trace_scope
                ~debug_print_perf_commands
                ~record_dir:opts.record_dir
                decode_opts))
@@ -592,7 +592,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                decode_to_trace
                  ~perf_maps
                  ~elf
-                 ~trace_mode:opts.trace_mode
+                 ~trace_scope:opts.trace_scope
                  ~debug_print_perf_commands
                  ~record_dir:opts.record_dir
                  decode_opts)))
@@ -602,7 +602,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Command.async_or_error
       ~summary:"Converts perf-script output to a trace. (expert)"
       (let%map_open.Command record_dir = record_dir_flag required
-       and trace_mode = Trace_mode.param
+       and trace_scope = Trace_scope.param
        and decode_opts = decode_flags
        and executable =
          flag
@@ -628,7 +628,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          decode_to_trace
            ?perf_maps
            ~elf
-           ~trace_mode
+           ~trace_scope
            ~debug_print_perf_commands
            ~record_dir
            decode_opts)

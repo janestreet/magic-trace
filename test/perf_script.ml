@@ -3,7 +3,7 @@ open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 
-let run ?(debug = false) ?ocaml_exception_info ~trace_mode file =
+let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
   (* CR-someday cgaebel: Get the git root by shelling out to `git rev-parse --show-toplevel`.
      This works, but is ridiculous. *)
   let git_root = "../../.." in
@@ -51,7 +51,7 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_mode file =
     ~f:(fun () ->
       let trace_writer =
         Trace_writer.create_expert
-          ~trace_mode
+          ~trace_scope
           ~debug_info:None
           ~ocaml_exception_info
           ~earliest_time:Time_ns.Span.zero

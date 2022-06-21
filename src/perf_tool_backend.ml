@@ -69,7 +69,7 @@ module Recording = struct
     ; when_to_snapshot : [ `at_exit of [ `sigint | `sigusr2 ] | `function_call | `never ]
     }
 
-  let perf_selector_of_trace_mode : Trace_mode.t -> string = function
+  let perf_selector_of_trace_scope : Trace_scope.t -> string = function
     | Userspace -> "u"
     | Kernel -> "k"
     | Userspace_and_kernel -> "uk"
@@ -100,14 +100,14 @@ module Recording = struct
       ~debug_print_perf_commands
       ~(subcommand : Subcommand.t)
       ~(when_to_snapshot : When_to_snapshot.t)
-      ~(trace_mode : Trace_mode.t)
+      ~(trace_scope : Trace_scope.t)
       ~(timer_resolution : Timer_resolution.t)
       ~record_dir
       pids
     =
     let%bind capabilities = Perf_capabilities.detect_exn () in
     let%bind.Deferred.Or_error () =
-      match trace_mode, Perf_capabilities.(do_intersect capabilities kernel_tracing) with
+      match trace_scope, Perf_capabilities.(do_intersect capabilities kernel_tracing) with
       | Userspace, _ | _, true -> return (Ok ())
       | (Kernel | Userspace_and_kernel), false ->
         if not Env_vars.perf_is_privileged
@@ -153,11 +153,11 @@ module Recording = struct
         | _, _ -> timer_resolution
       in
       let intel_pt_config = perf_intel_pt_config_of_timer_resolution timer_resolution in
-      let selector = perf_selector_of_trace_mode trace_mode in
+      let selector = perf_selector_of_trace_scope trace_scope in
       [%string "--event=intel_pt/%{intel_pt_config}/%{selector}"]
     in
     let kcore_opts =
-      match trace_mode, Perf_capabilities.(do_intersect capabilities kcore) with
+      match trace_scope, Perf_capabilities.(do_intersect capabilities kcore) with
       | Userspace, _ -> []
       | (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
       | (Kernel | Userspace_and_kernel), false ->
