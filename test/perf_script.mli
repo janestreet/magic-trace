@@ -16,6 +16,6 @@ open! Magic_trace_core
 val run
   :  ?debug:bool
   -> ?ocaml_exception_info:Ocaml_exception_info.t
-  -> trace_mode:Trace_mode.t
+  -> trace_scope:Trace_scope.t
   -> Filename.t
   -> unit

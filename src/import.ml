@@ -11,7 +11,7 @@ include struct
   module Subcommand = Subcommand
   module Symbol = Symbol
   module Timer_resolution = Timer_resolution
-  module Trace_mode = Trace_mode
+  module Trace_scope = Trace_scope
   module Trace_state_change = Trace_state_change
   module When_to_snapshot = When_to_snapshot
 end

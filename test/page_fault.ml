@@ -1,7 +1,7 @@
 open! Core
 
 let%expect_test "A page fault during demo.c" =
-  Perf_script.run ~trace_mode:Userspace_and_kernel "page_fault.perf";
+  Perf_script.run ~trace_scope:Userspace_and_kernel "page_fault.perf";
   [%expect
     {|
     1439745/1439745 2472089.651284813:   jmp                      7f59488f90f7 call_destructors+0x67 (foo.so) =>     7f5948676e18 _fini+0x0 (foo.so)

@@ -19,7 +19,7 @@ module type S = sig
       -> debug_print_perf_commands:bool
       -> subcommand:Subcommand.t
       -> when_to_snapshot:When_to_snapshot.t
-      -> trace_mode:Trace_mode.t
+      -> trace_scope:Trace_scope.t
       -> timer_resolution:Timer_resolution.t
       -> record_dir:string
       -> Pid.t list

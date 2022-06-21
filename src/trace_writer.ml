@@ -117,7 +117,7 @@ type 'thread inner =
   ; ocaml_exception_info : Ocaml_exception_info.t option
   ; thread_info : 'thread Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
-  ; trace_mode : Trace_mode.t
+  ; trace_scope : Trace_scope.t
   ; trace : (module Trace with type thread = 'thread)
   ; annotate_inferred_start_times : bool
   }
@@ -260,7 +260,7 @@ let write_hits (T t) hits =
 ;;
 
 let create_expert
-    ~trace_mode
+    ~trace_scope
     ~debug_info
     ~ocaml_exception_info
     ~earliest_time
@@ -278,7 +278,7 @@ let create_expert
       ; ocaml_exception_info
       ; thread_info = Hashtbl.create (module Event.Thread)
       ; base_time
-      ; trace_mode
+      ; trace_scope
       ; trace
       ; annotate_inferred_start_times
       }
@@ -288,7 +288,7 @@ let create_expert
 ;;
 
 let create
-    ~trace_mode
+    ~trace_scope
     ~debug_info
     ~ocaml_exception_info
     ~earliest_time
@@ -297,7 +297,7 @@ let create
     trace
   =
   create_expert
-    ~trace_mode
+    ~trace_scope
     ~debug_info
     ~ocaml_exception_info
     ~earliest_time
@@ -778,14 +778,14 @@ end = struct
   ;;
 end
 
-let assert_trace_mode t event trace_modes =
-  if List.find trace_modes ~f:(Trace_mode.equal t.trace_mode) |> Option.is_none
+let assert_trace_scope t event trace_scopes =
+  if List.find trace_scopes ~f:(Trace_scope.equal t.trace_scope) |> Option.is_none
   then
     (* CR-someday cgaebel: Should this raise? *)
     Core.eprint_s
       [%message
         "BUG: assumptions violated, saw an unexpected event for this trace mode"
-          ~trace_mode:(t.trace_mode : Trace_mode.t)
+          ~trace_scope:(t.trace_scope : Trace_scope.t)
           (event : Event.t)]
 ;;
 
@@ -859,7 +859,7 @@ let write_event (T t) event =
     | None, Some End -> call t thread_info ~time ~location:Event.Location.untraced
     | Some Syscall, Some End ->
       (* We should only be getting these under /u *)
-      assert_trace_mode t outer_event [ Userspace ];
+      assert_trace_scope t outer_event [ Userspace ];
       call t thread_info ~time ~location:Event.Location.syscall
     | Some Return, Some End -> call t thread_info ~time ~location:Event.Location.returned
     | Some Return, None ->
@@ -868,7 +868,7 @@ let write_event (T t) event =
     | None, Some Start ->
       (* Might get this under /u, /k, and /uk, but we need to handle them all
        differently. *)
-      if Trace_mode.equal t.trace_mode Kernel
+      if Trace_scope.equal t.trace_scope Kernel
       then (
         (* We're back in the kernel after having been in userspace. We have a
            brand new stack to work with. [clear_callstack] here should only be
@@ -895,13 +895,13 @@ let write_event (T t) event =
     | Some ((Syscall | Hardware_interrupt) as kind), None ->
       (* We should only be getting [Syscall] these under /uk, but we can get
          [Hardware_interrupt] under /uk, /k. *)
-      [ [ Trace_mode.Userspace_and_kernel ]
+      [ [ Trace_scope.Userspace_and_kernel ]
       ; (if [%compare.equal: Event.Kind.t] kind Hardware_interrupt
         then [ Kernel ]
         else [])
       ]
       |> List.concat
-      |> assert_trace_mode t outer_event;
+      |> assert_trace_scope t outer_event;
       (* A syscall or hardware interrupt can be modelled as operating on a new
          stack, and shouldn't be allowed to modify the previous stack.
 
@@ -912,17 +912,17 @@ let write_event (T t) event =
       call t thread_info ~time ~location:dst
     | Some (Iret | Sysret), Some End ->
       (* We should only be getting these under /k *)
-      assert_trace_mode t outer_event [ Kernel ];
+      assert_trace_scope t outer_event [ Kernel ];
       clear_callstack t thread_info ~time;
       call t thread_info ~time ~location:Event.Location.untraced
     | Some ((Iret | Sysret) as kind), None ->
       (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
          well (because the kernel can be interrupted). *)
-      [ [ Trace_mode.Userspace_and_kernel ]
+      [ [ Trace_scope.Userspace_and_kernel ]
       ; (if [%compare.equal: Event.Kind.t] kind Iret then [ Kernel ] else [])
       ]
       |> List.concat
-      |> assert_trace_mode t outer_event;
+      |> assert_trace_scope t outer_event;
       clear_callstack t thread_info ~time;
       (match Stack.pop thread_info.inactive_callstacks with
       | Some callstack -> thread_info.callstack <- callstack
