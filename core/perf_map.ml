@@ -12,9 +12,6 @@ let perf_map_re =
   Re.Posix.re {|^([0-9a-fA-F]+) ([0-9a-fA-F]+) (.*)$|} |> Re.compile
 ;;
 
-let hex_to_int s = Int.Hex.of_string ("0x" ^ s)
-let hex_to_int64 s = Int64.Hex.of_string ("0x" ^ s)
-
 let parse_line line =
   (* empty string for the last line in a file *)
   if String.is_empty line
@@ -23,8 +20,10 @@ let parse_line line =
     try
       match Re.Group.all (Re.exec perf_map_re line) with
       | [| _; start_addr; size; function_ |] ->
-        let start_addr = hex_to_int64 start_addr in
-        (start_addr, { Perf_map_location.start_addr; size = hex_to_int size; function_ })
+        let start_addr = Util.int64_of_hex_string start_addr in
+        ( start_addr
+        , { Perf_map_location.start_addr; size = Util.int_of_hex_string size; function_ }
+        )
         |> Some
       | _ -> failwith "doesn't match regex"
     with

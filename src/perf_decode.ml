@@ -8,41 +8,6 @@ let saturating_sub_i64 a b =
   | Some offset -> offset
 ;;
 
-let int64_of_hex_string str =
-  (* Bit hacks for fast parsing of hex strings.
-   *
-   * Note that in ASCII, ('1' | 'a' | 'A') & 0xF = 1.
-   *
-   * So for each character, take the bottom 4 bits, and add 9 if it's
-   * not a digit. *)
-  let res = ref 0L in
-  for i = 0 to String.length str - 1 do
-    let open Int64 in
-    let c = of_int (Char.to_int (String.unsafe_get str i)) in
-    res := (!res lsl 4) lor ((c land 0xFL) + ((c lsr 6) lor ((c lsr 3) land 0x8L)))
-  done;
-  !res
-;;
-
-let%test_module _ =
-  (module struct
-    open Core
-
-    let check str = Core.print_s ([%sexp_of: Int64.Hex.t] (int64_of_hex_string str))
-
-    let%expect_test "int64 hex parsing" =
-      check "fF";
-      [%expect {| 0xff |}];
-      check "f0f";
-      [%expect {| 0xf0f |}];
-      check "fA0f";
-      [%expect {| 0xfa0f |}];
-      check "0";
-      [%expect {| 0x0 |}]
-    ;;
-  end)
-;;
-
 let ok_perf_sample_line_re =
   Re.Perl.re {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): *$|} |> Re.compile
 ;;
@@ -106,7 +71,8 @@ let parse_time ~time_hi ~time_lo =
 
 let parse_symbol_and_offset ?perf_maps pid str ~addr =
   match Re.Group.all (Re.exec symbol_and_offset_re str) with
-  | [| _; symbol; offset |] -> Symbol.From_perf symbol, Int.Hex.of_string offset
+  | [| _; symbol; offset |] ->
+    Symbol.From_perf symbol, Util.int_of_hex_string ~remove_hex_prefix:true offset
   | _ | (exception _) ->
     let failed = Symbol.Unknown, 0 in
     (match perf_maps, pid with
@@ -138,7 +104,9 @@ let trace_error_to_event matches : Event.Decode_error.t =
     let pid = maybe_pid_of_string pid in
     let tid = maybe_pid_of_string tid in
     let instruction_pointer =
-      if String.( = ) ip "0" then None else Some (Int64.Hex.of_string ip)
+      if String.( = ) ip "0"
+      then None
+      else Some (Util.int64_of_hex_string ~remove_hex_prefix:true ip)
     in
     let time =
       if String.is_empty time_hi && String.is_empty time_lo
@@ -182,7 +150,7 @@ let ok_perf_sample_line_to_event ?perf_maps matches lines : Event.Ok.t =
       List.map lines ~f:(fun line ->
           match Re.Group.all (Re.exec ok_perf_sample_callstack_entry_re line) with
           | [| _; instruction_pointer; symbol_and_offset |] ->
-            let instruction_pointer = int64_of_hex_string instruction_pointer in
+            let instruction_pointer = Util.int64_of_hex_string instruction_pointer in
             let symbol, symbol_offset =
               parse_symbol_and_offset
                 ?perf_maps
@@ -220,8 +188,8 @@ let ok_perf_line_to_event ?perf_maps matches line : Event.Ok.t =
     let pid = maybe_pid_of_string pid in
     let tid = maybe_pid_of_string tid in
     let time = parse_time ~time_hi ~time_lo in
-    let src_instruction_pointer = int64_of_hex_string src_instruction_pointer in
-    let dst_instruction_pointer = int64_of_hex_string dst_instruction_pointer in
+    let src_instruction_pointer = Util.int64_of_hex_string src_instruction_pointer in
+    let dst_instruction_pointer = Util.int64_of_hex_string dst_instruction_pointer in
     let src_symbol, src_symbol_offset =
       parse_symbol_and_offset
         ?perf_maps
