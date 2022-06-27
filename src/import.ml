@@ -4,9 +4,11 @@ include struct
   module Collection_mode = Collection_mode
   module Decode_result = Decode_result
   module Elf = Elf
+  module Env_vars = Env_vars
   module Errno = Errno
   module Event = Event
   module Ocaml_exception_info = Ocaml_exception_info
+  module Perf_capabilities = Perf_capabilities
   module Perf_map = Perf_map
   module Perf_map_location = Perf_map_location
   module Subcommand = Subcommand
