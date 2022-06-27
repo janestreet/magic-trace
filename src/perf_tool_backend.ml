@@ -261,10 +261,12 @@ module Recording = struct
         Deferred.Or_error.return [%string "--event=cycles:%{selector}"]
     in
     let kcore_opts =
-      match trace_scope, Perf_capabilities.(do_intersect capabilities kcore) with
-      | Userspace, _ -> []
-      | (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
-      | (Kernel | Userspace_and_kernel), false ->
+      match
+        collection_mode, trace_scope, Perf_capabilities.(do_intersect capabilities kcore)
+      with
+      | Intel_processor_trace, Userspace, _ | Stacktrace_sampling, _, _ -> []
+      | Intel_processor_trace, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
+      | Intel_processor_trace, (Kernel | Userspace_and_kernel), false ->
         (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
            here instead of bailing. But that's tricky, and upgrading to a newer
            perf is easier. *)
@@ -431,8 +433,8 @@ let decode_events
         let fields_opts =
           match collection_mode with
           | Intel_processor_trace ->
-            [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso" ]
-          | Stacktrace_sampling -> [ "-F"; "pid,tid,time,ip,sym,symoff,dso" ]
+            [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso,event,period" ]
+          | Stacktrace_sampling -> [ "-F"; "pid,tid,time,ip,sym,symoff,dso,event,period" ]
         in
         let args =
           List.concat
