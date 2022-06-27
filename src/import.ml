@@ -7,6 +7,7 @@ include struct
   module Errno = Errno
   module Event = Event
   module Ocaml_exception_info = Ocaml_exception_info
+  module Perf_capabilities = Perf_capabilities
   module Perf_map = Perf_map
   module Perf_map_location = Perf_map_location
   module Subcommand = Subcommand
