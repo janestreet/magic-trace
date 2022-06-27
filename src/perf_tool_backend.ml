@@ -101,13 +101,28 @@ module Recording = struct
   ;;
 
   let perf_intel_pt_config_of_timer_resolution
-      : Timer_resolution.t -> string Deferred.Or_error.t
-    = function
-    | Low -> Deferred.Or_error.return ""
-    | Normal -> Deferred.Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0"
-    | High -> Deferred.Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
+      ~capabilities
+      (timer_resolution : Timer_resolution.t)
+    =
+    let timer_resolution =
+      match
+        ( timer_resolution
+        , Perf_capabilities.(do_intersect capabilities configurable_psb_period) )
+      with
+      | (Normal | High), false ->
+        Core.eprintf
+          "Warning: This machine has an older generation processor, timing granularity \
+           will be ~1us instead of ~10ns. Consider using a newer machine.\n\
+           %!";
+        Timer_resolution.Low
+      | _, _ -> timer_resolution
+    in
+    match timer_resolution with
+    | Low -> Or_error.return ""
+    | Normal -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0"
+    | High -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
     | Sample _ ->
-      Deferred.Or_error.error_string
+      Or_error.error_string
         "[-timer-resolution Sample] can only be used in sampling mode. (Did you forget \
          [-sampling]?)"
     | Custom { cyc; cyc_thresh; mtc; mtc_period; noretcomp; psb_period } ->
@@ -124,7 +139,67 @@ module Recording = struct
       ]
       |> List.filter_opt
       |> String.concat ~sep:","
-      |> Deferred.Or_error.return
+      |> Or_error.return
+  ;;
+
+  let perf_cycles_config_of_timer_resolution (timer_resolution : Timer_resolution.t) =
+    match timer_resolution with
+    | Low -> Or_error.return "freq=1000"
+    | Normal -> Or_error.return "freq=10000"
+    | High -> Or_error.return [%string "freq=%{max_sampling_frequency ()#Int}"]
+    | Sample { freq } -> Or_error.return [%string "freq=%{freq#Int}"]
+    | Custom _ ->
+      Or_error.error_string
+        "[-timer-resolution Custom] can only be used with Intel PT. (Are you running on \
+         a physical Intel machine without [-sampling]?)"
+  ;;
+
+  let perf_config_of_extra_events ~selector extra_events =
+    List.map
+      extra_events
+      ~f:(fun ({ when_to_sample; name; precision } : Collection_mode.Event.t) ->
+        let precision_selector =
+          match precision with
+          | Arbitrary_skid -> ""
+          | Constant_skid -> "p"
+          | Request_zero_skid -> "pp"
+          | Zero_skid -> "ppp"
+          | Maximum_possible -> "P"
+        in
+        match when_to_sample with
+        | Period period ->
+          [%string
+            "%{name#Collection_mode.Event.Name}/period=%{period#Int}/%{selector}%{precision_selector}"]
+        | Frequency freq ->
+          [%string
+            "%{name#Collection_mode.Event.Name}/freq=%{freq#Int}/%{selector}%{precision_selector}"])
+  ;;
+
+  let perf_args_of_collection_mode
+      ~capabilities
+      ~timer_resolution
+      ~trace_scope
+      (collection_mode : Collection_mode.t)
+    =
+    let selector = perf_selector_of_trace_scope trace_scope in
+    let%map.Or_error primary_event =
+      match collection_mode with
+      | Intel_processor_trace _ ->
+        let%map.Or_error intel_pt_config =
+          perf_intel_pt_config_of_timer_resolution ~capabilities timer_resolution
+        in
+        [%string "intel_pt/%{intel_pt_config}/%{selector}"]
+      | Stacktrace_sampling _ ->
+        let%map.Or_error cycles_config =
+          perf_cycles_config_of_timer_resolution timer_resolution
+        in
+        [%string "cycles/%{cycles_config}/%{selector}"]
+    in
+    let extra_events =
+      perf_config_of_extra_events ~selector (Collection_mode.extra_events collection_mode)
+    in
+    let arg_string = String.concat ~sep:"," (primary_event :: extra_events) in
+    [ [%string "--event=%{arg_string}"] ]
   ;;
 
   let init_record_dir record_dir =
@@ -178,38 +253,37 @@ module Recording = struct
            https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
            %!"
     | Application_calls_a_function _, _ | _, Attach -> ());
+    (* CR-someday alamoreaux: [--per-thread] is an important argument here.
+       However perf fails with an invalid argument to mmap if [--per-thread] is
+       given as well as additional events to sample. Without [--per-thread], you
+       can end up with traces have gaps in time if a process was switching
+       between CPUs.
+
+       We would allow this flag always if perf didn't crash. Even then, it might
+       be worth having magic-trace potentially be able to handle / filter the
+       trace better. *)
+    let per_thread_opts =
+      match Collection_mode.extra_events collection_mode with
+      | [] -> [ "--per-thread" ]
+      | _ -> []
+    in
     let thread_opts =
       match multi_thread with
-      | false -> [ "--per-thread"; "-t" ]
+      | false -> List.concat [ per_thread_opts; [ "-t" ] ]
       | true -> [ "-p" ]
     in
     let pid_opt = [ List.map pids ~f:Pid.to_string |> String.concat ~sep:"," ] in
-    let%bind.Deferred.Or_error freq_opts =
-      let open Deferred.Or_error in
-      match collection_mode with
-      | Intel_processor_trace -> return []
-      | Stacktrace_sampling ->
-        (match timer_resolution with
-        | Low -> return [ "-F"; "1000" ]
-        | Normal -> return [ "-F"; "10000" ]
-        | High -> return [ "-F"; Int.to_string (max_sampling_frequency ()) ]
-        | Sample { freq } -> return [ "-F"; Int.to_string freq ]
-        | Custom _ ->
-          error_string
-            "[-timer-resolution Custom] can only be used with Intel PT. (Are you running \
-             on a physical Intel machine without [-sampling]?)")
-    in
     let%bind.Deferred.Or_error selected_callgraph_mode =
       let open Deferred.Or_error.Let_syntax in
       match collection_mode with
-      | Intel_processor_trace ->
+      | Intel_processor_trace _ ->
         (match callgraph_mode with
         | None -> return None
         | Some _ ->
           Deferred.Or_error.error_string
             "[-callgraph-mode] is only configurable when running magic-trace with \
              sampling.")
-      | Stacktrace_sampling ->
+      | Stacktrace_sampling _ ->
         (match
            ( callgraph_mode
            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
@@ -236,29 +310,13 @@ module Recording = struct
         | Some mode, false -> return (Some mode)
         | Some mode, true -> return (Some mode))
     in
-    let%bind.Deferred.Or_error ev_arg =
-      let selector = perf_selector_of_trace_scope trace_scope in
-      match collection_mode with
-      | Intel_processor_trace ->
-        let timer_resolution : Timer_resolution.t =
-          match
-            ( timer_resolution
-            , Perf_capabilities.(do_intersect capabilities configurable_psb_period) )
-          with
-          | (Normal | High), false ->
-            Core.eprintf
-              "Warning: This machine has an older generation processor, timing \
-               granularity will be ~1us instead of ~10ns. Consider using a newer machine.\n\
-               %!";
-            Low
-          | _, _ -> timer_resolution
-        in
-        let%map.Deferred.Or_error intel_pt_config =
-          perf_intel_pt_config_of_timer_resolution timer_resolution
-        in
-        [%string "--event=intel_pt/%{intel_pt_config}/%{selector}"]
-      | Stacktrace_sampling ->
-        Deferred.Or_error.return [%string "--event=cycles:%{selector}"]
+    let%bind.Deferred.Or_error event_opts =
+      perf_args_of_collection_mode
+        ~capabilities
+        ~timer_resolution
+        ~trace_scope
+        collection_mode
+      |> Deferred.return
     in
     let kcore_opts =
       match
@@ -282,13 +340,13 @@ module Recording = struct
     in
     let snapshot_size_opt =
       match snapshot_size, collection_mode with
-      | Some snapshot_size, Intel_processor_trace ->
+      | Some snapshot_size, Intel_processor_trace _ ->
         [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
-      | Some _, Stacktrace_sampling ->
+      | Some _, Stacktrace_sampling _ ->
         Core.eprintf
           "Warning: -snapshot-size is ignored when not running with Intel PT.\n";
         []
-      | None, Intel_processor_trace | None, Stacktrace_sampling -> []
+      | None, Intel_processor_trace _ | None, Stacktrace_sampling _ -> []
     in
     let when_to_snapshot =
       if full_execution
@@ -301,8 +359,8 @@ module Recording = struct
     in
     let snapshot_opt =
       match collection_mode with
-      | Stacktrace_sampling -> []
-      | Intel_processor_trace ->
+      | Stacktrace_sampling _ -> []
+      | Intel_processor_trace _ ->
         (match when_to_snapshot with
         | `never -> []
         | `at_exit `sigint -> [ "--snapshot=e" ]
@@ -310,8 +368,8 @@ module Recording = struct
     in
     let overwrite_opts =
       match collection_mode, full_execution with
-      | Stacktrace_sampling, false -> [ "--overwrite" ]
-      | Stacktrace_sampling, true | Intel_processor_trace, _ -> []
+      | Stacktrace_sampling _, false -> [ "--overwrite" ]
+      | Intel_processor_trace _, false | _, true -> []
     in
     let switch_opts =
       match multi_snapshot with
@@ -320,7 +378,8 @@ module Recording = struct
     in
     let argv =
       List.concat
-        [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; ev_arg; "--timestamp" ]
+        [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; "--timestamp" ]
+        ; event_opts
         ; overwrite_opts
         ; switch_opts
         ; thread_opts
@@ -329,7 +388,6 @@ module Recording = struct
         ; kcore_opts
         ; snapshot_size_opt
         ; Callgraph_mode.to_perf_record_args selected_callgraph_mode
-        ; freq_opts
         ]
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
@@ -411,12 +469,12 @@ let decode_events
       , collection_mode
       , Env_vars.no_dlfilter || not filter_same_symbol_jumps )
     with
-    | true, Intel_processor_trace, false ->
+    | true, Intel_processor_trace _, false ->
       let filename = record_dir ^/ "perf_dlfilter.so" in
       let%map.Deferred.Or_error () = write_perf_dlfilter filename in
       [ "--dlfilter"; filename ]
-    | false, _, _ | true, Stacktrace_sampling, _ | true, Intel_processor_trace, true ->
-      Deferred.Or_error.return []
+    | false, _, _ | true, Stacktrace_sampling _, _ | true, Intel_processor_trace _, true
+      -> Deferred.Or_error.return []
   in
   let%bind files =
     Sys.readdir record_dir
@@ -427,14 +485,15 @@ let decode_events
     Deferred.List.map files ~f:(fun perf_data_file ->
         let itrace_opts =
           match collection_mode with
-          | Intel_processor_trace -> [ "--itrace=bep" ]
-          | Stacktrace_sampling -> []
+          | Intel_processor_trace _ -> [ "--itrace=bep" ]
+          | Stacktrace_sampling _ -> []
         in
         let fields_opts =
           match collection_mode with
-          | Intel_processor_trace ->
+          | Intel_processor_trace _ ->
             [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso,event,period" ]
-          | Stacktrace_sampling -> [ "-F"; "pid,tid,time,ip,sym,symoff,dso,event,period" ]
+          | Stacktrace_sampling _ ->
+            [ "-F"; "pid,tid,time,ip,sym,symoff,dso,event,period" ]
         in
         let args =
           List.concat

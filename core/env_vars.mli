@@ -1,6 +1,7 @@
 open! Core
 
 val debug : bool
+val experimental : bool
 val perf_is_privileged : bool
 val perfetto_dir : string option
 val no_dlfilter : bool

@@ -17,6 +17,10 @@ let perf_is_privileged = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_IS_PRIVIL
    This helps magic-trace developers debug magic-trace, it's not generally useful. *)
 let debug = Option.is_some (Unix.getenv "MAGIC_TRACE_DEBUG")
 
+(* Turns on hidden command line options which are considered experimental
+   features of magic-trace. *)
+let experimental = Option.is_some (Unix.getenv "MAGIC_TRACE_EXPERIMENTAL")
+
 (* When tracing the kernel on certain systems, perf only has root access when
    being run with a specific set of flags. Since this does not include
    [--dlfilter], this environment variable allows the user to forcibly disable

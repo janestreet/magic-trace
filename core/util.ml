@@ -60,3 +60,7 @@ let%test_module _ =
     ;;
   end)
 ;;
+
+let experimental_flag ~default flag =
+  if Env_vars.experimental then flag else Command.Param.return default
+;;
