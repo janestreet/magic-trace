@@ -902,6 +902,11 @@ let write_event (T t) event =
     in
     end_of_thread t thread_info ~time ~is_kernel_address
   | Ok
+      { Event.Ok.thread = _
+      ; time = _
+      ; data = Event_sample { location = _; period = _; name = _ }
+      } -> failwith "unimplemented"
+  | Ok
       { Event.Ok.thread = _ (* Already used this to look up thread info. *)
       ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
       ; data = Power { freq }
@@ -915,7 +920,7 @@ let write_event (T t) event =
   | Ok
       { Event.Ok.thread = _ (* Already used this to look up thread info. *)
       ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
-      ; data = Sample { callstack }
+      ; data = Stacktrace_sample { callstack }
       } ->
     let how_many_ret =
       Stack.length thread_info.callstack.stack

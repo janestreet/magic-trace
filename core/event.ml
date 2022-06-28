@@ -47,7 +47,12 @@ module Ok = struct
           ; dst : Location.t
           }
       | Power of { freq : int }
-      | Sample of { callstack : Location.t list }
+      | Stacktrace_sample of { callstack : Location.t list }
+      | Event_sample of
+          { location : Location.t
+          ; period : int
+          ; name : Collection_mode.Event.Name.t
+          }
     [@@deriving sexp]
   end
 

@@ -44,9 +44,14 @@ module Ok : sig
           ; dst : Location.t
           } (** Represents an event collected from Intel PT. *)
       | Power of { freq : int } (** Power event collected by Intel PT. *)
-      | Sample of
+      | Stacktrace_sample of
           { callstack : Location.t list (** Oldest to most recent calls in order. *) }
-          (** Represents event collected through sampling. *)
+          (** Represents cycles event collected through sampling. *)
+      | Event_sample of
+          { location : Location.t
+          ; period : int
+          ; name : Collection_mode.Event.Name.t
+          } (** Represents counter based events collected through sampling. *)
     [@@deriving sexp]
   end
 
