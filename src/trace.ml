@@ -160,7 +160,7 @@ let write_trace_from_events
 ;;
 
 let write_event_sexps writer events close_result =
-  Writer.write_line writer "(V3 (";
+  Writer.write_line writer "(V4 (";
   let%bind () =
     Deferred.List.iter events ~f:(fun events ->
         Pipe.iter_without_pushback

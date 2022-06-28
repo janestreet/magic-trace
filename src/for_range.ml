@@ -26,7 +26,7 @@ let range_hit_times ~decode_events ~range_symbols =
       let is_start symbol = String.(Symbol.display_name symbol = start_symbol) in
       let is_stop symbol = String.(Symbol.display_name symbol = stop_symbol) in
       Pipe.filter_map events ~f:(function
-          | Error _ | Ok { data = Power _; _ } -> None
+          | Error _ | Ok { data = Power _; _ } | Ok { data = Event_sample _; _ } -> None
           | Ok { data = Trace trace; time; _ } ->
             (match trace.kind with
             | Some Call ->
@@ -37,7 +37,7 @@ let range_hit_times ~decode_events ~range_symbols =
               then Some { Symbol_hit.kind = Stop; symbol; time }
               else None
             | _ -> None)
-          | Ok { data = Sample { callstack }; time; _ } ->
+          | Ok { data = Stacktrace_sample { callstack }; time; _ } ->
             List.rev callstack
             |> List.fold ~init:None ~f:(fun acc call ->
                    match acc, call with
@@ -89,11 +89,12 @@ let decode_events_and_annotate ~decode_events ~range_symbols =
                      when Time_ns_unix.Span.(time = hd.time)
                           && Symbol.equal dst.symbol hd.symbol ->
                      tl, not in_filtered_region
-                   | Ok { data = Sample _; time; _ }
+                   | Ok { data = Stacktrace_sample _; time; _ }
                      when Time_ns_unix.Span.(time = hd.time) -> tl, not in_filtered_region
                    | Ok { data = Trace _; _ }
-                   | Ok { data = Sample _; _ }
                    | Ok { data = Power _; _ }
+                   | Ok { data = Stacktrace_sample _; _ }
+                   | Ok { data = Event_sample _; _ }
                    | Error _ -> hits, in_filtered_region)
                in
                ( (hits, in_filtered_region)

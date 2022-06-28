@@ -322,9 +322,9 @@ module Recording = struct
       match
         collection_mode, trace_scope, Perf_capabilities.(do_intersect capabilities kcore)
       with
-      | Intel_processor_trace, Userspace, _ | Stacktrace_sampling, _, _ -> []
-      | Intel_processor_trace, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
-      | Intel_processor_trace, (Kernel | Userspace_and_kernel), false ->
+      | Intel_processor_trace _, Userspace, _ | Stacktrace_sampling _, _, _ -> []
+      | Intel_processor_trace _, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
+      | Intel_processor_trace _, (Kernel | Userspace_and_kernel), false ->
         (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
            here instead of bailing. But that's tricky, and upgrading to a newer
            perf is easier. *)

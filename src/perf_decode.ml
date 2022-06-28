@@ -10,8 +10,12 @@ let saturating_sub_i64 a b =
 
 let perf_event_header_re =
   Re.Perl.re
-    {|^ *([0-9]+)/([0-9]+) +([0-9]+)\.([0-9]+): +([0-9]+) +([a-z]+):([a-zA-Z]+:)?(.*)$|}
+    {|^ *([0-9]+)/([0-9]+) +([0-9]+)\.([0-9]+): +([0-9]+) +([a-z\-]+)(/[a-z=0-9]+)?(/[a-zA-Z]*)?:([a-zA-Z]+:)?(.*)$|}
   |> Re.compile
+;;
+
+let perf_extra_sampled_event_re =
+  Re.Perl.re {|^ *([0-9]+) +([0-9a-f]+) (.*)$|} |> Re.compile
 ;;
 
 let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
@@ -41,7 +45,7 @@ type header =
       { thread : Event.Thread.t
       ; time : Time_ns.Span.t
       ; period : int
-      ; event : [ `Branches | `Cbr | `Psb | `Cycles ]
+      ; event : [ `Branches | `Cbr | `Psb | `Cycles | `Branch_misses | `Cache_misses ]
       ; remaining_line : string
       }
 
@@ -69,8 +73,18 @@ let parse_event_header line =
   then Trace_error
   else (
     match Re.Group.all (Re.exec perf_event_header_re line) with
-    | [| _; pid; tid; time_hi; time_lo; period; event_name; _selector; remaining_line |]
-      ->
+    | [| _
+       ; pid
+       ; tid
+       ; time_hi
+       ; time_lo
+       ; period
+       ; event_name
+       ; _event_config
+       ; _event_selector
+       ; _selector
+       ; remaining_line
+      |] ->
       let pid = maybe_pid_of_string pid in
       let tid = maybe_pid_of_string tid in
       let time = parse_time ~time_hi ~time_lo in
@@ -81,10 +95,12 @@ let parse_event_header line =
         | "cbr" -> `Cbr
         | "psb" -> `Psb
         | "cycles" -> `Cycles
+        | "branch-misses" -> `Branch_misses
+        | "cache-misses" -> `Cache_misses
         | _ ->
           raise_s
             [%message
-              "Unexpected event type when parsing perf output." (event_name : string)]
+              "Unexpected event type when parsing perf output" (event_name : string)]
       in
       Event { thread = { pid; tid }; time; period; event; remaining_line }
     | results ->
@@ -149,28 +165,32 @@ let parse_perf_cbr_event thread time line : Event.t =
         "Regex of perf cbr event did not match expected fields" (results : string array)]
 ;;
 
+let parse_location ?perf_maps ~pid instruction_pointer symbol_and_offset
+    : Event.Location.t
+  =
+  let instruction_pointer = Util.int64_of_hex_string instruction_pointer in
+  let symbol, symbol_offset =
+    parse_symbol_and_offset ?perf_maps pid symbol_and_offset ~addr:instruction_pointer
+  in
+  { instruction_pointer; symbol; symbol_offset }
+;;
+
+let parse_callstack_entry ?perf_maps (thread : Event.Thread.t) line : Event.Location.t =
+  match Re.Group.all (Re.exec perf_callstack_entry_re line) with
+  | [| _; instruction_pointer; symbol_and_offset |] ->
+    parse_location ?perf_maps ~pid:thread.pid instruction_pointer symbol_and_offset
+  | results ->
+    raise_s
+      [%message
+        "perf output did not match expected regex when parsing callstack entry"
+          (results : string array)]
+;;
+
 let parse_perf_cycles_event ?perf_maps (thread : Event.Thread.t) time lines : Event.t =
   let callstack =
-    List.map lines ~f:(fun line ->
-        match Re.Group.all (Re.exec perf_callstack_entry_re line) with
-        | [| _; instruction_pointer; symbol_and_offset |] ->
-          let instruction_pointer = Util.int64_of_hex_string instruction_pointer in
-          let symbol, symbol_offset =
-            parse_symbol_and_offset
-              ?perf_maps
-              thread.pid
-              symbol_and_offset
-              ~addr:instruction_pointer
-          in
-          { Event.Location.instruction_pointer; symbol; symbol_offset }
-        | results ->
-          raise_s
-            [%message
-              "perf output did not match expected regex when parsing callstack entry."
-                (results : string array)])
+    List.map lines ~f:(parse_callstack_entry ?perf_maps thread) |> List.rev
   in
-  let callstack = List.rev callstack in
-  Ok { thread; time; data = Sample { callstack } }
+  Ok { thread; time; data = Stacktrace_sample { callstack } }
 ;;
 
 let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : Event.t =
@@ -258,6 +278,31 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       [%message "Regex of expected perf output did not match." (results : string array)]
 ;;
 
+let parse_perf_extra_sampled_event
+    ?perf_maps
+    (thread : Event.Thread.t)
+    time
+    period
+    line
+    lines
+    name
+    : Event.t
+  =
+  let (location : Event.Location.t) =
+    match lines with
+    | [] ->
+      (match Re.Group.all (Re.exec perf_extra_sampled_event_re line) with
+      | [| _str; _; instruction_pointer; symbol_and_offset |] ->
+        parse_location ?perf_maps ~pid:thread.pid instruction_pointer symbol_and_offset
+      | results ->
+        raise_s
+          [%message
+            "Regex of perf event did not match expected fields" (results : string array)])
+    | lines -> List.hd_exn lines |> parse_callstack_entry ?perf_maps thread
+  in
+  Ok { thread; time; data = Event_sample { location; count = period; name } }
+;;
+
 let to_event ?perf_maps lines : Event.t option =
   try
     match lines with
@@ -265,7 +310,7 @@ let to_event ?perf_maps lines : Event.t option =
       let header = parse_event_header first_line in
       (match header with
       | Trace_error -> Some (Error (trace_error_to_event first_line))
-      | Event { thread; time; period = _; event; remaining_line } ->
+      | Event { thread; time; period; event; remaining_line } ->
         (match event with
         | `Branches ->
           Some (parse_perf_branches_event ?perf_maps thread time remaining_line)
@@ -273,7 +318,27 @@ let to_event ?perf_maps lines : Event.t option =
           (* cbr (core-to-bus ratio) are events which show frequency changes. *)
           Some (parse_perf_cbr_event thread time remaining_line)
         | `Psb -> (* Ignore psb (packet stream boundary) packets *) None
-        | `Cycles -> Some (parse_perf_cycles_event ?perf_maps thread time lines)))
+        | `Cycles -> Some (parse_perf_cycles_event ?perf_maps thread time lines)
+        | `Branch_misses ->
+          Some
+            (parse_perf_extra_sampled_event
+               ?perf_maps
+               thread
+               time
+               period
+               remaining_line
+               lines
+               Collection_mode.Event.Name.Branch_misses)
+        | `Cache_misses ->
+          Some
+            (parse_perf_extra_sampled_event
+               ?perf_maps
+               thread
+               time
+               period
+               remaining_line
+               lines
+               Collection_mode.Event.Name.Cache_misses)))
     | [] -> raise_s [%message "Unexpected line while parsing perf output."]
   with
   | exn ->
@@ -609,13 +674,13 @@ let%test_module _ =
          \t7f9bd445225e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
          \t7f9bd46ae964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
          \t7f9bd46ae285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so)\n\
-         \t4008de main+0x87 (/home/alamoreaux/Documents/demo)";
+         \t4008de main+0x87 (/home/demo)";
       [%expect
         {|
         ((Ok
           ((thread ((pid (2060126)) (tid (2060126)))) (time 2d1h28m10.391624068s)
            (data
-            (Sample
+            (Stacktrace_sample
              (callstack
               (((instruction_pointer 0x4008de) (symbol (From_perf main))
                 (symbol_offset 0x87))
@@ -648,6 +713,63 @@ let%test_module _ =
                ((instruction_pointer -0x68dfef00)
                 (symbol (From_perf "[unknown @ -0x68dfef00 ([unknown])]"))
                 (symbol_offset 0x0))))))))) |}]
+    ;;
+
+    let%expect_test "cache-misses event with ipt" =
+      check
+        "3871580/3871580 430720.265503976:         50                   \
+         cache-misses/period=50/u:                                      0     \
+         7fca9945c595 __sleep+0x55 (/usr/lib64/libc-2.28.so)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h38m40.265503976s)
+           (data
+            (Event_sample
+             (location
+              ((instruction_pointer 0x7fca9945c595) (symbol (From_perf __sleep))
+               (symbol_offset 0x55)))
+             (count 50) (name Cache_misses)))))) |}]
+    ;;
+
+    let%expect_test "cache-misses event with sampling" =
+      check
+        "3871580/3871580 431043.387175119:         50 cache-misses/period=50/u: \n\
+         \t7fca999481a0 _dl_unmap+0x0 (/usr/lib64/ld-2.28.so)\n\
+         \t7fca999454cc _dl_close_worker+0x83c (/usr/lib64/ld-2.28.so)\n\
+         \t7fca99945dbd _dl_close+0x2d (/usr/lib64/ld-2.28.so)\n\
+         \t7fca994cc1a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+         \t7fca994cc25e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
+         \t7fca99728964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
+         \t7fca99728313 dlclose+0x23 (/usr/lib64/libdl-2.28.so)\n\
+         \t4009b7 main+0x160 (/usr/local/home/demo)\n";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h44m3.387175119s)
+           (data
+            (Event_sample
+             (location
+              ((instruction_pointer 0x7fca999481a0) (symbol (From_perf _dl_unmap))
+               (symbol_offset 0x0)))
+             (count 50) (name Cache_misses)))))) |}]
+    ;;
+
+    let%expect_test "branch-misses event with ipt" =
+      check
+        "3871580/3871580 431228.526799230:         50                  \
+         branch-misses/period=50/u:                                      0     \
+         7fca99943c60 _dl_open+0x0 (/usr/lib64/ld-2.28.so)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h47m8.52679923s)
+           (data
+            (Event_sample
+             (location
+              ((instruction_pointer 0x7fca99943c60) (symbol (From_perf _dl_open))
+               (symbol_offset 0x0)))
+             (count 50) (name Branch_misses)))))) |}]
     ;;
   end)
 ;;
