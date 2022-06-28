@@ -138,16 +138,22 @@ let write_trace_from_events
       ~annotate_inferred_start_times:Env_vars.debug
       trace
   in
-  let last_index = ref 0 in
+  (* [earliest_time] does represent the time of earliest event, but we want to
+     ignore extra events we sampled. However setting [last_index = -1] ensures
+     that we immediately flush up to the start of the snapshot. *)
+  let last_index = ref (-1) in
   let process_event index (ev : Event.With_write_info.t) =
     (* When processing a new snapshot, clear all [Trace_writer] data in order to
        avoid sharing callstacks, start times, etc. *)
-    if index > 0 && not (index = !last_index)
+    if not (index = !last_index)
     then (
-      match%optional.Time_ns_unix.Span.Option Event.time ev.event with
-      | None -> Trace_writer.end_of_trace writer
-      | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
-    last_index := index;
+      match ev.event with
+      | Ok { data = Trace _; _ } | Ok { data = Stacktrace_sample _; _ } ->
+        (match%optional.Time_ns_unix.Span.Option Event.time ev.event with
+        | None -> Trace_writer.end_of_trace writer
+        | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
+        last_index := index
+      | Ok { data = Event_sample _; _ } | Ok { data = Power _; _ } | Error _ -> ());
     Trace_writer.write_event writer ev
   in
   let%bind () =

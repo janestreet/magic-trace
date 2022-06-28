@@ -654,7 +654,8 @@ let%test_module _ =
         "2937048/2937048 448556.689403475:                             1          \
          psb:                        psb offs: 0x4be8                                \
          0     7f068fbfd330 mmap64+0x50 (/usr/lib64/ld-2.28.so)";
-      [%expect {| () |}]
+      [%expect {|
+        () |}]
     ;;
 
     let%expect_test "sampled callstack" =
