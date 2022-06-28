@@ -46,6 +46,19 @@ module Record_opts = struct
   ;;
 end
 
+let write_perf_dlfilter filename =
+  let error = Deferred.Or_error.error_string "Unable to write [perf_dlfilter.so]." in
+  try
+    match Perf_dlfilter.read "perf_dlfilter.so" with
+    | Some data ->
+      Out_channel.write_all filename ~data;
+      (* Otherwise this is written without executable permission. *)
+      Core_unix.chmod filename ~perm:0o775 |> Deferred.Or_error.return
+    | None -> error
+  with
+  | Sys_error _ -> error
+;;
+
 let perf_exit_to_or_error = function
   | Ok () | Error (`Signal _) -> Ok ()
   | Error (`Exit_non_zero n) -> Core_unix.Exit.of_code n |> Core_unix.Exit.or_error
@@ -377,6 +390,15 @@ let decode_events
     ~(collection_mode : Collection_mode.t)
     ()
   =
+  let%bind capabilities = Perf_capabilities.detect_exn () in
+  let%bind.Deferred.Or_error dlfilter_opts =
+    match Perf_capabilities.(do_intersect capabilities dlfilter), collection_mode with
+    | true, Intel_processor_trace ->
+      let filename = record_dir ^/ "perf_dlfilter.so" in
+      let%map.Deferred.Or_error () = write_perf_dlfilter filename in
+      [ "--dlfilter"; filename ]
+    | false, _ | true, Stacktrace_sampling -> Deferred.Or_error.return []
+  in
   let%bind files =
     Sys.readdir record_dir
     >>| Array.to_list
@@ -400,6 +422,7 @@ let decode_events
             [ [ "script"; "-i"; record_dir ^/ perf_data_file; "--ns" ]
             ; itrace_opts
             ; fields_opts
+            ; dlfilter_opts
             ]
         in
         if debug_print_perf_commands

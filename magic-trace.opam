@@ -17,6 +17,7 @@ depends: [
   "core"
   "core_unix"
   "expect_test_helpers_async"
+  "crunch"
   "ppx_jane"
   "shell"
   "dune"         {>= "2.0.0"}

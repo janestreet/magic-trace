@@ -7,6 +7,7 @@ let kernel_tracing = bit 1
 let kcore = bit 2
 let snapshot_on_exit = bit 3
 let last_branch_record = bit 4
+let dlfilter = bit 5
 
 include Flags.Make (struct
   let allow_intersecting = false
@@ -18,6 +19,7 @@ include Flags.Make (struct
     ; kernel_tracing, "kernel_tracing"
     ; kcore, "kcore"
     ; last_branch_record, "last_branch_record"
+    ; dlfilter, "dlfilter"
     ]
   ;;
 end)
@@ -94,6 +96,9 @@ let supports_kcore = kernel_version_at_least ~major:5 ~minor:5
 (* Added in kernel commit ce7b0e4, which made it into 5.4. *)
 let supports_snapshot_on_exit = kernel_version_at_least ~major:5 ~minor:4
 
+(* Added in kernel commit 291961f, which made it into 5.14. *)
+let supports_dlfilter = kernel_version_at_least ~major:5 ~minor:14
+
 let detect_exn () =
   let%bind perf_version_proc = Process.create_exn ~prog:"perf" ~args:[ "--version" ] () in
   let%map version_string = Reader.contents (Process.stdout perf_version_proc) in
@@ -105,4 +110,5 @@ let detect_exn () =
   |> set_if (supports_kcore version) kcore
   |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
   |> set_if (supports_last_branch_record ()) last_branch_record
+  |> set_if (supports_dlfilter version) dlfilter
 ;;

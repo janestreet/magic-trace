@@ -1,3 +1,14 @@
+(rule
+ (targets perf_dlfilter.ml)
+ (deps
+  (:dep perf_dlfilter.c))
+ (action
+  (progn
+   (run mkdir -p dlfilter)
+   (run %{bin:gcc} -c -fpic %{dep})
+   (run %{bin:gcc} -shared -o dlfilter/perf_dlfilter.so perf_dlfilter.o)
+   (run %{bin:ocaml-crunch} -m plain dlfilter -o perf_dlfilter.ml))))
+
 (library
  (name magic_trace_lib)
  (public_name magic-trace.magic_trace_lib)
