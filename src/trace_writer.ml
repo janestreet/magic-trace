@@ -9,7 +9,7 @@ let is_kernel_address addr = Int64.(addr < 0L)
    compensate, the trace writer subtracts the time of the first event from all time spans, producing
    what we call a "mapped time". Only mapped times may be written to the trace file. *)
 module Mapped_time : sig
-  type t = private Time_ns.Span.t [@@deriving sexp_of, compare]
+  type t = Time_ns.Span.t [@@deriving sexp_of, compare]
 
   include Comparable with type t := t
 
@@ -111,6 +111,8 @@ module Thread_info = struct
     ; start_events : (Mapped_time.t * Pending_event.t) Deque.t
           (* When the last event arrived. Used to give timestamps to events lacking them. *)
     ; mutable last_event_time : Mapped_time.t
+    ; trace_pid : int
+    ; extra_event_tracks : ('thread[@sexp.opaque]) Hashtbl.M(Collection_mode.Event.Name).t
     }
   [@@deriving sexp_of]
 
@@ -532,6 +534,8 @@ let create_thread t event =
   ; pending_time = Mapped_time.start_of_trace
   ; start_events = Deque.create ()
   ; last_event_time = effective_time
+  ; trace_pid
+  ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
   }
 ;;
 
@@ -901,11 +905,35 @@ let write_event (T t) event =
       | Some ip -> is_kernel_address ip
     in
     end_of_thread t thread_info ~time ~is_kernel_address
-  | Ok
-      { Event.Ok.thread = _
-      ; time = _
-      ; data = Event_sample { location = _; period = _; name = _ }
-      } -> failwith "unimplemented"
+  | Ok { Event.Ok.thread = _; time = _; data = Event_sample { location; period; name } }
+    ->
+    let track_name = Collection_mode.Event.Name.to_string name in
+    let track_thread =
+      Hashtbl.find_or_add thread_info.extra_event_tracks name ~default:(fun () ->
+          allocate_thread t ~pid:thread_info.trace_pid ~name:track_name)
+    in
+    let args =
+      Tracing.Trace.Arg.(
+        List.concat
+          [ [ "timestamp", Int (Time_ns.Span.to_int_ns time) ]
+          ; [ "symbol", String (Symbol.display_name location.symbol) ]
+          ; [ "addr", Pointer location.instruction_pointer ]
+          ; [ "period", Int period ]
+          ; Option.map (Event.thread outer_event).pid ~f:(fun pid ->
+                [ "pid", Int (Pid.to_int pid) ])
+            |> Option.value ~default:[]
+          ; Option.map (Event.thread outer_event).pid ~f:(fun pid ->
+                [ "tid", Int (Pid.to_int pid) ])
+            |> Option.value ~default:[]
+          ])
+    in
+    write_duration_complete
+      t
+      ~thread:track_thread
+      ~args
+      ~name:track_name
+      ~time
+      ~time_end:time
   | Ok
       { Event.Ok.thread = _ (* Already used this to look up thread info. *)
       ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
