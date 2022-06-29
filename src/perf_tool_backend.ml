@@ -392,12 +392,17 @@ let decode_events
   =
   let%bind capabilities = Perf_capabilities.detect_exn () in
   let%bind.Deferred.Or_error dlfilter_opts =
-    match Perf_capabilities.(do_intersect capabilities dlfilter), collection_mode with
-    | true, Intel_processor_trace ->
+    match
+      ( Perf_capabilities.(do_intersect capabilities dlfilter)
+      , collection_mode
+      , Env_vars.no_dlfilter )
+    with
+    | true, Intel_processor_trace, false ->
       let filename = record_dir ^/ "perf_dlfilter.so" in
       let%map.Deferred.Or_error () = write_perf_dlfilter filename in
       [ "--dlfilter"; filename ]
-    | false, _ | true, Stacktrace_sampling -> Deferred.Or_error.return []
+    | false, _, _ | true, Stacktrace_sampling, _ | true, Intel_processor_trace, true ->
+      Deferred.Or_error.return []
   in
   let%bind files =
     Sys.readdir record_dir
