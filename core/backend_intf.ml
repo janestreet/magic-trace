@@ -12,6 +12,10 @@ module type S = sig
   end
 
   module Recording : sig
+    module Data : sig
+      type t [@@deriving sexp]
+    end
+
     type t
 
     val attach_and_record
@@ -25,7 +29,7 @@ module type S = sig
       -> record_dir:string
       -> collection_mode:Collection_mode.t
       -> Pid.t list
-      -> t Deferred.Or_error.t
+      -> (t * Data.t) Deferred.Or_error.t
 
     val maybe_take_snapshot : t -> source:[ `ctrl_c | `function_call ] -> unit
     val finish_recording : t -> unit Deferred.Or_error.t
@@ -40,6 +44,9 @@ module type S = sig
   val decode_events
     :  ?perf_maps:Perf_map.Table.t
     -> debug_print_perf_commands:bool
+    -> recording_data:Recording.Data.t option
+         (** This parameter is passed to allow [decode_events] to depend
+             on information or configuration from [attach_and_record]. *)
     -> record_dir:string
     -> collection_mode:Collection_mode.t
     -> Decode_opts.t

@@ -85,6 +85,10 @@ let max_sampling_frequency () =
 ;;
 
 module Recording = struct
+  module Data = struct
+    type t = { callgraph_mode : Callgraph_mode.t option } [@@deriving sexp]
+  end
+
   type t =
     { pid : Pid.t
     ; when_to_snapshot : [ `at_exit of [ `sigint | `sigusr2 ] | `function_call | `never ]
@@ -195,37 +199,42 @@ module Recording = struct
             "[-timer-resolution Custom] can only be used with Intel PT. (Are you running \
              on a physical Intel machine without [-sampling]?)")
     in
-    let%bind.Deferred.Or_error callgraph_opts =
+    let%bind.Deferred.Or_error selected_callgraph_mode =
       let open Deferred.Or_error.Let_syntax in
       match collection_mode with
       | Intel_processor_trace ->
         (match callgraph_mode with
-        | None -> return []
+        | None -> return None
         | Some _ ->
           Deferred.Or_error.error_string
             "[-callgraph-mode] is only configurable when running magic-trace with \
              sampling.")
       | Stacktrace_sampling ->
-        let%map mode =
-          match
-            ( callgraph_mode
-            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
-          with
-          (* We choose to default to dwarf if lbr is not available. This is
+        (match
+           ( callgraph_mode
+           , Perf_capabilities.(do_intersect capabilities last_branch_record) )
+         with
+        (* We choose to default to dwarf if lbr is not available. This is
              because dwarf will work on any setup, while frame pointers requires
              compilation with [-fno-omit-frame-pointers]. Although decoding is
              slow and perf.data file sizes are larger. *)
-          | None, false -> return Callgraph_mode.Dwarf
-          | None, true -> return Callgraph_mode.Last_branch_record
-          | Some Last_branch_record, false ->
-            Deferred.Or_error.error_string
-              "[-callgraph-mode Last_branch_record] is only supported on an Intel \
-               machine which supports LBR. Try passing [Frame_pointers] or [Dwarf] \
-               instead."
-          | Some mode, false -> return mode
-          | Some mode, true -> return mode
-        in
-        [ "--call-graph"; Callgraph_mode.to_perf_string mode ]
+        | None, false ->
+          Core.eprintf
+            "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
+             overhead and decoding time. For more info: https://magic-trace.org/w/c\n";
+          return (Some Callgraph_mode.Dwarf)
+        | None, true ->
+          Core.eprintf
+            "Warning: [-callgraph-mode] is defaulting to [Last_branch_record] which may \
+             lose data and has limited callstack depth. For more info: \
+             https://magic-trace.org/w/c\n";
+          return (Some (Callgraph_mode.Last_branch_record { stitched = true }))
+        | Some (Last_branch_record _), false ->
+          Deferred.Or_error.error_string
+            "[-callgraph-mode Last_branch_record] is only supported on an Intel machine \
+             which supports LBR. Try passing [Frame_pointers] or [Dwarf] instead."
+        | Some mode, false -> return (Some mode)
+        | Some mode, true -> return (Some mode))
     in
     let%bind.Deferred.Or_error ev_arg =
       let selector = perf_selector_of_trace_scope trace_scope in
@@ -317,7 +326,7 @@ module Recording = struct
         ; snapshot_opt
         ; kcore_opts
         ; snapshot_size_opt
-        ; callgraph_opts
+        ; Callgraph_mode.to_perf_record_args selected_callgraph_mode
         ; freq_opts
         ]
     in
@@ -338,7 +347,8 @@ module Recording = struct
       | Some (_, exit) -> perf_exit_to_or_error exit
       | _ -> Ok ()
     in
-    { pid = perf_pid; when_to_snapshot }
+    ( { pid = perf_pid; when_to_snapshot }
+    , { Data.callgraph_mode = selected_callgraph_mode } )
   ;;
 
   let maybe_take_snapshot t ~source =
@@ -386,6 +396,7 @@ end
 let decode_events
     ?perf_maps
     ~debug_print_perf_commands
+    ~(recording_data : Recording.Data.t option)
     ~record_dir
     ~(collection_mode : Collection_mode.t)
     ()
@@ -428,12 +439,16 @@ let decode_events
             ; itrace_opts
             ; fields_opts
             ; dlfilter_opts
+            ; Option.map recording_data ~f:(fun recording_data ->
+                  Callgraph_mode.to_perf_script_args recording_data.callgraph_mode)
+              |> Option.value ~default:[]
             ]
         in
         if debug_print_perf_commands
         then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
-        (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to avoid
-      the [perf script] process from outliving the parent. *)
+        (* CR-someday tbrindus: this should be switched over to using
+           [perf_fork_exec] to avoid the [perf script] process from outliving
+           the parent. *)
         let%map perf_script_proc =
           Process.create_exn ~env:perf_env ~prog:"perf" ~args ()
         in
