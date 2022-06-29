@@ -23,6 +23,6 @@ let param =
       no_arg
       ~doc:
         "Use stacktrace sampling instead of Intel PT. If Intel PT is not available, \
-         magic-trace will default to this."
+         magic-trace will default to this. For more info: https://magic-trace.org/w/b"
     |> map ~f:(fun use_sampling -> select_collection_mode ~use_sampling))
 ;;
