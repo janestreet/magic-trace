@@ -1,6 +1,6 @@
 (** Runs a program under Intel Processor Trace in Snapshot mode *)
-open! Core
 
+open! Core
 open! Async
 open! Import
 
@@ -212,11 +212,21 @@ module Make_commands (Backend : Backend_intf.S) = struct
       { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
+    let recording_data =
+      try
+        Some
+          (In_channel.read_all (record_dir ^/ "recording_data.sexp")
+          |> Sexp.of_string
+          |> [%of_sexp: Backend.Recording.Data.t])
+      with
+      | Sys_error _ -> None
+    in
     let decode_events () =
       Backend.decode_events
         ?perf_maps
         decode_opts
         ~debug_print_perf_commands
+        ~recording_data
         ~record_dir
         ~collection_mode
     in
@@ -325,7 +335,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           let snap_loc = Elf.symbol_stop_info elf head_pid snap_sym in
           return (Some snap_loc))
     in
-    let%map recording =
+    let%map.Deferred.Or_error recording, recording_data =
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
@@ -351,7 +361,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
       if not !snapshot_taken then take_snapshot ~source:`ctrl_c;
       Out_channel.write_all
         (Hits_file.filename ~record_dir:opts.record_dir)
-        ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string)
+        ~data:([%sexp (!hits : Hits_file.t)] |> Sexp.to_string);
+      Out_channel.write_all
+        (opts.record_dir ^/ "recording_data.sexp")
+        ~data:([%sexp (recording_data : Backend.Recording.Data.t)] |> Sexp.to_string)
     in
     let take_snapshot_on_hit hit =
       hits := hit :: !hits;
