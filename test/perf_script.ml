@@ -26,11 +26,13 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
     ;;
 
     let write_duration_begin ~args:_ ~thread:_ ~name ~time : unit =
-      printf "-> %8s BEGIN %s\n" (Time_ns.Span.to_string_hum time) name
+      if not String.(name = "branch-misses" || name = "cache-misses")
+      then printf "-> %8s BEGIN %s\n" (Time_ns.Span.to_string_hum time) name
     ;;
 
     let write_duration_end ~args:_ ~thread:_ ~name ~time : unit =
-      printf "-> %8s END   %s\n" (Time_ns.Span.to_string_hum time) name
+      if not String.(name = "branch-misses" || name = "cache-misses")
+      then printf "-> %8s END   %s\n" (Time_ns.Span.to_string_hum time) name
     ;;
 
     let write_duration_complete ~args ~thread ~name ~time ~time_end : unit =
@@ -86,17 +88,18 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
       in
       List.iter split_lines ~f:(fun lines ->
           let event =
-            Perf_decode.For_testing.to_event lines
-            |> Option.value_exn
-            |> adjust_event_time
+            Perf_decode.For_testing.to_event lines |> Option.map ~f:adjust_event_time
           in
-          if should_print_perf_line event
-          then (
-            match lines with
-            | [ line ] -> printf "%s\n" line
-            | lines -> print_s [%message (lines : string list)]);
-          let event = Event.With_write_info.create ~should_write:true event in
-          Trace_writer.write_event trace_writer event);
+          match event with
+          | Some event ->
+            if should_print_perf_line event
+            then (
+              match lines with
+              | [ line ] -> printf "%s\n" line
+              | lines -> print_s [%message (lines : string list)]);
+            let event = Event.With_write_info.create ~should_write:true event in
+            Trace_writer.write_event trace_writer event
+          | None -> ());
       printf "END\n";
       Trace_writer.end_of_trace trace_writer)
 ;;
