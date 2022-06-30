@@ -24,7 +24,7 @@ let ok_perf_line_re =
    offs]. *)
 let ok_perf_power_line_re =
   Re.Perl.re
-    {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z]*)? +(cbr|psb offs): ([0-9]+ freq: ([0-9]+) MHz)?(.*)$|}
+    {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z]*)? +(cbr|psb offs): +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|}
   |> Re.compile
 ;;
 
@@ -545,7 +545,7 @@ let%test_module _ =
              (message "Never-ending loop (refer perf config intel-pt.max-loops)")))) |}]
     ;;
 
-    let%expect_test "power event csb" =
+    let%expect_test "power event cbr" =
       check
         "2937048/2937048 448556.689322817:                        cbr: 46 freq: 4606 MHz \
          (159%)                   0                0 [unknown] ([unknown])";
@@ -554,6 +554,20 @@ let%test_module _ =
           ((Ok
             ((thread ((pid (2937048)) (tid (2937048)))) (time 5d4h35m56.689322817s)
              (data (Power (freq 4606)))))) |}]
+    ;;
+
+    (* Perf seems to change spacing when frequency is small and our regex was
+       crashing on this case. *)
+    let%expect_test "cbr event with double spaces" =
+      check
+        "2428980/2428980 526586.720546055:   syscall              cbr:  8 freq:  801 MHz \
+         ( 28%)                   0     7fde1f64e646 __nanosleep+0x16 \
+         (/usr/lib64/libc-2.28.so)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (2428980)) (tid (2428980)))) (time 6d2h16m26.720546055s)
+           (data (Power (freq 801)))))) |}]
     ;;
 
     (* Expected [None] because we ignore these events currently. *)
