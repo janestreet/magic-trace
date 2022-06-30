@@ -460,7 +460,7 @@ let decode_events
     ()
   =
   let%bind capabilities = Perf_capabilities.detect_exn () in
-  let%bind.Deferred.Or_error dlfilter_opts =
+  let%bind.Deferred.Or_error use_dlfilter, dlfilter_opts =
     match
       ( Perf_capabilities.(do_intersect capabilities dlfilter)
       , collection_mode.primary
@@ -469,9 +469,9 @@ let decode_events
     | true, Intel_processor_trace, false ->
       let filename = record_dir ^/ "perf_dlfilter.so" in
       let%map.Deferred.Or_error () = write_perf_dlfilter filename in
-      [ "--dlfilter"; filename ]
+      true, [ "--dlfilter"; filename ]
     | false, _, _ | true, Stacktrace_sampling, _ | true, Intel_processor_trace, true ->
-      Deferred.Or_error.return []
+      Deferred.Or_error.return (false, [])
   in
   let%bind files =
     Sys.readdir record_dir
@@ -479,7 +479,14 @@ let decode_events
     >>| List.filter ~f:(String.is_prefix ~prefix:"perf.data")
   in
   let%map result =
+    let pid = Unix.getpid () in
     Deferred.List.map files ~f:(fun perf_data_file ->
+        (* These environment variables are used to transfer data between
+           [magic-trace] and the dlfilter. [MAGIC_TRACE_DLFILTER_FILE] tells the dlfilter
+           where to write the samples. *)
+        let basename = Filename.basename perf_data_file in
+        let shmem_filename = [%string "/dev/shm/magic-trace.%{pid#Pid}.%{basename}"] in
+        Unix.putenv ~key:"MAGIC_TRACE_DLFILTER_FILE" ~data:shmem_filename;
         let itrace_opts =
           match collection_mode.primary with
           | Intel_processor_trace -> [ "--itrace=bep" ]
@@ -507,20 +514,48 @@ let decode_events
         (* CR-someday tbrindus: this should be switched over to using
            [perf_fork_exec] to avoid the [perf script] process from outliving
            the parent. *)
-        let%map perf_script_proc =
+        let%bind perf_script_proc =
           Process.create_exn ~env:perf_env ~prog:"perf" ~args ()
         in
-        let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
         don't_wait_for
           (Reader.transfer
              (Process.stderr perf_script_proc)
              (Writer.pipe (force Writer.stderr)));
-        let events = Perf_decode.to_events ?perf_maps line_pipe in
-        let close_result =
-          let%map exit_or_signal = Process.wait perf_script_proc in
-          perf_exit_to_or_error exit_or_signal
-        in
-        events, close_result)
+        match use_dlfilter with
+        | true ->
+          let close_result =
+            let%map exit_or_signal = Process.wait perf_script_proc in
+            perf_exit_to_or_error exit_or_signal
+          in
+          let%map fd = Unix.openfile shmem_filename ~mode:[ `Creat; `Rdonly ] in
+          let reader = Reader.create fd in
+          let events =
+            Reader.read_all reader (fun reader ->
+                Deferred.repeat_until_finished () (fun () ->
+                    let%map res =
+                      Reader.read_bin_prot reader Perf_raw_sample.bin_reader_t
+                    in
+                    match res with
+                    | `Eof ->
+                      (* We don't want to close [reader] until [perf script] has
+                         actually terminated which we can check using whether
+                         [close_result] is determined. *)
+                      if Deferred.is_determined close_result
+                      then `Finished `Eof
+                      else `Repeat ()
+                    | `Ok _ -> `Finished res))
+            |> Pipe.map ~f:Perf_sample_decode.to_event
+            |> Pipe.filter_map ~f:Fn.id
+          in
+          events, close_result
+        | false ->
+          let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
+          let events = Perf_decode.to_events ?perf_maps line_pipe in
+          let close_result =
+            let%map exit_or_signal = Process.wait perf_script_proc in
+            perf_exit_to_or_error exit_or_signal
+          in
+          Deferred.return (events, close_result))
   in
   let events = List.map result ~f:(fun (events, _close_result) -> events) in
   (* Force [close_result] to wait on [Pipe.t]s in order. *)

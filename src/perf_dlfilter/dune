@@ -1,0 +1,12 @@
+(executable
+ (name perf_dlfilter)
+ (public_name perf_dlfilter)
+ (libraries core ctypes magic_trace_core)
+ (foreign_stubs
+  (language c)
+  (names dlfilter_stubs))
+ (modes
+  exe
+  (native shared_object))
+ (preprocess
+  (pps ppx_jane)))

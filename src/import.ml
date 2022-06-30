@@ -10,6 +10,7 @@ include struct
   module Perf_capabilities = Perf_capabilities
   module Perf_map = Perf_map
   module Perf_map_location = Perf_map_location
+  module Perf_raw_sample = Perf_raw_sample
   module Subcommand = Subcommand
   module Symbol = Symbol
   module Timer_resolution = Timer_resolution
