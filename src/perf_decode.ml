@@ -24,7 +24,7 @@ let ok_perf_line_re =
    offs]. *)
 let ok_perf_power_line_re =
   Re.Perl.re
-    {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z]*)? +(cbr|psb offs): +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|}
+    {|^ *([0-9]+)/([0-9]+) +([0-9]+).([0-9]+): +([a-z ]*)? +(cbr|psb offs): +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|}
   |> Re.compile
 ;;
 
@@ -568,6 +568,17 @@ let%test_module _ =
         ((Ok
           ((thread ((pid (2428980)) (tid (2428980)))) (time 6d2h16m26.720546055s)
            (data (Power (freq 801)))))) |}]
+    ;;
+
+    let%expect_test "cbr event with tr end" =
+      check
+        "21302/21302 82318.700445693:   tr end               cbr: 45 freq: 4500 MHz \
+         (118%)                   0          5368e58 __symbol+0x168 (/dev/foo.exe)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (21302)) (tid (21302)))) (time 22h51m58.700445693s)
+           (data (Power (freq 4500)))))) |}]
     ;;
 
     (* Expected [None] because we ignore these events currently. *)
