@@ -23,7 +23,9 @@ let param =
        easier to use. [-trigger .] is a shorthand for [-trigger \
        magic_trace_stop_indicator].\n\
        (*) Regardless of trigger mode, magic-trace will always snapshot when the \
-       application terminates if it has not yet triggered for any other reason."
+       application terminates if it has not yet triggered for any other reason.\n\
+       (*) If you pass multiple PIDs when tracing, the trigger will only be able to \
+       select a function from the first PID passed.\n\n"
   |> map ~f:(function
          | None -> Magic_trace_or_the_application_terminates
          | Some input ->
