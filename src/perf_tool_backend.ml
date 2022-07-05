@@ -395,6 +395,7 @@ end
 
 let decode_events
     ?perf_maps
+    ?(filter_same_symbol_jumps = true)
     ~debug_print_perf_commands
     ~(recording_data : Recording.Data.t option)
     ~record_dir
@@ -406,7 +407,7 @@ let decode_events
     match
       ( Perf_capabilities.(do_intersect capabilities dlfilter)
       , collection_mode
-      , Env_vars.no_dlfilter )
+      , Env_vars.no_dlfilter || not filter_same_symbol_jumps )
     with
     | true, Intel_processor_trace, false ->
       let filename = record_dir ^/ "perf_dlfilter.so" in
