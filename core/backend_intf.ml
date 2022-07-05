@@ -43,6 +43,9 @@ module type S = sig
 
   val decode_events
     :  ?perf_maps:Perf_map.Table.t
+    -> ?filter_same_symbol_jumps:bool
+         (** Whether to filter unnecessary events which are jumps within the same
+             function. Default [true]. *)
     -> debug_print_perf_commands:bool
     -> recording_data:Recording.Data.t option
          (** This parameter is passed to allow [decode_events] to depend

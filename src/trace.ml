@@ -221,9 +221,10 @@ module Make_commands (Backend : Backend_intf.S) = struct
       with
       | Sys_error _ -> None
     in
-    let decode_events () =
+    let decode_events ?filter_same_symbol_jumps () =
       Backend.decode_events
         ?perf_maps
+        ?filter_same_symbol_jumps
         decode_opts
         ~debug_print_perf_commands
         ~recording_data
@@ -235,7 +236,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~f_sexp:(fun writer ->
         let open Deferred.Or_error.Let_syntax in
         let%bind events, close_result =
-          get_events_and_close_result ~decode_events ~range_symbols
+          get_events_and_close_result
+            ~decode_events:(decode_events ~filter_same_symbol_jumps:false)
+            ~range_symbols
         in
         let%bind () = write_event_sexps writer events close_result in
         return ())
