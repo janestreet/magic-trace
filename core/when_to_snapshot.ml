@@ -17,11 +17,13 @@ let param =
        (2) If you provide [-trigger ?], magic-trace will open up a fuzzy-find dialog to \
        help you choose a symbol to trace. Fails if you don't have the \"fzf\" binary in \
        your PATH.\n\
-       (3) If you provide [-trigger <FUNCTION NAME>], magic-trace will snapshot when the \
+       (3) If you provide [-trigger <SELECTION>], magic-trace will snapshot when the \
        application being traced calls the given function. This takes the fully-mangled \
        name, so if you're using anything except C, fuzzy-find mode will probably be \
        easier to use. [-trigger .] is a shorthand for [-trigger \
-       magic_trace_stop_indicator].\n\
+       magic_trace_stop_indicator]. [SELECTION] can be [<FUNCTION NAME>], [<ADDRESS>], \
+       or [<FILE>:<LINE>:<COL>]. Prefixes [addr:], [symbol:], and [line:] restrict how \
+       magic-trace should parse the selection.\n\
        (*) Regardless of trigger mode, magic-trace will always snapshot when the \
        application terminates if it has not yet triggered for any other reason.\n\
        (*) If you pass multiple PIDs when tracing, the trigger will only be able to \
