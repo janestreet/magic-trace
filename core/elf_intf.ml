@@ -20,3 +20,12 @@ module Stop_info = struct
     ; filter : string
     }
 end
+
+module Selection = struct
+  type t =
+    | Symbol of Owee_elf.Symbol_table.Symbol.t
+    | Address of
+        { address : int
+        ; name : string
+        }
+end

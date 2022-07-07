@@ -328,11 +328,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
           let%bind snap_sym =
             Deferred.return
               (Result.of_option
-                 (Elf.find_symbol elf symbol_name)
+                 (Elf.find_selection elf symbol_name)
                  ~error:
                    (Error.of_string [%string "Snapshot symbol not found: %{symbol_name}"]))
           in
-          let snap_loc = Elf.symbol_stop_info elf head_pid snap_sym in
+          let snap_loc = Elf.selection_stop_info elf head_pid snap_sym in
           return (Some snap_loc))
     in
     let%map.Deferred.Or_error recording, recording_data =
