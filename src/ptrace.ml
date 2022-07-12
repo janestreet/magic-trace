@@ -16,16 +16,16 @@ let fork_exec_stopped ~prog ~argv () =
     if not (ptrace_traceme ()) then sys_exit 126;
     never_returns
       (try Core_unix.exec ~prog ~argv () with
-      | _ -> sys_exit 127)
+       | _ -> sys_exit 127)
   | `In_the_parent pid ->
     (match Core_unix.wait_untraced (`Pid pid) with
-    | _, Error (`Stop _) -> pid
-    | _, result ->
-      raise_s
-        [%message
-          "expected child to stop but it did not"
-            (pid : Pid.t)
-            (result : (unit, Core_unix.Exit_or_signal_or_stop.error) Result.t)])
+     | _, Error (`Stop _) -> pid
+     | _, result ->
+       raise_s
+         [%message
+           "expected child to stop but it did not"
+             (pid : Pid.t)
+             (result : (unit, Core_unix.Exit_or_signal_or_stop.error) Result.t)])
 ;;
 
 external resume : Pid.t -> unit = "magic_ptrace_detach"

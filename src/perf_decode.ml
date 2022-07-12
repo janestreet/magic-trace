@@ -116,21 +116,21 @@ let parse_symbol_and_offset ?perf_maps pid str ~addr =
   | _ | (exception _) ->
     let failed = Symbol.Unknown, 0 in
     (match perf_maps, pid with
-    | None, _ | _, None ->
-      (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
-      | [| _; dso |] ->
-        (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
+     | None, _ | _, None ->
+       (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
+        | [| _; dso |] ->
+          (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
            from [offset] here. *)
-        Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
-      | _ | (exception _) -> failed)
-    | Some perf_map, Some pid ->
-      (match Perf_map.Table.symbol ~pid perf_map ~addr with
-      | None -> failed
-      | Some location ->
-        (* It's strange that perf isn't resolving these symbols. It says on the
+          Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
+        | _ | (exception _) -> failed)
+     | Some perf_map, Some pid ->
+       (match Perf_map.Table.symbol ~pid perf_map ~addr with
+        | None -> failed
+        | Some location ->
+          (* It's strange that perf isn't resolving these symbols. It says on the
            tin that it supports perf map files! *)
-        let offset = saturating_sub_i64 addr location.start_addr in
-        From_perf_map location, offset))
+          let offset = saturating_sub_i64 addr location.start_addr in
+          From_perf_map location, offset))
 ;;
 
 let trace_error_to_event line : Event.Decode_error.t =
@@ -166,7 +166,7 @@ let parse_perf_cbr_event thread time line : Event.t =
 ;;
 
 let parse_location ?perf_maps ~pid instruction_pointer symbol_and_offset
-    : Event.Location.t
+  : Event.Location.t
   =
   let instruction_pointer = Util.int64_of_hex_string instruction_pointer in
   let symbol, symbol_offset =
@@ -279,25 +279,25 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
 ;;
 
 let parse_perf_extra_sampled_event
-    ?perf_maps
-    (thread : Event.Thread.t)
-    time
-    period
-    line
-    lines
-    name
-    : Event.t
+  ?perf_maps
+  (thread : Event.Thread.t)
+  time
+  period
+  line
+  lines
+  name
+  : Event.t
   =
   let (location : Event.Location.t) =
     match lines with
     | [] ->
       (match Re.Group.all (Re.exec perf_extra_sampled_event_re line) with
-      | [| _str; _; instruction_pointer; symbol_and_offset |] ->
-        parse_location ?perf_maps ~pid:thread.pid instruction_pointer symbol_and_offset
-      | results ->
-        raise_s
-          [%message
-            "Regex of perf event did not match expected fields" (results : string array)])
+       | [| _str; _; instruction_pointer; symbol_and_offset |] ->
+         parse_location ?perf_maps ~pid:thread.pid instruction_pointer symbol_and_offset
+       | results ->
+         raise_s
+           [%message
+             "Regex of perf event did not match expected fields" (results : string array)])
     | lines -> List.hd_exn lines |> parse_callstack_entry ?perf_maps thread
   in
   Ok { thread; time; data = Event_sample { location; count = period; name } }
@@ -309,36 +309,36 @@ let to_event ?perf_maps lines : Event.t option =
     | first_line :: lines ->
       let header = parse_event_header first_line in
       (match header with
-      | Trace_error -> Some (Error (trace_error_to_event first_line))
-      | Event { thread; time; period; event; remaining_line } ->
-        (match event with
-        | `Branches ->
-          Some (parse_perf_branches_event ?perf_maps thread time remaining_line)
-        | `Cbr ->
-          (* cbr (core-to-bus ratio) are events which show frequency changes. *)
-          Some (parse_perf_cbr_event thread time remaining_line)
-        | `Psb -> (* Ignore psb (packet stream boundary) packets *) None
-        | `Cycles -> Some (parse_perf_cycles_event ?perf_maps thread time lines)
-        | `Branch_misses ->
-          Some
-            (parse_perf_extra_sampled_event
-               ?perf_maps
-               thread
-               time
-               period
-               remaining_line
-               lines
-               Collection_mode.Event.Name.Branch_misses)
-        | `Cache_misses ->
-          Some
-            (parse_perf_extra_sampled_event
-               ?perf_maps
-               thread
-               time
-               period
-               remaining_line
-               lines
-               Collection_mode.Event.Name.Cache_misses)))
+       | Trace_error -> Some (Error (trace_error_to_event first_line))
+       | Event { thread; time; period; event; remaining_line } ->
+         (match event with
+          | `Branches ->
+            Some (parse_perf_branches_event ?perf_maps thread time remaining_line)
+          | `Cbr ->
+            (* cbr (core-to-bus ratio) are events which show frequency changes. *)
+            Some (parse_perf_cbr_event thread time remaining_line)
+          | `Psb -> (* Ignore psb (packet stream boundary) packets *) None
+          | `Cycles -> Some (parse_perf_cycles_event ?perf_maps thread time lines)
+          | `Branch_misses ->
+            Some
+              (parse_perf_extra_sampled_event
+                 ?perf_maps
+                 thread
+                 time
+                 period
+                 remaining_line
+                 lines
+                 Collection_mode.Event.Name.Branch_misses)
+          | `Cache_misses ->
+            Some
+              (parse_perf_extra_sampled_event
+                 ?perf_maps
+                 thread
+                 time
+                 period
+                 remaining_line
+                 lines
+                 Collection_mode.Event.Name.Cache_misses)))
     | [] -> raise_s [%message "Unexpected line while parsing perf output."]
   with
   | exn ->
@@ -355,17 +355,17 @@ let split_line_pipe pipe : string list Pipe.Reader.t =
   don't_wait_for
     (let%bind acc =
        Pipe.fold pipe ~init:[] ~f:(fun acc line ->
-           let should_acc = not String.(line = "") in
-           let should_write =
-             String.(line = "") || not (Char.equal (String.get line 0) '\t')
-           in
-           let%map () =
-             if List.length acc > 0 && should_write
-             then Pipe.write writer (List.rev acc)
-             else Deferred.return ()
-           in
-           let prev_acc = if should_write then [] else acc in
-           if should_acc then line :: prev_acc else prev_acc)
+         let should_acc = not String.(line = "") in
+         let should_write =
+           String.(line = "") || not (Char.equal (String.get line 0) '\t')
+         in
+         let%map () =
+           if List.length acc > 0 && should_write
+           then Pipe.write writer (List.rev acc)
+           else Deferred.return ()
+         in
+         let prev_acc = if should_write then [] else acc in
+         if should_acc then line :: prev_acc else prev_acc)
      in
      let%map () =
        if List.length acc > 0

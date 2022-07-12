@@ -88,29 +88,29 @@ let read_current_maps pid =
   Owee_linux_maps.scan_pid (Pid.to_int pid)
   |> List.filter_map
        ~f:(fun { address_start; address_end; pathname; offset; perm_execute; _ } ->
-         match perm_execute with
-         | false -> None
-         | true ->
-           let open Int64 in
-           Some
-             { Mmap.vaddr = to_int_exn address_start
-             ; length = address_end - address_start |> to_int_exn
-             ; offset = to_int_exn offset
-             ; filename = pathname
-             })
+       match perm_execute with
+       | false -> None
+       | true ->
+         let open Int64 in
+         Some
+           { Mmap.vaddr = to_int_exn address_start
+           ; length = address_end - address_start |> to_int_exn
+           ; offset = to_int_exn offset
+           ; filename = pathname
+           })
 ;;
 
 module Tracing_state = struct
   type t = Stub.c_tracing_state
 
   let attach
-      ?(data_size = 0x400000)
-      ?(aux_size = 0x400000)
-      ?filter
-      ~pt_file
-      ~sideband_file
-      ~setup_file
-      pid
+    ?(data_size = 0x400000)
+    ?(aux_size = 0x400000)
+    ?filter
+    ~pt_file
+    ~sideband_file
+    ~setup_file
+    pid
     =
     let state = Stub.create_empty_state () in
     let trace_meta : Stub.Trace_meta.t =

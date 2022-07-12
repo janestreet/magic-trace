@@ -20,9 +20,9 @@ let ocaml_exception_info t = t.ocaml_exception_info
 let find_base_offset sections =
   (* iterate sections and find offset of first non-zero address *)
   Array.find_map sections ~f:(fun (section : Owee_elf.section) ->
-      if Int64.(section.sh_addr = 0L)
-      then None
-      else Some Int64.(section.sh_addr - section.sh_offset))
+    if Int64.(section.sh_addr = 0L)
+    then None
+    else Some Int64.(section.sh_addr - section.sh_offset))
 ;;
 
 let is_non_pie_executable (header : Owee_elf.header) =
@@ -125,46 +125,44 @@ let is_func sym =
 let matching_functions t symbol_re =
   let res = ref String.Map.empty in
   Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      match Owee_elf.Symbol_table.Symbol.name symbol t.string with
-      | Some name when is_func symbol && Re.execp symbol_re name ->
-        (* Duplicate symbols are possible if a symbol is in both the dynamic and static
+    match Owee_elf.Symbol_table.Symbol.name symbol t.string with
+    | Some name when is_func symbol && Re.execp symbol_re name ->
+      (* Duplicate symbols are possible if a symbol is in both the dynamic and static
          symbol tables. *)
-        (match Map.add !res ~key:name ~data:symbol with
-        | `Ok a -> res := a
-        | `Duplicate -> ())
-      | _ -> ());
+      (match Map.add !res ~key:name ~data:symbol with
+       | `Ok a -> res := a
+       | `Duplicate -> ())
+    | _ -> ());
   !res
 ;;
 
 let traverse_debug_line ~f t =
   Option.iter t.debug ~f:(fun body ->
-      let cursor = Owee_buf.cursor body in
-      let pointers_to_other_sections =
-        Owee_elf.debug_line_pointers t.all_elf t.sections
-      in
-      let rec load_table_next () =
-        match Owee_debug_line.read_chunk cursor ~pointers_to_other_sections with
-        | None -> ()
-        | Some (header, chunk) ->
-          let process header (state : Owee_debug_line.state) () =
-            if not state.end_sequence then f header state
-          in
-          Owee_debug_line.fold_rows (header, chunk) process ();
-          load_table_next ()
-      in
-      load_table_next ())
+    let cursor = Owee_buf.cursor body in
+    let pointers_to_other_sections = Owee_elf.debug_line_pointers t.all_elf t.sections in
+    let rec load_table_next () =
+      match Owee_debug_line.read_chunk cursor ~pointers_to_other_sections with
+      | None -> ()
+      | Some (header, chunk) ->
+        let process header (state : Owee_debug_line.state) () =
+          if not state.end_sequence then f header state
+        in
+        Owee_debug_line.fold_rows (header, chunk) process ();
+        load_table_next ()
+    in
+    load_table_next ())
 ;;
 
 let find_symbol t name =
   let some_name = Some name in
   with_return (fun return ->
-      Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-          if is_func symbol
-             && [%compare.equal: string option]
-                  (Owee_elf.Symbol_table.Symbol.name symbol t.string)
-                  some_name
-          then return.return (Some symbol));
-      None)
+    Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
+      if is_func symbol
+         && [%compare.equal: string option]
+              (Owee_elf.Symbol_table.Symbol.name symbol t.string)
+              some_name
+      then return.return (Some symbol));
+    None)
 ;;
 
 let find_selection t name : Selection.t option =
@@ -201,22 +199,22 @@ let find_selection t name : Selection.t option =
     | [] -> None
     | (col, address) :: _ ->
       (match desired_col with
-      | None ->
-        if List.length cols > 1
-        then
-          Core.eprintf
-            "Multiple snapshot symbols on same line. Selecting column %d with address \
-             0x%x.\n"
-            col
-            address;
-        Some (Selection.Address { address; name })
-      | Some desired_col ->
-        (match
-           List.find_map cols ~f:(fun (col, _) ->
-               if col = desired_col then Some address else None)
-         with
-        | None -> None
-        | Some address -> Some (Selection.Address { address; name })))
+       | None ->
+         if List.length cols > 1
+         then
+           Core.eprintf
+             "Multiple snapshot symbols on same line. Selecting column %d with address \
+              0x%x.\n"
+             col
+             address;
+         Some (Selection.Address { address; name })
+       | Some desired_col ->
+         (match
+            List.find_map cols ~f:(fun (col, _) ->
+              if col = desired_col then Some address else None)
+          with
+          | None -> None
+          | Some address -> Some (Selection.Address { address; name })))
   in
   let find_addr_selection name =
     Option.bind
@@ -234,9 +232,9 @@ let find_selection t name : Selection.t option =
   in
   match
     List.find_map prefix_and_functions ~f:(fun (prefix, f) ->
-        match String.is_prefix name ~prefix with
-        | true -> f (String.drop_prefix name (String.length prefix))
-        | false -> None)
+      match String.is_prefix name ~prefix with
+      | true -> f (String.drop_prefix name (String.length prefix))
+      | false -> None)
   with
   | Some _ as result -> result
   | None -> List.find_map prefix_and_functions ~f:(fun ((_prefix : string), f) -> f name)
@@ -245,21 +243,21 @@ let find_selection t name : Selection.t option =
 let all_symbols ?(select = `File_or_func) t =
   let res = String.Table.create () in
   Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      let should_add =
-        match select, Owee_elf.Symbol_table.Symbol.type_attribute symbol with
-        | `File_or_func, File | `File_or_func, Func -> true
-        | `File, File | `Func, Func -> true
-        | _, _ -> false
-      in
-      if should_add
-      then (
-        match Owee_elf.Symbol_table.Symbol.name symbol t.string with
-        | None -> ()
-        | Some name ->
-          (* Duplicate symbols are possible if a symbol is in both the dynamic and static
+    let should_add =
+      match select, Owee_elf.Symbol_table.Symbol.type_attribute symbol with
+      | `File_or_func, File | `File_or_func, Func -> true
+      | `File, File | `Func, Func -> true
+      | _, _ -> false
+    in
+    if should_add
+    then (
+      match Owee_elf.Symbol_table.Symbol.name symbol t.string with
+      | None -> ()
+      | Some name ->
+        (* Duplicate symbols are possible if a symbol is in both the dynamic and static
            symbol tables. *)
-          (match Hashtbl.add res ~key:name ~data:symbol with
-          | `Ok | `Duplicate -> ())));
+        (match Hashtbl.add res ~key:name ~data:symbol with
+         | `Ok | `Duplicate -> ())));
   String.Table.to_alist res
 ;;
 
@@ -282,7 +280,7 @@ let all_file_selections t symbol =
           in
           let closest_symbol_name =
             Option.bind closest_symbol ~f:(fun closest_symbol ->
-                Owee_elf.Symbol_table.Symbol.name closest_symbol t.string)
+              Owee_elf.Symbol_table.Symbol.name closest_symbol t.string)
           in
           let show_name =
             match closest_symbol_name with
@@ -304,11 +302,11 @@ let selection_stop_info t pid selection =
     else
       Owee_linux_maps.scan_pid (Pid.to_int pid)
       |> List.filter_map ~f:(fun { address_start; address_end; pathname; offset; _ } ->
-             let open Int64 in
-             let length = address_end - address_start in
-             if String.(pathname = filename) && addr >= offset && addr < offset + length
-             then Some (addr - offset + address_start)
-             else None)
+           let open Int64 in
+           let length = address_end - address_start in
+           if String.(pathname = filename) && addr >= offset && addr < offset + length
+           then Some (addr - offset + address_start)
+           else None)
       |> List.hd_exn
   in
   let compute_filter ~name ~addr ~size =
@@ -333,11 +331,11 @@ let addr_table t =
   let table = Int.Table.create () in
   let symbol_starts = Int.Hash_set.create () in
   Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      if is_func symbol
-      then
-        Hash_set.add
-          symbol_starts
-          (Owee_elf.Symbol_table.Symbol.value symbol |> Int64.to_int_exn));
+    if is_func symbol
+    then
+      Hash_set.add
+        symbol_starts
+        (Owee_elf.Symbol_table.Symbol.value symbol |> Int64.to_int_exn));
   traverse_debug_line
     ~f:(fun header state ->
       if Hash_set.mem symbol_starts state.address

@@ -156,10 +156,10 @@ let dump_using_file ?range_symbols events =
   while%bind_open.Result Ok true do
     let%bind.Result cur = Tracing.Parser.parse_next parser in
     (match cur with
-    | Tick_initialization { ticks_per_second; base_time = _ } ->
-      (* Elide [base_time], since it isn't stable. *)
-      print_s [%message "Tick_initialization" (ticks_per_second : int)]
-    | _ -> print_s [%sexp (cur : Tracing.Parser.Record.t)]);
+     | Tick_initialization { ticks_per_second; base_time = _ } ->
+       (* Elide [base_time], since it isn't stable. *)
+       print_s [%message "Tick_initialization" (ticks_per_second : int)]
+     | _ -> print_s [%sexp (cur : Tracing.Parser.Record.t)]);
     Result.return ()
   done
   |> [%sexp_of: (unit, Tracing.Parser.Parse_error.t) Result.t]
@@ -793,13 +793,13 @@ let%expect_test "get debug information from ELF" =
   let debug_table =
     Magic_trace_core.Elf.addr_table (Option.value_exn elf)
     |> Hashtbl.filter ~f:(fun info ->
-           match info.filename with
-           | Some "sample.ml" -> true
-           | _ -> false)
+         match info.filename with
+         | Some "sample.ml" -> true
+         | _ -> false)
   in
   let raise_after_col =
     Hashtbl.filter_map debug_table ~f:(fun info ->
-        if info.line = 5 then Some info.col else None)
+      if info.line = 5 then Some info.col else None)
     |> Hashtbl.data
     |> List.hd_exn
   in

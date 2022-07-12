@@ -74,7 +74,7 @@ let perf_fork_exec ?env ~prog ~argv () =
     pr_set_pdeathsig Signal.kill;
     never_returns
       (try Core_unix.exec ?env ~prog ~argv () with
-      | _ -> sys_exit 127)
+       | _ -> sys_exit 127)
   | `In_the_parent pid -> pid
 ;;
 
@@ -101,8 +101,8 @@ module Recording = struct
   ;;
 
   let perf_intel_pt_config_of_timer_resolution
-      ~capabilities
-      (timer_resolution : Timer_resolution.t)
+    ~capabilities
+    (timer_resolution : Timer_resolution.t)
     =
     let timer_resolution =
       match
@@ -158,28 +158,28 @@ module Recording = struct
     List.map
       extra_events
       ~f:(fun ({ when_to_sample; name; precision } : Collection_mode.Event.t) ->
-        let precision_selector =
-          match precision with
-          | Arbitrary_skid -> ""
-          | Constant_skid -> "p"
-          | Request_zero_skid -> "pp"
-          | Zero_skid -> "ppp"
-          | Maximum_possible -> "P"
-        in
-        match when_to_sample with
-        | Period period ->
-          [%string
-            "%{name#Collection_mode.Event.Name}/period=%{period#Int}/%{selector}%{precision_selector}"]
-        | Frequency freq ->
-          [%string
-            "%{name#Collection_mode.Event.Name}/freq=%{freq#Int}/%{selector}%{precision_selector}"])
+      let precision_selector =
+        match precision with
+        | Arbitrary_skid -> ""
+        | Constant_skid -> "p"
+        | Request_zero_skid -> "pp"
+        | Zero_skid -> "ppp"
+        | Maximum_possible -> "P"
+      in
+      match when_to_sample with
+      | Period period ->
+        [%string
+          "%{name#Collection_mode.Event.Name}/period=%{period#Int}/%{selector}%{precision_selector}"]
+      | Frequency freq ->
+        [%string
+          "%{name#Collection_mode.Event.Name}/freq=%{freq#Int}/%{selector}%{precision_selector}"])
   ;;
 
   let perf_args_of_collection_mode
-      ~capabilities
-      ~timer_resolution
-      ~trace_scope
-      (collection_mode : Collection_mode.t)
+    ~capabilities
+    ~timer_resolution
+    ~trace_scope
+    (collection_mode : Collection_mode.t)
     =
     let selector = perf_selector_of_trace_scope trace_scope in
     let%map.Or_error primary_event =
@@ -208,22 +208,22 @@ module Recording = struct
     |> Deferred.bind
          ~f:
            (Deferred.Array.iter ~f:(fun file ->
-                if String.is_prefix file ~prefix:"perf.data"
-                then Sys.remove (record_dir ^/ file)
-                else Deferred.return ()))
+              if String.is_prefix file ~prefix:"perf.data"
+              then Sys.remove (record_dir ^/ file)
+              else Deferred.return ()))
   ;;
 
   let attach_and_record
-      { Record_opts.multi_thread; full_execution; snapshot_size; callgraph_mode }
-      ~debug_print_perf_commands
-      ~(subcommand : Subcommand.t)
-      ~(when_to_snapshot : When_to_snapshot.t)
-      ~(trace_scope : Trace_scope.t)
-      ~multi_snapshot
-      ~(timer_resolution : Timer_resolution.t)
-      ~record_dir
-      ~(collection_mode : Collection_mode.t)
-      pids
+    { Record_opts.multi_thread; full_execution; snapshot_size; callgraph_mode }
+    ~debug_print_perf_commands
+    ~(subcommand : Subcommand.t)
+    ~(when_to_snapshot : When_to_snapshot.t)
+    ~(trace_scope : Trace_scope.t)
+    ~multi_snapshot
+    ~(timer_resolution : Timer_resolution.t)
+    ~record_dir
+    ~(collection_mode : Collection_mode.t)
+    pids
     =
     let%bind () = init_record_dir record_dir in
     let%bind capabilities = Perf_capabilities.detect_exn () in
@@ -241,18 +241,18 @@ module Recording = struct
       Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
     in
     (match when_to_snapshot, subcommand with
-    | Magic_trace_or_the_application_terminates, Run ->
-      if not perf_supports_snapshot_on_exit
-      then
-        printf
-          "Warning: magic-trace will only be able to snapshot when magic-trace is \
-           Ctrl+C'd, not when the application it's running ends. If that application \
-           ends before magic-trace can snapshot it, the resulting trace will be empty. \
-           The ability to snapshot when an application teminates was added to perf's \
-           userspace tools in version 5.4. For more information, see:\n\
-           https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
-           %!"
-    | Application_calls_a_function _, _ | _, Attach -> ());
+     | Magic_trace_or_the_application_terminates, Run ->
+       if not perf_supports_snapshot_on_exit
+       then
+         printf
+           "Warning: magic-trace will only be able to snapshot when magic-trace is \
+            Ctrl+C'd, not when the application it's running ends. If that application \
+            ends before magic-trace can snapshot it, the resulting trace will be empty. \
+            The ability to snapshot when an application teminates was added to perf's \
+            userspace tools in version 5.4. For more information, see:\n\
+            https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
+            %!"
+     | Application_calls_a_function _, _ | _, Attach -> ());
     (* CR-someday alamoreaux: [--per-thread] is an important argument here.
        However perf fails with an invalid argument to mmap if [--per-thread] is
        given as well as additional events to sample. Without [--per-thread], you
@@ -278,37 +278,37 @@ module Recording = struct
       match collection_mode with
       | Intel_processor_trace _ ->
         (match callgraph_mode with
-        | None -> return None
-        | Some _ ->
-          Deferred.Or_error.error_string
-            "[-callgraph-mode] is only configurable when running magic-trace with \
-             sampling.")
+         | None -> return None
+         | Some _ ->
+           Deferred.Or_error.error_string
+             "[-callgraph-mode] is only configurable when running magic-trace with \
+              sampling.")
       | Stacktrace_sampling _ ->
         (match
            ( callgraph_mode
            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
          with
-        (* We choose to default to dwarf if lbr is not available. This is
+         (* We choose to default to dwarf if lbr is not available. This is
              because dwarf will work on any setup, while frame pointers requires
              compilation with [-fno-omit-frame-pointers]. Although decoding is
              slow and perf.data file sizes are larger. *)
-        | None, false ->
-          Core.eprintf
-            "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
-             overhead and decoding time. For more info: https://magic-trace.org/w/c\n";
-          return (Some Callgraph_mode.Dwarf)
-        | None, true ->
-          Core.eprintf
-            "Warning: [-callgraph-mode] is defaulting to [Last_branch_record] which may \
-             lose data and has limited callstack depth. For more info: \
-             https://magic-trace.org/w/c\n";
-          return (Some (Callgraph_mode.Last_branch_record { stitched = true }))
-        | Some (Last_branch_record _), false ->
-          Deferred.Or_error.error_string
-            "[-callgraph-mode Last_branch_record] is only supported on an Intel machine \
-             which supports LBR. Try passing [Frame_pointers] or [Dwarf] instead."
-        | Some mode, false -> return (Some mode)
-        | Some mode, true -> return (Some mode))
+         | None, false ->
+           Core.eprintf
+             "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
+              overhead and decoding time. For more info: https://magic-trace.org/w/c\n";
+           return (Some Callgraph_mode.Dwarf)
+         | None, true ->
+           Core.eprintf
+             "Warning: [-callgraph-mode] is defaulting to [Last_branch_record] which may \
+              lose data and has limited callstack depth. For more info: \
+              https://magic-trace.org/w/c\n";
+           return (Some (Callgraph_mode.Last_branch_record { stitched = true }))
+         | Some (Last_branch_record _), false ->
+           Deferred.Or_error.error_string
+             "[-callgraph-mode Last_branch_record] is only supported on an Intel machine \
+              which supports LBR. Try passing [Frame_pointers] or [Dwarf] instead."
+         | Some mode, false -> return (Some mode)
+         | Some mode, true -> return (Some mode))
     in
     let%bind.Deferred.Or_error event_opts =
       perf_args_of_collection_mode
@@ -362,9 +362,9 @@ module Recording = struct
       | Stacktrace_sampling _ -> []
       | Intel_processor_trace _ ->
         (match when_to_snapshot with
-        | `never -> []
-        | `at_exit `sigint -> [ "--snapshot=e" ]
-        | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ])
+         | `never -> []
+         | `at_exit `sigint -> [ "--snapshot=e" ]
+         | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ])
     in
     let overwrite_opts =
       match collection_mode, full_execution with
@@ -430,8 +430,8 @@ module Recording = struct
            supports snapshot-at-exit. *)
         Some
           (match signal with
-          | `sigint -> Signal.int
-          | `sigusr2 -> Signal.usr2)
+           | `sigint -> Signal.int
+           | `sigusr2 -> Signal.usr2)
     in
     match signal with
     | None -> ()
@@ -454,13 +454,13 @@ module Decode_opts = struct
 end
 
 let decode_events
-    ?perf_maps
-    ?(filter_same_symbol_jumps = true)
-    ~debug_print_perf_commands
-    ~(recording_data : Recording.Data.t option)
-    ~record_dir
-    ~(collection_mode : Collection_mode.t)
-    ()
+  ?perf_maps
+  ?(filter_same_symbol_jumps = true)
+  ~debug_print_perf_commands
+  ~(recording_data : Recording.Data.t option)
+  ~record_dir
+  ~(collection_mode : Collection_mode.t)
+  ()
   =
   let%bind capabilities = Perf_capabilities.detect_exn () in
   let%bind.Deferred.Or_error dlfilter_opts =
@@ -483,56 +483,53 @@ let decode_events
   in
   let%map result =
     Deferred.List.map files ~f:(fun perf_data_file ->
-        let itrace_opts =
-          match collection_mode with
-          | Intel_processor_trace _ -> [ "--itrace=bep" ]
-          | Stacktrace_sampling _ -> []
-        in
-        let fields_opts =
-          match collection_mode with
-          | Intel_processor_trace _ ->
-            [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso,event,period" ]
-          | Stacktrace_sampling _ ->
-            [ "-F"; "pid,tid,time,ip,sym,symoff,dso,event,period" ]
-        in
-        let args =
-          List.concat
-            [ [ "script"; "-i"; record_dir ^/ perf_data_file; "--ns" ]
-            ; itrace_opts
-            ; fields_opts
-            ; dlfilter_opts
-            ; Option.map recording_data ~f:(fun recording_data ->
-                  Callgraph_mode.to_perf_script_args recording_data.callgraph_mode)
-              |> Option.value ~default:[]
-            ]
-        in
-        if debug_print_perf_commands
-        then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
-        (* CR-someday tbrindus: this should be switched over to using
+      let itrace_opts =
+        match collection_mode with
+        | Intel_processor_trace _ -> [ "--itrace=bep" ]
+        | Stacktrace_sampling _ -> []
+      in
+      let fields_opts =
+        match collection_mode with
+        | Intel_processor_trace _ ->
+          [ "-F"; "pid,tid,time,flags,ip,addr,sym,symoff,synth,dso,event,period" ]
+        | Stacktrace_sampling _ -> [ "-F"; "pid,tid,time,ip,sym,symoff,dso,event,period" ]
+      in
+      let args =
+        List.concat
+          [ [ "script"; "-i"; record_dir ^/ perf_data_file; "--ns" ]
+          ; itrace_opts
+          ; fields_opts
+          ; dlfilter_opts
+          ; Option.map recording_data ~f:(fun recording_data ->
+              Callgraph_mode.to_perf_script_args recording_data.callgraph_mode)
+            |> Option.value ~default:[]
+          ]
+      in
+      if debug_print_perf_commands
+      then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
+      (* CR-someday tbrindus: this should be switched over to using
            [perf_fork_exec] to avoid the [perf script] process from outliving
            the parent. *)
-        let%map perf_script_proc =
-          Process.create_exn ~env:perf_env ~prog:"perf" ~args ()
-        in
-        let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
-        don't_wait_for
-          (Reader.transfer
-             (Process.stderr perf_script_proc)
-             (Writer.pipe (force Writer.stderr)));
-        let events = Perf_decode.to_events ?perf_maps line_pipe in
-        let close_result =
-          let%map exit_or_signal = Process.wait perf_script_proc in
-          perf_exit_to_or_error exit_or_signal
-        in
-        events, close_result)
+      let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
+      let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
+      don't_wait_for
+        (Reader.transfer
+           (Process.stderr perf_script_proc)
+           (Writer.pipe (force Writer.stderr)));
+      let events = Perf_decode.to_events ?perf_maps line_pipe in
+      let close_result =
+        let%map exit_or_signal = Process.wait perf_script_proc in
+        perf_exit_to_or_error exit_or_signal
+      in
+      events, close_result)
   in
   let events = List.map result ~f:(fun (events, _close_result) -> events) in
   (* Force [close_result] to wait on [Pipe.t]s in order. *)
   let close_result =
     List.map result ~f:(fun (_events, close_result) -> close_result)
     |> Deferred.List.fold ~init:(Ok ()) ~f:(fun acc close_result ->
-           let%bind.Deferred.Or_error () = close_result in
-           Deferred.return acc)
+         let%bind.Deferred.Or_error () = close_result in
+         Deferred.return acc)
   in
   Ok { Decode_result.events; close_result }
 ;;

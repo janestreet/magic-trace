@@ -10,12 +10,12 @@ module Unevaluated = struct
   (* Accepts '(foo bar)', returns { start_symbol = User_selected "foo"; stop_symbol = User_selected = "bar" } *)
   let arg_type =
     Command.Param.Arg_type.create (fun s ->
-        let start_symbol, stop_symbol =
-          Sexp.of_string s
-          |> Tuple2.t_of_sexp String.t_of_sexp String.t_of_sexp
-          |> Tuple2.map ~f:Symbol_selection.of_command_string
-        in
-        { start_symbol; stop_symbol })
+      let start_symbol, stop_symbol =
+        Sexp.of_string s
+        |> Tuple2.t_of_sexp String.t_of_sexp String.t_of_sexp
+        |> Tuple2.map ~f:Symbol_selection.of_command_string
+      in
+      { start_symbol; stop_symbol })
   ;;
 end
 

@@ -66,14 +66,14 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
       (* Make the start of the trace start at time=0, regardless of when it actually started. *)
       let adjust_event_time (event : Event.t) : Event.t =
         Event.change_time event ~f:(fun event_time ->
-            let first_event_time =
-              match%optional.Time_ns.Span.Option !first_event_time with
-              | None ->
-                first_event_time := Time_ns.Span.Option.some event_time;
-                event_time
-              | Some first_event_time -> first_event_time
-            in
-            Time_ns.Span.( - ) event_time first_event_time)
+          let first_event_time =
+            match%optional.Time_ns.Span.Option !first_event_time with
+            | None ->
+              first_event_time := Time_ns.Span.Option.some event_time;
+              event_time
+            | Some first_event_time -> first_event_time
+          in
+          Time_ns.Span.( - ) event_time first_event_time)
       in
       let should_print_perf_line (event : Event.t) =
         match event with
@@ -87,19 +87,19 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
         Perf_decode.For_testing.split_line_pipe (Pipe.of_list lines) |> Pipe.to_list
       in
       List.iter split_lines ~f:(fun lines ->
-          let event =
-            Perf_decode.For_testing.to_event lines |> Option.map ~f:adjust_event_time
-          in
-          match event with
-          | Some event ->
-            if should_print_perf_line event
-            then (
-              match lines with
-              | [ line ] -> printf "%s\n" line
-              | lines -> print_s [%message (lines : string list)]);
-            let event = Event.With_write_info.create ~should_write:true event in
-            Trace_writer.write_event trace_writer event
-          | None -> ());
+        let event =
+          Perf_decode.For_testing.to_event lines |> Option.map ~f:adjust_event_time
+        in
+        match event with
+        | Some event ->
+          if should_print_perf_line event
+          then (
+            match lines with
+            | [ line ] -> printf "%s\n" line
+            | lines -> print_s [%message (lines : string list)]);
+          let event = Event.With_write_info.create ~should_write:true event in
+          Trace_writer.write_event trace_writer event
+        | None -> ());
       printf "END\n";
       Trace_writer.end_of_trace trace_writer)
 ;;
