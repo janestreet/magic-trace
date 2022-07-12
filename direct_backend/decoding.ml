@@ -117,10 +117,10 @@ let handle_add_section (state : state) (add : Stub.Add_section.t) =
     | Some elf -> Some elf
     | None ->
       (match Elf.create add.filename with
-      | None -> None
-      | Some elf ->
-        Hashtbl.add_exn state.elfs_by_filename ~key:add.filename ~data:elf;
-        Some elf)
+       | None -> None
+       | Some elf ->
+         Hashtbl.add_exn state.elfs_by_filename ~key:add.filename ~data:elf;
+         Some elf)
   in
   match elf with
   | None -> ()
@@ -141,7 +141,7 @@ let convert_trace_event state (event : Stub.Event.t) =
       | None ->
         (* Tracing start/stop events don't have an isid so we need a fallback *)
         List.find state.fallback_resolvers ~f:(fun (vaddr, size, _) ->
-            event.addr > vaddr && event.addr < vaddr + size)
+          event.addr > vaddr && event.addr < vaddr + size)
         |> Option.map ~f:(fun (_, _, r) -> r)
     in
     match resolver with

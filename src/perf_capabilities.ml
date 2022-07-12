@@ -36,7 +36,7 @@ module Version = struct
   let of_perf_version_string_exn version_string =
     try
       Scanf.sscanf version_string "perf version %d.%d" (fun major minor ->
-          { major; minor })
+        { major; minor })
     with
     | Scanf.Scan_failure _ | End_of_file ->
       raise_s
@@ -64,12 +64,12 @@ let supports_last_branch_record () =
   let flag_re = Re.Perl.re {|^flags\s*:\s+(\S.*)$|} |> Re.compile in
   let flags =
     List.filter_map cpuinfo ~f:(fun line ->
-        try
-          match Re.Group.all (Re.exec flag_re line) with
-          | [| _; flags |] -> Some (String.split ~on:' ' flags)
-          | _ -> None
-        with
-        | _ -> None)
+      try
+        match Re.Group.all (Re.exec flag_re line) with
+        | [| _; flags |] -> Some (String.split ~on:' ' flags)
+        | _ -> None
+      with
+      | _ -> None)
   in
   (* Check if pdcm in intersection of all processor flags *)
   let contains_pdcm flags = List.exists flags ~f:(fun flag -> String.(flag = "pdcm")) in

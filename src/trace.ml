@@ -6,17 +6,17 @@ open! Import
 
 let supports_command command =
   Lazy.from_fun (fun () ->
-      match Core_unix.fork () with
-      | `In_the_child ->
-        Core_unix.close Core_unix.stdout;
-        Core_unix.close Core_unix.stderr;
-        Core_unix.exec ~prog:command ~argv:[ command; "--version" ] ~use_path:true ()
-        |> never_returns
-      | `In_the_parent pid ->
-        let exit_or_signal = Core_unix.waitpid pid in
-        (match Core_unix.Exit_or_signal.or_error exit_or_signal with
-        | Error _ -> false
-        | Ok () -> true))
+    match Core_unix.fork () with
+    | `In_the_child ->
+      Core_unix.close Core_unix.stdout;
+      Core_unix.close Core_unix.stderr;
+      Core_unix.exec ~prog:command ~argv:[ command; "--version" ] ~use_path:true ()
+      |> never_returns
+    | `In_the_parent pid ->
+      let exit_or_signal = Core_unix.waitpid pid in
+      (match Core_unix.Exit_or_signal.or_error exit_or_signal with
+       | Error _ -> false
+       | Ok () -> true))
 ;;
 
 let supports_fzf = supports_command "fzf"
@@ -76,14 +76,14 @@ let debug_print_perf_commands =
 ;;
 
 let write_trace_from_events
-    ?ocaml_exception_info
-    ~print_events
-    ~trace_scope
-    ~debug_info
-    writer
-    ~hits
-    ~events
-    ~close_result
+  ?ocaml_exception_info
+  ~print_events
+  ~trace_scope
+  ~debug_info
+  writer
+  ~hits
+  ~events
+  ~close_result
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
@@ -103,9 +103,9 @@ let write_trace_from_events
     if print_events
     then
       List.map events ~f:(fun events ->
-          Pipe.map events ~f:(fun event ->
-              Core.print_s ~mach:() (Event.With_write_info.event event |> Event.sexp_of_t);
-              event))
+        Pipe.map events ~f:(fun event ->
+          Core.print_s ~mach:() (Event.With_write_info.event event |> Event.sexp_of_t);
+          event))
     else events
   in
   let writer =
@@ -130,15 +130,15 @@ let write_trace_from_events
       match ev.event with
       | Ok { data = Trace _; _ } | Ok { data = Stacktrace_sample _; _ } ->
         (match%optional.Time_ns_unix.Span.Option Event.time ev.event with
-        | None -> Trace_writer.end_of_trace writer
-        | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
+         | None -> Trace_writer.end_of_trace writer
+         | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
         last_index := index
       | Ok { data = Event_sample _; _ } | Ok { data = Power _; _ } | Error _ -> ());
     Trace_writer.write_event writer ev
   in
   let%bind () =
     Deferred.List.iteri events ~f:(fun index events ->
-        Pipe.iter_without_pushback events ~f:(process_event index))
+      Pipe.iter_without_pushback events ~f:(process_event index))
   in
   Trace_writer.end_of_trace writer;
   Tracing.Trace.close trace;
@@ -149,11 +149,11 @@ let write_event_sexps writer events close_result =
   Writer.write_line writer "(V4 (";
   let%bind () =
     Deferred.List.iter events ~f:(fun events ->
-        Pipe.iter_without_pushback
-          events
-          ~f:(fun { Event.With_write_info.event; should_write } ->
-            if should_write
-            then Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
+      Pipe.iter_without_pushback
+        events
+        ~f:(fun { Event.With_write_info.event; should_write } ->
+        if should_write
+        then Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
   in
   Writer.write_line writer "))";
   close_result
@@ -165,8 +165,8 @@ let get_events_and_close_result ~decode_events ~range_symbols =
   | None ->
     let%map { Decode_result.events; close_result } = decode_events () in
     ( List.map events ~f:(fun events ->
-          Pipe.map events ~f:(fun event ->
-              Event.With_write_info.create ~should_write:true event))
+        Pipe.map events ~f:(fun event ->
+          Event.With_write_info.create ~should_write:true event))
     , close_result )
   | Some range_symbols ->
     For_range.decode_events_and_annotate ~decode_events ~range_symbols
@@ -188,14 +188,14 @@ module Make_commands (Backend : Backend_intf.S) = struct
   end
 
   let decode_to_trace
-      ?perf_maps
-      ?range_symbols
-      ~elf
-      ~trace_scope
-      ~debug_print_perf_commands
-      ~record_dir
-      ~collection_mode
-      { Decode_opts.output_config; decode_opts; print_events }
+    ?perf_maps
+    ?range_symbols
+    ~elf
+    ~trace_scope
+    ~debug_print_perf_commands
+    ~record_dir
+    ~collection_mode
+    { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
     let recording_data =
@@ -291,12 +291,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
   end
 
   let attach
-      (opts : Record_opts.t)
-      ~elf
-      ~debug_print_perf_commands
-      ~subcommand
-      ~collection_mode
-      pids
+    (opts : Record_opts.t)
+    ~elf
+    ~debug_print_perf_commands
+    ~subcommand
+    ~collection_mode
+    pids
     =
     let open Deferred.Or_error.Let_syntax in
     Process_info.read_all_proc_info ();
@@ -306,24 +306,25 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | Magic_trace_or_the_application_terminates -> return None
       | Application_calls_a_function symbol_selection ->
         (match elf with
-        | None -> Deferred.Or_error.error_string "No ELF found"
-        | Some elf ->
-          let%bind symbol_name =
-            Symbol_selection.evaluate
-              ~supports_fzf
-              ~elf:(Some elf)
-              ~header:"Snapshot symbol"
-              symbol_selection
-          in
-          let%bind snap_sym =
-            Deferred.return
-              (Result.of_option
-                 (Elf.find_selection elf symbol_name)
-                 ~error:
-                   (Error.of_string [%string "Snapshot symbol not found: %{symbol_name}"]))
-          in
-          let snap_loc = Elf.selection_stop_info elf head_pid snap_sym in
-          return (Some snap_loc))
+         | None -> Deferred.Or_error.error_string "No ELF found"
+         | Some elf ->
+           let%bind symbol_name =
+             Symbol_selection.evaluate
+               ~supports_fzf
+               ~elf:(Some elf)
+               ~header:"Snapshot symbol"
+               symbol_selection
+           in
+           let%bind snap_sym =
+             Deferred.return
+               (Result.of_option
+                  (Elf.find_selection elf symbol_name)
+                  ~error:
+                    (Error.of_string
+                       [%string "Snapshot symbol not found: %{symbol_name}"]))
+           in
+           let snap_loc = Elf.selection_stop_info elf head_pid snap_sym in
+           return (Some snap_loc))
     in
     let%map.Deferred.Or_error recording, recording_data =
       Backend.Recording.attach_and_record
@@ -396,8 +397,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ()
         in
         (match res with
-        | `Interrupted -> Breakpoint.destroy bp
-        | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
+         | `Interrupted -> Breakpoint.destroy bp
+         | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
     in
     { Attachment.recording; done_ivar; breakpoint_done; finalize_recording }
   ;;
@@ -412,12 +413,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
   ;;
 
   let run_and_record
-      record_opts
-      ~elf
-      ~debug_print_perf_commands
-      ~prog
-      ~argv
-      ~collection_mode
+    record_opts
+    ~elf
+    ~debug_print_perf_commands
+    ~prog
+    ~argv
+    ~collection_mode
     =
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
@@ -437,24 +438,24 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~stop:(Ivar.read exited_ivar)
       Async_unix.Signal.terminating
       ~f:(fun signal ->
-        try
-          UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
-        with
-        | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
-          (* We raced, but it's OK because the child still exited. *)
-          ());
+      try
+        UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
+      with
+      | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
+        (* We raced, but it's OK because the child still exited. *)
+        ());
     (* [Monitor.try_with] because [waitpid] raises if perf died before we got here. *)
     let%bind.Deferred (waitpid_result : (Core_unix.Exit_or_signal.t, exn) result) =
       Monitor.try_with (fun () -> Async_unix.Unix.waitpid pid)
     in
     (match waitpid_result with
-    | Ok _ -> ()
-    | Error error ->
-      Core.eprintf
-        !"Warning: [perf] exited suspiciously quickly; it may have crashed.\n\
-          Error: %{Exn}\n\
-          %!"
-        error);
+     | Ok _ -> ()
+     | Error error ->
+       Core.eprintf
+         !"Warning: [perf] exited suspiciously quickly; it may have crashed.\n\
+           Error: %{Exn}\n\
+           %!"
+         error);
     (* This is still a little racey, but it's the best we can do without pidfds. *)
     Ivar.fill exited_ivar ();
     let%bind () = detach attachment in
@@ -474,8 +475,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
-        Core.eprintf "[ Got signal, detaching... ]\n%!";
-        Ivar.fill_if_empty done_ivar ());
+      Core.eprintf "[ Got signal, detaching... ]\n%!";
+      Ivar.fill_if_empty done_ivar ());
     Core.eprintf "[ Attached. Press Ctrl-C to stop recording. ]\n%!";
     let%bind () = stop in
     detach attachment
@@ -577,30 +578,30 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | None -> failwithf "Can't find executable for %s" prog ()
          in
          record_opt_fn ~executable ~f:(fun opts ->
-             let elf = Elf.create opts.executable in
-             let%bind range_symbols =
-               evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
-             in
-             let%bind pid =
-               let argv = prog :: List.concat (Option.to_list argv) in
-               run_and_record
-                 opts
-                 ~elf
-                 ~debug_print_perf_commands
-                 ~prog
-                 ~argv
-                 ~collection_mode:opts.collection_mode
-             in
-             let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
-             decode_to_trace
-               ~perf_maps
-               ?range_symbols
+           let elf = Elf.create opts.executable in
+           let%bind range_symbols =
+             evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
+           in
+           let%bind pid =
+             let argv = prog :: List.concat (Option.to_list argv) in
+             run_and_record
+               opts
                ~elf
-               ~trace_scope:opts.trace_scope
                ~debug_print_perf_commands
-               ~record_dir:opts.record_dir
+               ~prog
+               ~argv
                ~collection_mode:opts.collection_mode
-               decode_opts))
+           in
+           let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
+           decode_to_trace
+             ~perf_maps
+             ?range_symbols
+             ~elf
+             ~trace_scope:opts.trace_scope
+             ~debug_print_perf_commands
+             ~record_dir:opts.record_dir
+             ~collection_mode:opts.collection_mode
+             decode_opts))
   ;;
 
   let select_pid () =
@@ -686,31 +687,31 @@ module Make_commands (Backend : Backend_intf.S) = struct
              |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
            in
            record_opt_fn ~executable ~f:(fun opts ->
-               let { Record_opts.executable; when_to_snapshot; collection_mode; _ } =
+             let { Record_opts.executable; when_to_snapshot; collection_mode; _ } =
+               opts
+             in
+             let%bind elf = create_elf ~executable ~when_to_snapshot in
+             let%bind range_symbols =
+               evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
+             in
+             let%bind () =
+               attach_and_record
                  opts
-               in
-               let%bind elf = create_elf ~executable ~when_to_snapshot in
-               let%bind range_symbols =
-                 evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
-               in
-               let%bind () =
-                 attach_and_record
-                   opts
-                   ~elf
-                   ~debug_print_perf_commands
-                   ~collection_mode
-                   pids
-               in
-               let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
-               decode_to_trace
-                 ~perf_maps
-                 ?range_symbols
                  ~elf
-                 ~trace_scope:opts.trace_scope
                  ~debug_print_perf_commands
-                 ~record_dir:opts.record_dir
                  ~collection_mode
-                 decode_opts)))
+                 pids
+             in
+             let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
+             decode_to_trace
+               ~perf_maps
+               ?range_symbols
+               ~elf
+               ~trace_scope:opts.trace_scope
+               ~debug_print_perf_commands
+               ~record_dir:opts.record_dir
+               ~collection_mode
+               decode_opts)))
   ;;
 
   let decode_command =

@@ -63,11 +63,11 @@ let evaluate ~supports_fzf ~elf ~header symbol_selection =
   | Use_fzf_to_select_one select ->
     let%bind chosen_name, chosen_symbol = select_owee_symbol ~elf ~header select in
     (match Owee_elf.Symbol_table.Symbol.type_attribute chosen_symbol with
-    | File ->
-      let%bind chosen_name =
-        select_within_file ~elf ~header:(header ^ " line") chosen_symbol
-      in
-      return chosen_name
-    | _ -> return chosen_name)
+     | File ->
+       let%bind chosen_name =
+         select_within_file ~elf ~header:(header ^ " line") chosen_symbol
+       in
+       return chosen_name
+     | _ -> return chosen_name)
   | User_selected user_selection -> return user_selection
 ;;

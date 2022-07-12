@@ -157,21 +157,21 @@ let%expect_test "pid_of_filename success" =
 
 let%expect_test "pid_of_filename failure 1" =
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-      print_s [%message "" ~pid:(pid_of_filename "/tmp/per-512.map" : Pid.t)]);
+    print_s [%message "" ~pid:(pid_of_filename "/tmp/per-512.map" : Pid.t)]);
   [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
   |> Deferred.return
 ;;
 
 let%expect_test "pid_of_filename failure 2" =
   Expect_test_helpers_core.require_does_raise [%here] (fun () ->
-      print_s [%message "" ~pid:(pid_of_filename "/tmp/perf-512" : Pid.t)]);
+    print_s [%message "" ~pid:(pid_of_filename "/tmp/perf-512" : Pid.t)]);
   [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
   |> Deferred.return
 ;;
 
 let map_of_sequence_prefer_later sequence =
   Sequence.fold sequence ~init:Int64.Map.empty ~f:(fun map (key, data) ->
-      Map.set map ~key ~data)
+    Map.set map ~key ~data)
 ;;
 
 let load file_location =
@@ -207,20 +207,20 @@ module Table = struct
 
   let create maps =
     List.filter_map maps ~f:(function
-        | _, None -> None
-        | pid, Some map -> Some (pid, map))
+      | _, None -> None
+      | pid, Some map -> Some (pid, map))
     |> Hashtbl.of_alist_exn (module Pid)
   ;;
 
   let load_by_files files =
     Deferred.List.map files ~f:(fun filename ->
-        load filename |> Deferred.map ~f:(fun map -> pid_of_filename filename, map))
+      load filename |> Deferred.map ~f:(fun map -> pid_of_filename filename, map))
     >>| create
   ;;
 
   let load_by_pids pids =
     Deferred.List.map pids ~f:(fun pid ->
-        load (default_filename ~pid) |> Deferred.map ~f:(fun map -> pid, map))
+      load (default_filename ~pid) |> Deferred.map ~f:(fun map -> pid, map))
     >>| create
   ;;
 

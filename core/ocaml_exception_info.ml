@@ -23,7 +23,7 @@ let create ~pushtraps ~poptraps ~entertraps : t =
     |> Array.concat
   in
   Array.sort pushtrap_and_poptrap_addresses ~compare:(fun (addr, _) (addr', _) ->
-      Int64.compare addr addr');
+    Int64.compare addr addr');
   { pushtrap_and_poptrap_addresses; entertrap_addresses = Int64.Set.of_array entertraps }
 ;;
 

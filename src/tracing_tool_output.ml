@@ -107,7 +107,7 @@ module Serve = struct
     in
     let stop = Cohttp_async.Server.close_finished server in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
-        Cohttp_async.Server.close server |> don't_wait_for);
+      Cohttp_async.Server.close server |> don't_wait_for);
     Core.eprintf "Open %s to view the %s in Perfetto!\n%!" (url t) filename;
     stop |> Deferred.ok
   ;;
@@ -137,8 +137,8 @@ let param =
     | false -> `Fuchsia store_path
   in
   (match serve, output with
-  | Enabled _, `Sexp _ -> raise_s [%message "cannot serve .sexp output"]
-  | _ -> ());
+   | Enabled _, `Sexp _ -> raise_s [%message "cannot serve .sexp output"]
+   | _ -> ());
   { serve; output }
 ;;
 

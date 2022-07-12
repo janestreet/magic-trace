@@ -1,10 +1,10 @@
 open! Core
 
 let intable_of_hex_string
-    (type a)
-    (module M : Int_intf.S with type t = a)
-    ?(remove_hex_prefix = false)
-    str
+  (type a)
+  (module M : Int_intf.S with type t = a)
+  ?(remove_hex_prefix = false)
+  str
   =
   (* Bit hacks for fast parsing of hex strings.
    *

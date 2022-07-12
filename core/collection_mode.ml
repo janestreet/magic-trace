@@ -62,11 +62,11 @@ let select_collection_mode ~extra_events ~use_sampling =
   | true -> Stacktrace_sampling { extra_events }
   | false ->
     (match Core_unix.access "/sys/bus/event_source/devices/intel_pt" [ `Exists ] with
-    | Ok () -> Intel_processor_trace { extra_events }
-    | Error _ ->
-      Core.eprintf
-        "Intel PT support not found. magic-trace will continue and use sampling instead.\n";
-      Stacktrace_sampling { extra_events })
+     | Ok () -> Intel_processor_trace { extra_events }
+     | Error _ ->
+       Core.eprintf
+         "Intel PT support not found. magic-trace will continue and use sampling instead.\n";
+       Stacktrace_sampling { extra_events })
 ;;
 
 let param =

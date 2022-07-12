@@ -23,8 +23,8 @@ let read_proc_info pid =
 let read_all_proc_info () =
   Sys_unix.readdir "/proc"
   |> Array.iter ~f:(fun filename ->
-         try Pid.of_string filename |> read_proc_info with
-         | _ -> ())
+       try Pid.of_string filename |> read_proc_info with
+       | _ -> ())
 ;;
 
 let cmdline_of_pid pid = Hashtbl.find state pid
