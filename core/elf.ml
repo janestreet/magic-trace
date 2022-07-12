@@ -242,10 +242,16 @@ let find_selection t name : Selection.t option =
   | None -> List.find_map prefix_and_functions ~f:(fun ((_prefix : string), f) -> f name)
 ;;
 
-let all_symbols t =
+let all_symbols ?(select = `File_or_func) t =
   let res = String.Table.create () in
   Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      if is_func symbol
+      let should_add =
+        match select, Owee_elf.Symbol_table.Symbol.type_attribute symbol with
+        | `File_or_func, File | `File_or_func, Func -> true
+        | `File, File | `Func, Func -> true
+        | _, _ -> false
+      in
+      if should_add
       then (
         match Owee_elf.Symbol_table.Symbol.name symbol t.string with
         | None -> ()
@@ -255,6 +261,39 @@ let all_symbols t =
           (match Hashtbl.add res ~key:name ~data:symbol with
           | `Ok | `Duplicate -> ())));
   String.Table.to_alist res
+;;
+
+let all_file_selections t symbol =
+  let locations = ref [] in
+  let desired_filename = Owee_elf.Symbol_table.Symbol.name symbol t.string in
+  traverse_debug_line
+    ~f:(fun header state ->
+      let filename = Owee_debug_line.get_filename header state in
+      match filename, desired_filename with
+      | Some filename, Some desired_filename ->
+        if String.(filename = desired_filename)
+        then (
+          let name = [%string "%{filename}:%{state.line#Int}:%{state.col#Int}"] in
+          let closest_symbol =
+            Owee_elf.Symbol_table.symbols_enclosing_address
+              t.symbol
+              ~address:(Int64.of_int state.address)
+            |> List.hd
+          in
+          let closest_symbol_name =
+            Option.bind closest_symbol ~f:(fun closest_symbol ->
+                Owee_elf.Symbol_table.Symbol.name closest_symbol t.string)
+          in
+          let show_name =
+            match closest_symbol_name with
+            | None -> name
+            | Some closest_symbol_name -> [%string "%{name} %{closest_symbol_name}"]
+          in
+          let selection = Selection.Address { address = state.address; name } in
+          locations := (show_name, selection) :: !locations)
+      | None, _ | _, None -> ())
+    t;
+  !locations
 ;;
 
 let selection_stop_info t pid selection =

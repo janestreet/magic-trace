@@ -20,7 +20,16 @@ val ocaml_exception_info : t -> Ocaml_exception_info.t option
     suitable for asking the user to disambiguate. *)
 val matching_functions : t -> Re.re -> Owee_elf.Symbol_table.Symbol.t String.Map.t
 
-val all_symbols : t -> (string * Owee_elf.Symbol_table.Symbol.t) list
+val all_symbols
+  :  ?select:[ `File | `Func | `File_or_func ] (** Default [`File_or_func]. *)
+  -> t
+  -> (string * Owee_elf.Symbol_table.Symbol.t) list
+
+val all_file_selections
+  :  t
+  -> Owee_elf.Symbol_table.Symbol.t
+  -> (string * Selection.t) list
+
 val find_symbol : t -> string -> Owee_elf.Symbol_table.Symbol.t option
 val find_selection : t -> string -> Selection.t option
 
