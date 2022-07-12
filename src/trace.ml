@@ -45,44 +45,24 @@ let create_elf ~executable ~(when_to_snapshot : When_to_snapshot.t) =
   | Magic_trace_or_the_application_terminates, _ | _, Some _ -> return (Ok elf)
 ;;
 
-let evaluate_symbol_selection ~symbol_selection ~elf ~header =
-  let open Deferred.Or_error.Let_syntax in
-  let%bind elf =
-    match elf with
-    | None -> Deferred.Or_error.error_string "No ELF found"
-    | Some elf -> return elf
-  in
-  match symbol_selection with
-  | Symbol_selection.Use_fzf_to_select_one ->
-    let all_symbol_names = Elf.all_symbols elf |> List.map ~f:Tuple2.get1 in
-    if force supports_fzf
-    then (
-      match%bind Fzf.pick_one ~header (Inputs all_symbol_names) with
-      | None -> Deferred.Or_error.error_string "No symbol selected"
-      | Some symbol -> return symbol)
-    else
-      Deferred.Or_error.error_string
-        "magic-trace could show you a fuzzy-finding selector here if \"fzf\" were in \
-         your PATH, but it is not."
-  | User_selected user_selection -> return user_selection
-;;
-
 let evaluate_trace_filter ~(trace_filter : Trace_filter.Unevaluated.t option) ~elf =
   let open Deferred.Or_error.Let_syntax in
   match trace_filter with
   | None -> return None
   | Some { start_symbol; stop_symbol } ->
     let%bind start_symbol =
-      evaluate_symbol_selection
-        ~symbol_selection:start_symbol
+      Symbol_selection.evaluate
+        ~supports_fzf
         ~elf
         ~header:"Range filter start symbol"
+        start_symbol
     in
     let%map stop_symbol =
-      evaluate_symbol_selection
-        ~symbol_selection:stop_symbol
+      Symbol_selection.evaluate
+        ~supports_fzf
         ~elf
         ~header:"Range filter stop symbol"
+        stop_symbol
     in
     Some { Trace_filter.start_symbol; stop_symbol }
 ;;
@@ -320,10 +300,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
         | None -> Deferred.Or_error.error_string "No ELF found"
         | Some elf ->
           let%bind symbol_name =
-            evaluate_symbol_selection
-              ~symbol_selection
+            Symbol_selection.evaluate
+              ~supports_fzf
               ~elf:(Some elf)
               ~header:"Snapshot symbol"
+              symbol_selection
           in
           let%bind snap_sym =
             Deferred.return

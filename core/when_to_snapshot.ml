@@ -14,9 +14,10 @@ let param =
        from:\n\
        (1) If you do not provide [-trigger], magic-trace takes a snapshot when you \
        Ctrl+C it.\n\
-       (2) If you provide [-trigger ?], magic-trace will open up a fuzzy-find dialog to \
-       help you choose a symbol to trace. Fails if you don't have the \"fzf\" binary in \
-       your PATH.\n\
+       (2) If you provide [-trigger ?], [-trigger symbol:?], or [-trigger line:?], \
+       magic-trace will open up a fuzzy-find dialog to help you choose a symbol to \
+       trace. Fails if you don't have the \"fzf\" binary in your PATH. The prefixes \
+       [symbol:] and [line:] restrict to showing only functions or files respectively.\n\
        (3) If you provide [-trigger <SELECTION>], magic-trace will snapshot when the \
        application being traced calls the given function. This takes the fully-mangled \
        name, so if you're using anything except C, fuzzy-find mode will probably be \
