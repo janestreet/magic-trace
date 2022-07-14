@@ -618,8 +618,8 @@ module Expert = struct
   module Write_arg_unchecked = Write_arg_unchecked
 end
 
-let create_for_file ?num_temp_strs ~filename () =
-  let destination = Destinations.file_destination ~filename () in
+let create_for_file ?num_temp_strs ~filename ~original_filename () =
+  let destination = Destinations.file_destination ~filename ~original_filename () in
   Expert.create ?num_temp_strs ~destination ()
 ;;
 
