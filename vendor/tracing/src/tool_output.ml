@@ -28,7 +28,13 @@ let param =
 
 let write_and_view ?num_temp_strs { store_path } ~default_name:_ ~f =
   let open Deferred.Or_error.Let_syntax in
-  let w = Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:store_path () in
+  let w =
+    Tracing_zero.Writer.create_for_file
+      ?num_temp_strs
+      ~filename:store_path
+      ~original_filename:store_path
+      ()
+  in
   let%map res = f w in
   Core.eprintf "Visit https://ui.perfetto.dev/ and open %s to view trace.\n%!" store_path;
   res
