@@ -85,7 +85,7 @@ module Serve = struct
     let handler ~body addr request =
       let path = request_path request in
       (* Uncomment this to debug routing *)
-      (* Core.printf "%s\n%!" path; *)
+      Core.printf "%s\n%!" path;
       match path with
       | "" | "/" | "/index.html" -> respond_index t ~filename
       (* Serve the trace under any name under /trace/ so only the HTML has to change *)
@@ -116,6 +116,7 @@ type t =
   { serve : Serve.t
   ; output : [ `Fuchsia of string | `Sexp of string ]
   }
+[@@deriving fields]
 
 let store_path = function
   | `Fuchsia store_path | `Sexp store_path -> store_path

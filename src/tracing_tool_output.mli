@@ -3,6 +3,8 @@ open! Async
 
 type t
 
+val output : t -> [ `Fuchsia of string | `Sexp of string ]
+
 (** Offers configuration parameters for where to save a file and whether to serve it *)
 val param : t Command.Param.t
 
