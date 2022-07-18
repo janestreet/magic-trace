@@ -584,7 +584,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     flag
       "use-processor-exe"
       (optional string)
-      ~doc:"path for processor exe to use to process trace file"
+      ~doc:"path for standalone processor exe to use to process trace file"
   ;;
 
   let run_command =
