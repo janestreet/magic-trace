@@ -20,6 +20,7 @@ depends: [
   "crunch"
   "ppx_jane"
   "shell"
+  "zstandard"
   "dune"         {>= "2.0.0"}
   "owee"         {>= "0.6"}
   "re"           {>= "1.8.0"}
