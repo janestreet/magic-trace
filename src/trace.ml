@@ -561,6 +561,32 @@ module Make_commands (Backend : Backend_intf.S) = struct
     { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
+  let open_url_flags =
+    let open Command.Param in
+    flag
+      "open-url"
+      (optional string)
+      ~doc:
+        "opens a url to display trace. options are local, magic, or android to open \
+         http://localhost:10000, https://magic-trace.org, or https://ui.perfetto.dev \
+         respectively"
+    |> map ~f:(fun user_input ->
+           Option.map user_input ~f:(fun user_choice ->
+               match user_choice with
+               | "local" -> "http://localhost:10000"
+               | "magic" -> "https://magic-trace.org"
+               | "android" -> "https://ui.perfetto.dev"
+               | _ -> raise_s [%message "unkown user input" (user_choice : string)]))
+  ;;
+
+  let use_processor_flag =
+    let open Command.Param in
+    flag
+      "use-processor-exe"
+      (optional string)
+      ~doc:"path for processor exe to use to process trace file"
+  ;;
+
   let run_command =
     Command.async_or_error
       ~summary:"Runs a command and traces it."
@@ -573,16 +599,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace run -multi-thread ./program -- arg1 arg2\n\n\
          # Run a process, tracing its entire execution (only practical for short-lived \
          processes)\n\
-         magic-trace run -full-execution ./program\n")
+         magic-trace run -full-execution ./program\n\
+         # Run a process that generates a large trace file, and view it on \
+         magic-trace.org magic-trace run ./program -open-url magic -use-processor-exe \
+         ~/local-trace-processor\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
        and prog = anon ("COMMAND" %: string)
-       and _local_view =
-         flag
-           "local-view"
-           no_arg
-           ~doc:"uses local trace processor binary, for use in large trace files"
+       and trace_processor_exe = use_processor_flag
+       and url = open_url_flags
        and argv =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
        in
@@ -594,31 +620,53 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | Some path -> path
            | None -> failwithf "Can't find executable for %s" prog ()
          in
-         record_opt_fn ~executable ~f:(fun opts ->
-             let elf = Elf.create opts.executable in
-             let%bind range_symbols =
-               evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
-             in
-             let%bind pid =
-               let argv = prog :: List.concat (Option.to_list argv) in
-               run_and_record
-                 opts
+         let%bind () =
+           record_opt_fn ~executable ~f:(fun opts ->
+               let elf = Elf.create opts.executable in
+               let%bind range_symbols =
+                 evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
+               in
+               let%bind pid =
+                 let argv = prog :: List.concat (Option.to_list argv) in
+                 run_and_record
+                   opts
+                   ~elf
+                   ~debug_print_perf_commands
+                   ~prog
+                   ~argv
+                   ~collection_mode:opts.collection_mode
+               in
+               let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
+               decode_to_trace
+                 ~perf_maps
+                 ?range_symbols
                  ~elf
+                 ~trace_scope:opts.trace_scope
                  ~debug_print_perf_commands
-                 ~prog
-                 ~argv
+                 ~record_dir:opts.record_dir
                  ~collection_mode:opts.collection_mode
-             in
-             let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
-             decode_to_trace
-               ~perf_maps
-               ?range_symbols
-               ~elf
-               ~trace_scope:opts.trace_scope
-               ~debug_print_perf_commands
-               ~record_dir:opts.record_dir
-               ~collection_mode:opts.collection_mode
-               decode_opts))
+                 decode_opts)
+         in
+         let%bind.Deferred () =
+           match url with
+           | None -> Deferred.return ()
+           | Some url -> Async_shell.run "open" [ url ]
+         in
+         let output_config = decode_opts.Decode_opts.output_config in
+         let output = Tracing_tool_output.output output_config in
+         let output_file =
+           match output with
+           | `Sexp _ -> failwith "unimplemented"
+           | `Fuchsia store_path -> store_path
+         in
+         let%bind.Deferred () =
+           match trace_processor_exe with
+           | None ->
+             print_endline "warning: must use local processor on large trace files";
+             Deferred.return ()
+           | Some processor_path -> Async_shell.run processor_path [ "-D"; output_file ]
+         in
+         return ())
   ;;
 
   let select_pid () =
@@ -769,83 +817,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            decode_opts)
   ;;
 
-  let auto_command =
-    (* mostly copied from run_command *)
-    Command.async_or_error
-      ~summary:"Does work of run command and then calls trace_processor"
-      ~readme:(fun () ->
-        "=== examples ===\n\n\
-         # Run a process, snapshotting at ^C or exit\n\
-         magic-trace run ./program -- arg1 arg2\n\n\
-         # Run and trace all threads of a process, not just the main one, snapshotting \
-         at ^C or exit\n\
-         magic-trace run -multi-thread ./program -- arg1 arg2\n\n\
-         # Run a process, tracing its entire execution (only practical for short-lived \
-         processes)\n\
-         magic-trace run -full-execution ./program\n")
-      (let%map_open.Command record_opt_fn = record_flags
-       and decode_opts = decode_flags
-       and debug_print_perf_commands = debug_print_perf_commands
-       and prog = anon ("COMMAND" %: string)
-       and _local_view =
-         flag
-           "local-view"
-           no_arg
-           ~doc:"uses local trace processor binary, for use in large trace files"
-       and argv =
-         flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
-       in
-       fun () ->
-         let open Deferred.Or_error.Let_syntax in
-         let%bind () = check_for_perf () in
-         let executable =
-           match Shell.which prog with
-           | Some path -> path
-           | None -> failwithf "Can't find executable for %s" prog ()
-         in
-         let%bind () =
-           record_opt_fn ~executable ~f:(fun opts ->
-               let elf = Elf.create opts.executable in
-               let%bind range_symbols =
-                 evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
-               in
-               let%bind pid =
-                 let argv = prog :: List.concat (Option.to_list argv) in
-                 run_and_record
-                   opts
-                   ~elf
-                   ~debug_print_perf_commands
-                   ~prog
-                   ~argv
-                   ~collection_mode:opts.collection_mode
-               in
-               let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids [ pid ] in
-               decode_to_trace
-                 ~perf_maps
-                 ?range_symbols
-                 ~elf
-                 ~trace_scope:opts.trace_scope
-                 ~debug_print_perf_commands
-                 ~record_dir:opts.record_dir
-                 ~collection_mode:opts.collection_mode
-                 decode_opts)
-         in
-         (* let%bind.Deferred () =
-           Async_shell.run "scp" [ "MAGICTRACE:/home/abena/magic-trace/trace.fxt"; "." ]
-         in *)
-         (* let%bind.Deferred () = Async_shell.run "open" [ "http://localhost:9001" ] in
-         let%bind.Deferred () =
-           Async_shell.run "~/trace_processor" [ "-D"; "trace.fxt" ]
-         in *)
-         return ())
-  ;;
-
   let commands =
-    [ "run", run_command
-    ; "attach", attach_command
-    ; "decode", decode_command
-    ; "auto", auto_command
-    ]
+    [ "run", run_command; "attach", attach_command; "decode", decode_command ]
   ;;
 end
 

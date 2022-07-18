@@ -116,6 +116,7 @@ type t =
   { serve : Serve.t
   ; output : [ `Fuchsia of string | `Sexp of string ]
   }
+[@@deriving fields]
 
 let store_path = function
   | `Fuchsia store_path | `Sexp store_path -> store_path
