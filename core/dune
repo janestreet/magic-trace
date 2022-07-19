@@ -2,7 +2,7 @@
  (name magic_trace_core)
  (public_name magic-trace.magic_trace_core)
  (libraries core async core_unix.filename_unix expect_test_helpers_core fzf
-   magic_trace owee re)
+   magic_trace owee re angstrom)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))
