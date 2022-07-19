@@ -55,9 +55,15 @@ let evaluate_symbol_selection ~symbol_selection ~elf ~header =
   match symbol_selection with
   | Symbol_selection.Use_fzf_to_select_one ->
     let all_symbol_names = Elf.all_symbols elf |> List.map ~f:Tuple2.get1 in
+    let demangled_symbols =
+      List.map all_symbol_names ~f:(fun mangled_symbol ->
+          match Demangle_ocaml_symbols.demangle mangled_symbol with
+          | None -> mangled_symbol
+          | Some demangled_symbol -> demangled_symbol)
+    in
     if force supports_fzf
     then (
-      match%bind Fzf.pick_one ~header (Inputs all_symbol_names) with
+      match%bind Fzf.pick_one ~header (Inputs demangled_symbols) with
       | None -> Deferred.Or_error.error_string "No symbol selected"
       | Some symbol -> return symbol)
     else
