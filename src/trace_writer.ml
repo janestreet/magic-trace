@@ -39,7 +39,7 @@ module Pending_event = struct
       | Call of
           { addr : int64
           ; offset : int
-          ; from_untraced : bool
+          ; source : [ `Untraced | `From of Event.Location.t ]
           }
       | Ret
       | Ret_from_untraced of { reset_time : Mapped_time.t }
@@ -52,11 +52,9 @@ module Pending_event = struct
     }
   [@@deriving sexp_of]
 
-  let create_call location ~from_untraced =
+  let create_call location ~source =
     let { Event.Location.instruction_pointer; symbol; symbol_offset } = location in
-    { symbol
-    ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
-    }
+    { symbol; kind = Call { addr = instruction_pointer; offset = symbol_offset; source } }
   ;;
 end
 
@@ -339,7 +337,7 @@ let write_pending_event'
   =
   let display_name = Symbol.display_name symbol in
   match kind with
-  | Call { addr; offset; from_untraced } ->
+  | Call { addr; offset; source } ->
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
@@ -359,14 +357,24 @@ let write_pending_event'
          that's alright, because we wouldn't have a symbol for it in the executable's
          [debug_info] anyway). *)
       let address = [ "address", Pointer addr ] in
+      let source_arg =
+        match source with
+        | `From { symbol; instruction_pointer; symbol_offset } ->
+          [ "source_symbol", String (Symbol.display_name symbol)
+          ; "source_symbol_offset", Pointer (Int.to_int64 symbol_offset)
+          ; "source_address", Pointer instruction_pointer
+          ]
+        | `Untraced -> []
+      in
       match symbol with
       | From_perf_map { start_addr = _; size = _; function_ = _ } ->
-        address @ [ "symbol", Interned display_name ]
+        address @ source_arg @ [ "symbol", Interned display_name ]
       | _ ->
         (match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
-        | None -> address @ [ "symbol", Interned display_name ]
+        | None -> address @ source_arg @ [ "symbol", Interned display_name ]
         | Some (info : Elf.Location.t) ->
           address
+          @ source_arg
           @ [ "line", Int info.line
             ; "col", Int info.col
             ; "symbol", Interned display_name
@@ -377,13 +385,15 @@ let write_pending_event'
           | None -> []))
     in
     let inferred_start_time_arg =
-      if from_untraced then [ "inferred_start_time", Interned "true" ] else []
+      match source with
+      | `Untraced -> [ "inferred_start_time", Interned "true" ]
+      | `From _ -> []
     in
     let args = symbol_args @ inferred_start_time_arg in
     let name =
-      if t.annotate_inferred_start_times && from_untraced
-      then display_name ^ " [inferred start time]"
-      else display_name
+      match source, t.annotate_inferred_start_times with
+      | `Untraced, true -> display_name ^ " [inferred start time]"
+      | `From _, _ | `Untraced, false -> display_name
     in
     write_duration_begin t ~thread:thread.thread ~name ~time ~args
   | Ret -> write_duration_end t ~name:display_name ~time ~thread:thread.thread ~args:[]
@@ -414,7 +424,7 @@ let write_pending_event
     (ev : Pending_event.t)
   =
   match ev.kind with
-  | Ret_from_untraced _ | Call { from_untraced = true; _ } ->
+  | Ret_from_untraced _ | Call { source = `Untraced; _ } ->
     Deque.enqueue_front thread.start_events (time, ev)
   | Call _ when Mapped_time.is_base_time time ->
     Deque.enqueue_back thread.start_events (time, ev)
@@ -539,8 +549,13 @@ let create_thread t event =
   }
 ;;
 
-let call t thread_info ~time ~location =
-  let ev = Pending_event.create_call location ~from_untraced:false in
+let call t (thread_info : 'inner Thread_info.t) ~time ~location =
+  let source =
+    match Callstack.top thread_info.callstack with
+    | Some source -> `From source
+    | None -> `Untraced
+  in
+  let ev = Pending_event.create_call location ~source in
   add_event t thread_info time ev;
   Callstack.push thread_info.callstack location
 ;;
@@ -687,7 +702,7 @@ let check_current_symbol
 
        These shouldn't be buffered for spreading since we want them exactly at the reset
        time. *)
-    let ev = Pending_event.create_call location ~from_untraced:true in
+    let ev = Pending_event.create_call location ~source:`Untraced in
     write_pending_event t thread_info thread_info.callstack.create_time ev;
     Callstack.push thread_info.callstack location
 ;;
@@ -844,7 +859,7 @@ let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
         t
         thread_info
         time
-        (Pending_event.create_call location ~from_untraced:true)
+        (Pending_event.create_call location ~source:`Untraced)
       (* Not necessarily true, but setting [~from_untraced:true] causes the timestamp to be annotated as inferred *));
   callstack.create_time
     <- Mapped_time.add
