@@ -21,7 +21,7 @@ jobs:
       - uses: actions/cache@v2
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-musl-v4
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-musl-v5
 
       - name: Install musl-compatible kernel headers
         run: |
@@ -33,7 +33,7 @@ jobs:
       - name: Install upx
         run: |
           # The version that comes with focal is broken for musl binaries, pulling 3.96 from hirsute.
-          wget http://azure.archive.ubuntu.com/ubuntu/pool/universe/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
+          wget http://ftp.de.debian.org/debian/pool/main/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
           sudo dpkg -i upx-ucl_3.96-2_amd64.deb
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
