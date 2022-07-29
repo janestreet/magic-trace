@@ -1,9 +1,8 @@
 open! Core
 
-
-let direct_file_destination ?(buffer_size = 4096 * 16) ~filename () =
+let direct_file_destination ?(buffer_size = 64 * 1024) ~filename () =
   let buf = Iobuf.create ~len:buffer_size in
-  let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_RDWR ] filename in
+  let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_CLOEXEC; O_RDWR ] filename in
   let written = ref 0 in
   let flush () =
     Iobuf.rewind buf;
@@ -32,7 +31,72 @@ let direct_file_destination ?(buffer_size = 4096 * 16) ~filename () =
   (module Dest : Writer_intf.Destination)
 ;;
 
-let file_destination ~filename () = direct_file_destination ~filename ()
+let compressed_file_destination ?(buffer_size = 64 * 1024) ~filename () =
+  let buf = Iobuf.create ~len:buffer_size in
+  let compressed_size = buffer_size * 2 in
+  (* N.B. The size is 2x the buffer because, due to e.g. headers,
+     Zstandard will sometimes write slightly more data than the
+     original buffer had. *)
+  let compression_level = 5 in
+  let compressed_buf = Iobuf.create ~len:compressed_size in
+  let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_CLOEXEC; O_RDWR ] filename in
+  let written = ref 0 in
+  let compression_context = Zstandard.Compression_context.create () in
+  let flush () =
+    Iobuf.rewind buf;
+    Iobuf.advance buf !written;
+    Iobuf.flip_lo buf;
+    let input =
+      Zstandard.Input.from_bigstring
+        ~pos:(Iobuf.Expert.lo buf)
+        ~len:(Iobuf.length buf)
+        (Iobuf.Expert.buf buf)
+    in
+    let output =
+      Zstandard.Output.in_buffer
+        ~pos:(Iobuf.Expert.lo compressed_buf)
+        ~len:compressed_size
+        (Iobuf.Expert.buf compressed_buf)
+    in
+    let compressed_length =
+      Zstandard.With_explicit_context.compress
+        compression_context
+        ~compression_level
+        ~input
+        ~output
+    in
+    Iobuf.advance compressed_buf compressed_length;
+    Iobuf.flip_lo compressed_buf;
+    Iobuf_unix.write compressed_buf file;
+    written := 0;
+    Iobuf.reset buf;
+    Iobuf.reset compressed_buf
+  in
+  let module Dest = struct
+    let next_buf ~ensure_capacity =
+      flush ();
+      if ensure_capacity > Iobuf.length buf
+      then failwith "Not enough buffer space in [compressed_file_destination]";
+      buf
+    ;;
+
+    let wrote_bytes count = written := !written + count
+
+    let close () =
+      flush ();
+      Zstandard.Compression_context.free compression_context;
+      Core_unix.close file
+    ;;
+  end
+  in
+  (module Dest : Writer_intf.Destination)
+;;
+
+let file_destination ~filename ~original_filename () =
+  if Filename.check_suffix original_filename ".zst"
+  then compressed_file_destination ~filename ()
+  else direct_file_destination ~filename ()
+;;
 
 let iobuf_destination buf =
   (* We give out an [Iobuf] with a shared underlying [Bigstring] but different pointers

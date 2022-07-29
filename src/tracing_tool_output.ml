@@ -167,7 +167,11 @@ let write_and_maybe_serve ?num_temp_strs t ~filename ~f_sexp ~f_fuchsia =
      serving the new trace, which is unlikely to be what the user expected. *)
     let indirect_store_path = [%string "/proc/self/fd/%{fd#Core_unix.File_descr}"] in
     let w =
-      Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:indirect_store_path ()
+      Tracing_zero.Writer.create_for_file
+        ?num_temp_strs
+        ~filename:indirect_store_path
+        ~original_filename:store_path
+        ()
     in
     let%bind res = f_fuchsia w in
     let%map () =
