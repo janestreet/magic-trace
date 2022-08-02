@@ -85,7 +85,7 @@ module Serve = struct
     let handler ~body addr request =
       let path = request_path request in
       (* Uncomment this to debug routing *)
-      Core.printf "%s\n%!" path;
+      (* Core.printf "%s\n%!" path; *)
       match path with
       | "" | "/" | "/index.html" -> respond_index t ~filename
       (* Serve the trace under any name under /trace/ so only the HTML has to change *)

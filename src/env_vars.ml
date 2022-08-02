@@ -1,7 +1,7 @@
 open! Core
 open Async
 
-(* Points to a filesystem path will a copy of Perfetto. If provided, magic-trace will
+(* Points to a filesystem path with a copy of Perfetto. If provided, magic-trace will
    automatically start a local HTTP server for you to view the trace. You can use this
    "hidden" feature to serve a local copy of Perfetto if you don't want to copy trace
    files around. *)
@@ -22,3 +22,8 @@ let debug = Option.is_some (Unix.getenv "MAGIC_TRACE_DEBUG")
    [--dlfilter], this environment variable allows the user to forcibly disable
    filtering. *)
 let no_dlfilter = Option.is_some (Unix.getenv "MAGIC_TRACE_NO_DLFILTER")
+
+(* Points to a filesystem path with a trace processor executable. 
+   If provided, the flag can be indicated to automatically run the processor 
+   at the path once the trace file is created *)
+let processor_path = Unix.getenv "MAGIC_TRACE_PROCESSOR_SHELL_PATH"

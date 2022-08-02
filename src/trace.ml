@@ -8,8 +8,9 @@ let supports_command command =
   Lazy.from_fun (fun () ->
       match Core_unix.fork () with
       | `In_the_child ->
-        Core_unix.close Core_unix.stdout;
-        Core_unix.close Core_unix.stderr;
+        let devnull = Core_unix.openfile ~mode:[ O_WRONLY ] "/dev/null" in
+        Core_unix.dup2 ~src:devnull ~dst:Core_unix.stdout ();
+        Core_unix.dup2 ~src:devnull ~dst:Core_unix.stderr ();
         Core_unix.exec ~prog:command ~argv:[ command; "--version" ] ~use_path:true ()
         |> never_returns
       | `In_the_parent pid ->
@@ -561,30 +562,39 @@ module Make_commands (Backend : Backend_intf.S) = struct
     { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
-  let open_url_flags =
-    let open Command.Param in
-    flag
-      "open-url"
-      (optional string)
-      ~doc:
-        "opens a url to display trace. options are local, magic, or android to open \
-         http://localhost:10000, https://magic-trace.org, or https://ui.perfetto.dev \
-         respectively"
-    |> map ~f:(fun user_input ->
-           Option.map user_input ~f:(fun user_choice ->
-               match user_choice with
-               | "local" -> "http://localhost:10000"
-               | "magic" -> "https://magic-trace.org"
-               | "android" -> "https://ui.perfetto.dev"
-               | _ -> raise_s [%message "unkown user input" (user_choice : string)]))
-  ;;
+  module Enable = struct
+    type enabled = { value : string }
 
-  let use_processor_flag =
-    let open Command.Param in
-    flag
-      "use-processor-exe"
-      (optional string)
-      ~doc:"path for standalone processor exe to use to process trace file"
+    type t =
+      | Disabled
+      | Enabled of enabled
+
+    let processor_param =
+      match Env_vars.processor_path with
+      | None -> Command.Param.return Disabled
+      | Some processor_shell_path ->
+        let%map_open.Command processor =
+          flag
+            "use-trace-processor-shell"
+            no_arg
+            ~doc:[%string "use the trace processor set in environment variables"]
+        in
+        if processor then Enabled { value = processor_shell_path } else Disabled
+    ;;
+  end
+
+  (* Same as [Caml.exit] but does not run at_exit handlers *)
+  external sys_exit : int -> 'a = "caml_sys_exit"
+
+  let call_trace_processor ?env ~prog ~argv () =
+    let pr_set_pdeathsig = Or_error.ok_exn Linux_ext.pr_set_pdeathsig in
+    match Core_unix.fork () with
+    | `In_the_child ->
+      pr_set_pdeathsig Signal.kill;
+      never_returns
+        (try Core_unix.exec ?env ~prog ~argv () with
+        | _ -> sys_exit 127)
+    | `In_the_parent _ -> ()
   ;;
 
   let run_command =
@@ -600,15 +610,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
          # Run a process, tracing its entire execution (only practical for short-lived \
          processes)\n\
          magic-trace run -full-execution ./program\n\
-         # Run a process that generates a large trace file, and view it on \
-         magic-trace.org magic-trace run ./program -open-url magic -use-processor-exe \
-         ~/local-trace-processor\n")
+         # Run a process that generates a large trace file, magic-trace run ./program \
+         -use-trace-processor-shell\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
        and prog = anon ("COMMAND" %: string)
-       and trace_processor_exe = use_processor_flag
-       and url = open_url_flags
+       and trace_processor_exe = Enable.processor_param
        and argv =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
        in
@@ -647,24 +655,24 @@ module Make_commands (Backend : Backend_intf.S) = struct
                  ~collection_mode:opts.collection_mode
                  decode_opts)
          in
-         let%bind.Deferred () =
-           match url with
-           | None -> Deferred.return ()
-           | Some url -> Async_shell.run "open" [ url ]
-         in
          let output_config = decode_opts.Decode_opts.output_config in
          let output = Tracing_tool_output.output output_config in
          let output_file =
            match output with
            | `Sexp _ -> failwith "unimplemented"
-           | `Fuchsia store_path -> store_path
+           | `Fuchsia store_path -> store_path (* path for tracing output file *)
          in
          let%bind.Deferred () =
            match trace_processor_exe with
-           | None ->
-             print_endline "warning: must use local processor on large trace files";
+           | Disabled ->
+             print_endline "Warning: must use local processor on large trace files";
              Deferred.return ()
-           | Some processor_path -> Async_shell.run processor_path [ "-D"; output_file ]
+           | Enabled processor_path ->
+             Deferred.return
+               (call_trace_processor
+                  ~prog:processor_path.value
+                  ~argv:[ "-D"; output_file ]
+                  ())
          in
          return ())
   ;;
