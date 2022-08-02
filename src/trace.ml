@@ -8,6 +8,7 @@ let supports_command command =
   Lazy.from_fun (fun () ->
       match Core_unix.fork () with
       | `In_the_child ->
+        (* gracefully hide perf outputs *)
         let devnull = Core_unix.openfile ~mode:[ O_WRONLY ] "/dev/null" in
         Core_unix.dup2 ~src:devnull ~dst:Core_unix.stdout ();
         Core_unix.dup2 ~src:devnull ~dst:Core_unix.stderr ();
