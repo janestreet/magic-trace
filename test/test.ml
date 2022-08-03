@@ -146,10 +146,12 @@ let dump_using_file ?range_symbols events =
     write_trace_from_events
       ~debug_info:None
       ~trace_scope:Userspace
-      writer
+      ~events_writer:None
+      ~writer:(Some writer)
       ~hits:[]
       ~events:[ events ]
       ~close_result
+      ()
   in
   ok_exn or_error;
   let parser = Tracing.Parser.create (Iobuf.read_only buf) in

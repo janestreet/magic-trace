@@ -5,7 +5,7 @@ module Event = struct
     type t =
       | Branch_misses
       | Cache_misses
-    [@@deriving compare, hash, sexp]
+    [@@deriving compare, hash, sexp, bin_io]
 
     let to_string = function
       | Branch_misses -> "branch-misses"

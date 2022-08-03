@@ -75,15 +75,29 @@ let debug_print_perf_commands =
   |> debug_flag
 ;;
 
+module Null_writer : Trace_writer_intf.S_trace = struct
+  type thread = unit
+
+  let allocate_pid ~name:_ = 0
+  let allocate_thread ~pid:_ ~name:_ = ()
+  let write_duration_begin ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_end ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ : unit = ()
+  let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+end
+
 let write_trace_from_events
   ?ocaml_exception_info
+  ~events_writer
+  ~writer
   ~print_events
   ~trace_scope
   ~debug_info
-  writer
   ~hits
   ~events
   ~close_result
+  ()
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
   let%bind.Deferred earliest_time =
@@ -92,12 +106,6 @@ let write_trace_from_events
     match Pipe.peek events |> Option.map ~f:Event.With_write_info.event with
     | Some (Ok earliest) -> earliest.time
     | None | Some (Error _) -> Time_ns.Span.zero
-  in
-  let trace =
-    let base_time =
-      Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
-    in
-    Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
   let events =
     if print_events
@@ -108,16 +116,46 @@ let write_trace_from_events
           event))
     else events
   in
-  let writer =
-    Trace_writer.create
-      ~trace_scope
-      ~debug_info
-      ~ocaml_exception_info
-      ~earliest_time
-      ~hits
-      ~annotate_inferred_start_times:Env_vars.debug
-      trace
+  let trace =
+    let%map.Option writer = writer in
+    let base_time =
+      Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
+    in
+    Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
+  let writer =
+    match trace with
+    | Some trace ->
+      Trace_writer.create
+        ~trace_scope
+        ~debug_info
+        ~ocaml_exception_info
+        ~earliest_time
+        ~hits
+        ~annotate_inferred_start_times:Env_vars.debug
+        trace
+    | None ->
+      Trace_writer.create_expert
+        ~trace_scope
+        ~debug_info
+        ~ocaml_exception_info
+        ~earliest_time
+        ~hits
+        ~annotate_inferred_start_times:Env_vars.debug
+        (module Null_writer)
+  in
+  (match events_writer with
+   | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } ->
+     Writer.write_line w "(V5 ("
+   | Some Tracing_tool_output.{ format = Binio; writer = w; _ } ->
+     let shape =
+       Bin_prot.Shape.(
+         eval_to_digest Trace_writer.Event_and_callstack.bin_shape_t
+         |> Digest.to_md5
+         |> Md5.to_binary)
+     in
+     Async.Writer.write w shape
+   | _ -> ());
   (* [earliest_time] does represent the time of earliest event, but we want to
      ignore extra events we sampled. However setting [last_index = -1] ensures
      that we immediately flush up to the start of the snapshot. *)
@@ -134,28 +172,17 @@ let write_trace_from_events
          | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
         last_index := index
       | Ok { data = Event_sample _; _ } | Ok { data = Power _; _ } | Error _ -> ());
-    Trace_writer.write_event writer ev
+    Trace_writer.write_event writer ?events_writer ev
   in
   let%bind () =
     Deferred.List.iteri events ~f:(fun index events ->
       Pipe.iter_without_pushback events ~f:(process_event index))
   in
+  (match events_writer with
+   | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
+   | _ -> ());
   Trace_writer.end_of_trace writer;
-  Tracing.Trace.close trace;
-  close_result
-;;
-
-let write_event_sexps writer events close_result =
-  Writer.write_line writer "(V4 (";
-  let%bind () =
-    Deferred.List.iter events ~f:(fun events ->
-      Pipe.iter_without_pushback
-        events
-        ~f:(fun { Event.With_write_info.event; should_write } ->
-        if should_write
-        then Writer.write_sexp ~terminate_with:Newline writer (Event.sexp_of_t event)))
-  in
-  Writer.write_line writer "))";
+  Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;
 
@@ -219,52 +246,45 @@ module Make_commands (Backend : Backend_intf.S) = struct
     in
     Tracing_tool_output.write_and_maybe_view
       output_config
-      ~f_sexp:(fun writer ->
-        let open Deferred.Or_error.Let_syntax in
-        let%bind events, close_result =
-          get_events_and_close_result
-            ~decode_events:(decode_events ~filter_same_symbol_jumps:false)
-            ~range_symbols
-        in
-        let%bind () = write_event_sexps writer events close_result in
-        return ())
-      ~f_fuchsia:(fun writer ->
-        let open Deferred.Or_error.Let_syntax in
-        let hits =
-          In_channel.read_all (Hits_file.filename ~record_dir)
-          |> Sexp.of_string
-          |> [%of_sexp: Hits_file.t]
-        in
-        let debug_info =
-          match
-            Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
-          with
-          | None ->
-            eprintf
-              "Warning: Debug info is unavailable, so filenames and line numbers will \
-               not be available in the trace.\n\
-               See \
-               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
-               for more info.\n";
-            None
-          | Some _ as x -> x
-        in
-        let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
-        let%bind events, close_result =
-          get_events_and_close_result ~decode_events ~range_symbols
-        in
-        let%bind () =
-          write_trace_from_events
-            ?ocaml_exception_info
-            ~debug_info
-            ~trace_scope
-            ~print_events
-            writer
-            ~hits
-            ~events
-            ~close_result
-        in
-        return ())
+      ~f:(fun ~events_writer ~writer () ->
+      let open Deferred.Or_error.Let_syntax in
+      let hits =
+        In_channel.read_all (Hits_file.filename ~record_dir)
+        |> Sexp.of_string
+        |> [%of_sexp: Hits_file.t]
+      in
+      let debug_info =
+        match
+          Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
+        with
+        | None ->
+          eprintf
+            "Warning: Debug info is unavailable, so filenames and line numbers will not \
+             be available in the trace.\n\
+             See \
+             https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+             for more info.\n";
+          None
+        | Some _ as x -> x
+      in
+      let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
+      let%bind events, close_result =
+        get_events_and_close_result ~decode_events ~range_symbols
+      in
+      let%bind () =
+        write_trace_from_events
+          ?ocaml_exception_info
+          ~events_writer
+          ~writer
+          ~debug_info
+          ~trace_scope
+          ~print_events
+          ~hits
+          ~events
+          ~close_result
+          ()
+      in
+      return ())
   ;;
 
   module Record_opts = struct

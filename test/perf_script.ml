@@ -4,7 +4,7 @@ open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 
-let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
+let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file =
   (* CR-someday cgaebel: Get the git root by shelling out to `git rev-parse --show-toplevel`.
      This works, but is ridiculous. *)
   let git_root = "../../.." in
@@ -98,7 +98,7 @@ let run ?(debug = false) ?ocaml_exception_info ~trace_scope file =
             | [ line ] -> printf "%s\n" line
             | lines -> print_s [%message (lines : string list)]);
           let event = Event.With_write_info.create ~should_write:true event in
-          Trace_writer.write_event trace_writer event
+          Trace_writer.write_event ?events_writer trace_writer event
         | None -> ());
       printf "END\n";
       Trace_writer.end_of_trace trace_writer)

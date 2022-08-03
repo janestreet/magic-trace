@@ -113,33 +113,34 @@ module Serve = struct
   ;;
 end
 
-type t =
-  { serve : Serve.t
-  ; output : [ `Fuchsia of string | `Sexp of string ]
+type events_output_format =
+  | Sexp
+  | Binio
+
+type events_writer =
+  { format : events_output_format
+  ; writer : Writer.t
+  ; callstack_compression_state : Callstack_compression.t
   }
 
-let store_path = function
-  | `Fuchsia store_path | `Sexp store_path -> store_path
-;;
+type t =
+  { serve : Serve.t
+  ; output_path : string
+  }
 
 let param =
-  let%map_open.Command store_path =
+  let%map_open.Command output_path =
     let default = "trace.fxt" in
     flag
       "output"
       (optional_with_default default string)
       ~aliases:[ "o" ]
-      ~doc:[%string "FILE Where to output the trace. (default: '%{default}')"]
+      ~doc:
+        [%string
+          "FILE File to output the trace to. File format depends on suffix [*.sexp \
+           *.binio *.fxt] (default: '%{default}')"]
   and serve = Serve.param in
-  let output =
-    match String.is_suffix ~suffix:".sexp" store_path with
-    | true -> `Sexp store_path
-    | false -> `Fuchsia store_path
-  in
-  (match serve, output with
-   | Enabled _, `Sexp _ -> raise_s [%message "cannot serve .sexp output"]
-   | _ -> ());
-  { serve; output }
+  { serve; output_path }
 ;;
 
 let notify_trace ~store_path =
@@ -153,34 +154,59 @@ let maybe_stash_old_trace ~filename =
   | Core_unix.Unix_error (ENOENT, (_ : string), (_ : string)) -> ()
 ;;
 
-let write_and_maybe_serve ?num_temp_strs t ~filename ~f_sexp ~f_fuchsia =
+let write_and_maybe_serve
+  ?num_temp_strs
+  t
+  ~filename
+  ~(f :
+     events_writer:events_writer option
+     -> writer:Tracing_zero.Writer.t option
+     -> unit
+     -> 'a Deferred.Or_error.t)
+  =
   let open Deferred.Or_error.Let_syntax in
   maybe_stash_old_trace ~filename;
-  match t.output with
-  | `Sexp store_path -> Writer.with_file_atomic store_path ~f:f_sexp
-  | `Fuchsia store_path ->
-    let fd = Core_unix.openfile store_path ~mode:[ O_RDWR; O_CREAT; O_CLOEXEC ] in
-    (* Write to and serve from an indirect reference to [store_path], through our process'
-     fd table. This is a little grotesque, but avoids a race where the user runs
-     magic-trace twice with the same [-output], such that the filename changes under
-     [-serve] -- without this hack, the earlier magic-trace serving instance would start
-     serving the new trace, which is unlikely to be what the user expected. *)
+  let { serve; output_path } = t in
+  let matches_sexp = String.is_suffix ~suffix:".sexp" output_path in
+  let matches_binio = String.is_suffix ~suffix:".binio" output_path in
+  match matches_sexp || matches_binio with
+  | false ->
+    let fd = Core_unix.openfile output_path ~mode:[ O_RDWR; O_CREAT; O_CLOEXEC ] in
+    (* Write to and serve from an indirect reference to [fxt_path], through our process'
+    fd table. This is a little grotesque, but avoids a race where the user runs
+    magic-trace twice with the same [-output], such that the filename changes under
+    [-serve] -- without this hack, the earlier magic-trace serving instance would start
+    serving the new trace, which is unlikely to be what the user expected. *)
     let indirect_store_path = [%string "/proc/self/fd/%{fd#Core_unix.File_descr}"] in
-    let w =
+    let writer =
       Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:indirect_store_path ()
     in
-    let%bind res = f_fuchsia w in
+    let%bind.Deferred.Or_error res = f ~events_writer:None ~writer:(Some writer) () in
     let%map () =
-      match t.serve with
-      | Disabled -> notify_trace ~store_path
+      match serve with
+      | Disabled -> notify_trace ~store_path:output_path
       | Enabled serve ->
         Serve.serve_trace_file serve ~filename ~store_path:indirect_store_path
     in
     Core_unix.close fd;
     res
+  | true ->
+    let%map.Deferred.Or_error res =
+      let format =
+        match matches_sexp with
+        | true -> Sexp
+        | false -> Binio
+      in
+      Writer.with_file output_path ~f:(fun writer ->
+        let events_writer =
+          { format; writer; callstack_compression_state = Callstack_compression.init () }
+        in
+        f ~events_writer:(Some events_writer) ~writer:None ())
+    in
+    res
 ;;
 
-let write_and_maybe_view ?num_temp_strs t ~f_sexp ~f_fuchsia =
-  let filename = Filename.basename (store_path t.output) in
-  write_and_maybe_serve ?num_temp_strs t ~filename ~f_sexp ~f_fuchsia
+let write_and_maybe_view ?num_temp_strs t ~f =
+  let filename = Filename.basename t.output_path in
+  write_and_maybe_serve ?num_temp_strs t ~filename ~f
 ;;
