@@ -5,4 +5,4 @@ type t =
   ; size : int
   ; function_ : string
   }
-[@@deriving sexp, compare]
+[@@deriving sexp, compare, bin_io, hash]

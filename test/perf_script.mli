@@ -16,6 +16,7 @@ open! Magic_trace_core
    It's hard to keep people engaged when reading diffs of massive tests. *)
 val run
   :  ?debug:bool
+  -> ?events_writer:Magic_trace_lib.Tracing_tool_output.events_writer
   -> ?ocaml_exception_info:Ocaml_exception_info.t
   -> trace_scope:Trace_scope.t
   -> Filename.t

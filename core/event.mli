@@ -26,7 +26,7 @@ module Location : sig
     ; symbol : Symbol.t
     ; symbol_offset : int
     }
-  [@@deriving sexp, fields]
+  [@@deriving sexp, fields, bin_io]
 
   val unknown : t
   val untraced : t
@@ -73,7 +73,7 @@ module Decode_error : sig
   [@@deriving sexp]
 end
 
-type t = (Ok.t, Decode_error.t) Result.t [@@deriving sexp]
+type t = (Ok.t, Decode_error.t) Result.t [@@deriving sexp, bin_io]
 
 val thread : t -> Thread.t
 val time : t -> Time_ns_unix.Span.Option.t
