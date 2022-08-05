@@ -84,7 +84,7 @@ let supports_tracing_kernel () =
     (* get capability string *)
     let%bind perf_path = Process.create_exn ~prog:"which" ~args:[ "perf" ] () in
     let%bind path_string_slashn = Reader.contents (Process.stdout perf_path) in
-    let path_string = String.chop_suffix_exn path_string_slashn ~suffix:"\n" in 
+    let path_string = String.chop_suffix_exn path_string_slashn ~suffix:"\n" in
     let%bind linux_version = Process.create_exn ~prog:"uname" ~args:[ "-r" ] () in
     let%bind version_string_slashn = Reader.contents (Process.stdout linux_version) in
     let version_string = String.chop_suffix_exn version_string_slashn ~suffix:"\n" in

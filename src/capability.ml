@@ -11,16 +11,6 @@ module Capability = struct
   [@@deriving fields]
 
   let create = Fields.create
-
-  (* let to_string t =
-    "eff="
-    ^ Bool.to_string t.effective
-    ^ " per="
-    ^ Bool.to_string t.permitted
-    ^ " inh="
-    ^ Bool.to_string t.inherited
-  ;; *)
-
   let empty = create ~effective:false ~permitted:false ~inherited:false
 end
 
@@ -95,7 +85,6 @@ let process_capabilities input_text : t =
   let (all_caps : Capability.t), assignment_sets =
     split_init_rest_capabilities input_text
   in
-  (* print_endline (Capability.to_string all_caps); *)
   let caps_by_tag =
     List.concat_map assignment_sets ~f:(fun assign_set ->
       let cap_clauses = String.split assign_set ~on:',' |> List.rev in
@@ -105,7 +94,6 @@ let process_capabilities input_text : t =
       in
       let cap_strings = List.tl_exn cap_clauses in
       let final_capability : Capability.t = get_final_cap all_caps indication in
-      (* print_endline (Capability.to_string final_capability); *)
       List.map (indicator_cap_string :: cap_strings) ~f:(fun cap_string ->
         cap_string, final_capability))
     |> String.Map.of_alist_exn
@@ -113,7 +101,7 @@ let process_capabilities input_text : t =
   { all_caps; caps_by_tag }
 ;;
 
-let contains_cap t cap_string = 
+let contains_cap t cap_string =
   List.mem (Map.keys t.caps_by_tag) cap_string ~equal:String.equal
 ;;
 
@@ -125,37 +113,40 @@ let get_cap_sets t cap_string =
 
 let has_eff t cap_string = get_cap_sets t cap_string |> Capability.effective
 
-let linux_version_has_cap_perfmon linux_version = 
-  let split_version = String.split linux_version ~on:'.' in 
+let linux_version_has_cap_perfmon linux_version =
+  let split_version = String.split linux_version ~on:'.' in
   let head = Int.of_string (List.hd_exn split_version) in
-  Int.equal head 5 && Int.of_string (List.nth_exn split_version 1) >= 8 || head > 5
+  (Int.equal head 5 && Int.of_string (List.nth_exn split_version 1) >= 8) || head > 5
 ;;
 
-let does_not_remove_effective t cap_string = 
-  if contains_cap t cap_string 
-  then has_eff t cap_string 
-  else true
+let does_not_remove_effective t cap_string =
+  if contains_cap t cap_string then has_eff t cap_string else true
 ;;
 
-let check_perf_support getcap linux_version = 
+let check_perf_support getcap linux_version =
   let stripped_getcap = String.strip getcap in
-  if (String.equal stripped_getcap "") then false
-  else if not (String.contains (stripped_getcap) ' ')
+  if String.equal stripped_getcap ""
+  then false
+  else if not (String.contains stripped_getcap ' ')
   then
     failwith
       "Invalid capability string" (* must not have capability if contains no spaces *)
   else (
     let caps = process_capabilities getcap in
     if Capability.effective caps.all_caps (* if all_caps has eff *)
-    then (if linux_version_has_cap_perfmon linux_version 
-      then (if does_not_remove_effective caps "cap_perfmon" 
-        then true 
-        else (does_not_remove_effective caps "cap_sys_admin")) 
-      else does_not_remove_effective caps "cap_sys_admin") 
-    else (has_eff caps "cap_perfmon" || has_eff caps "cap_sys_admin"))
+    then
+      if linux_version_has_cap_perfmon linux_version
+      then
+        if does_not_remove_effective caps "cap_perfmon"
+        then true
+        else does_not_remove_effective caps "cap_sys_admin"
+      else does_not_remove_effective caps "cap_sys_admin"
+    else has_eff caps "cap_perfmon" || has_eff caps "cap_sys_admin")
 ;;
 
-let run_test test_string linux_version = printf "%s" (Bool.to_string (check_perf_support test_string linux_version))
+let run_test test_string linux_version =
+  printf "%s" (Bool.to_string (check_perf_support test_string linux_version))
+;;
 
 let%test_module "perf_support_tests_1" =
   (module struct
@@ -165,17 +156,23 @@ let%test_module "perf_support_tests_1" =
     ;;
 
     let%expect_test "has caps" =
-      run_test "/usr/bin/perf cap_sys_admin,cap_perfmon=ep" "5.10.118-111.515.amzn2.x86_64";
+      run_test
+        "/usr/bin/perf cap_sys_admin,cap_perfmon=ep"
+        "5.10.118-111.515.amzn2.x86_64";
       [%expect {|true|}]
     ;;
 
     let%expect_test "has cap with others, two sets" =
-      run_test "/usr/bin/perf all=ep cap_a,cap_b-p cap_perfmon,cap_d+i" "5.10.118-111.515.amzn2.x86_64";
+      run_test
+        "/usr/bin/perf all=ep cap_a,cap_b-p cap_perfmon,cap_d+i"
+        "5.10.118-111.515.amzn2.x86_64";
       [%expect {|true|}]
     ;;
 
     let%expect_test "all wrong caps" =
-      run_test "/usr/bin/perf all=ep cap_a,cap_b-p cap_c,cap_d+i cap_sys_admin-ep" "5.7.118-111.515.amzn2.x86_64";
+      run_test
+        "/usr/bin/perf all=ep cap_a,cap_b-p cap_c,cap_d+i cap_sys_admin-ep"
+        "5.7.118-111.515.amzn2.x86_64";
       [%expect {|false|}]
     ;;
 
@@ -205,18 +202,15 @@ let%test_module "perf_support_tests_1" =
     ;;
 
     let%expect_test "cap_sys_admin is subtracted but cap_perfmon remains" =
-      run_test "/usr/bin/perf =ep cap_sys_admin-ep cap_perfmon" "5.10.118-111.515.amzn2.x86_64";
-      [%expect {|true|}]
-    ;; 
-
-    let%expect_test "new version can have implicit cap_perfmon" =
-      run_test "/usr/bin/perf =ep cap_sys_admin-p" "5.10.118-111.515.amzn2.x86_64";
+      run_test
+        "/usr/bin/perf =ep cap_sys_admin-ep cap_perfmon"
+        "5.10.118-111.515.amzn2.x86_64";
       [%expect {|true|}]
     ;;
 
-    let%expect_test "old version does not have implicit cap_perfmon" =
-    run_test "/usr/bin/perf =ep cap_sys_admin-ep" "5.7.118-111.515.amzn2.x86_64";
-    [%expect {|false|}]
-  ;;
+    let%expect_test "new version can have implicit cap_perfmon" =
+      run_test "/usr/bin/perf =ep cap_sys_admin-ep" "5.10.118-111.515.amzn2.x86_64";
+      [%expect {|true|}]
+    ;;
   end)
 ;;
