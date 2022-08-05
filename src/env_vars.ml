@@ -26,4 +26,4 @@ let no_dlfilter = Option.is_some (Unix.getenv "MAGIC_TRACE_NO_DLFILTER")
 (* Points to a filesystem path with a trace processor executable. 
    If provided, the flag can be indicated to automatically run the processor 
    at the path once the trace file is created *)
-let processor_path = Unix.getenv "MAGIC_TRACE_PROCESSOR_SHELL_PATH"
+let trace_processor_shell_path = Unix.getenv "MAGIC_TRACE_TRACE_PROCESSOR_SHELL_PATH"

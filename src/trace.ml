@@ -9,6 +9,7 @@ let supports_command command =
       match Core_unix.fork () with
       | `In_the_child ->
         (* gracefully hide perf outputs *)
+        (* simply closing stdout and stderr irregularly caused this child process to exit with 1 and halted the overall process of things *)
         let devnull = Core_unix.openfile ~mode:[ O_WRONLY ] "/dev/null" in
         Core_unix.dup2 ~src:devnull ~dst:Core_unix.stdout ();
         Core_unix.dup2 ~src:devnull ~dst:Core_unix.stderr ();
@@ -563,15 +564,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
     { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
-  module Enable = struct
-    type enabled = { value : string }
-
+  module Trace_processor_config = struct
     type t =
       | Disabled
-      | Enabled of enabled
+      | Enabled of { trace_processor_shell_path : string }
 
-    let processor_param =
-      match Env_vars.processor_path with
+    let param =
+      match Env_vars.trace_processor_shell_path with
       | None -> Command.Param.return Disabled
       | Some processor_shell_path ->
         let%map_open.Command processor =
@@ -580,10 +579,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
             no_arg
             ~doc:[%string "use the trace processor set in environment variables"]
         in
-        if processor then Enabled { value = processor_shell_path } else Disabled
+        if processor
+        then Enabled { trace_processor_shell_path = processor_shell_path }
+        else Disabled
     ;;
   end
 
+  (* CR-someday abena: generalize call_trace_processor with the perf version *)
   (* Same as [Caml.exit] but does not run at_exit handlers *)
   external sys_exit : int -> 'a = "caml_sys_exit"
 
@@ -611,13 +613,16 @@ module Make_commands (Backend : Backend_intf.S) = struct
          # Run a process, tracing its entire execution (only practical for short-lived \
          processes)\n\
          magic-trace run -full-execution ./program\n\
-         # Run a process that generates a large trace file, magic-trace run ./program \
+         # Run a process that generates a large trace file, and automatically process  \n\
+        \         the file locally (flag only exists when the environment variable \
+         called  \n\
+        \         MAGIC_TRACE_TRACE_PROCESSOR_SHELL is set) magic-trace run ./program \
          -use-trace-processor-shell\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
        and prog = anon ("COMMAND" %: string)
-       and trace_processor_exe = Enable.processor_param
+       and trace_processor_exe = Trace_processor_config.param
        and argv =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
        in
@@ -671,7 +676,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | Enabled processor_path ->
              Deferred.return
                (call_trace_processor
-                  ~prog:processor_path.value
+                  ~prog:processor_path.trace_processor_shell_path
                   ~argv:[ "-D"; output_file ]
                   ())
          in
