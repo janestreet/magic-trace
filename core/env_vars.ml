@@ -21,8 +21,10 @@ let debug = Option.is_some (Unix.getenv "MAGIC_TRACE_DEBUG")
    features of magic-trace. *)
 let experimental = Option.is_some (Unix.getenv "MAGIC_TRACE_EXPERIMENTAL")
 
-(* When tracing the kernel on certain systems, perf only has root access when
+(* magic-trace's dlfilter integration is busted right now, see #246. Also:
+
+   When tracing the kernel on certain systems, perf only has root access when
    being run with a specific set of flags. Since this does not include
    [--dlfilter], this environment variable allows the user to forcibly disable
    filtering. *)
-let no_dlfilter = Option.is_some (Unix.getenv "MAGIC_TRACE_NO_DLFILTER")
+let no_dlfilter = Option.is_none (Unix.getenv "MAGIC_TRACE_ENABLE_DLFILTER")
