@@ -7,6 +7,7 @@ module Kind = struct
     | Syscall
     | Sysret
     | Hardware_interrupt
+    | Interrupt
     | Iret
     | Jump
   [@@deriving sexp, compare, bin_io]
