@@ -8,6 +8,7 @@ module Kind = struct
     | Syscall
     | Sysret
     | Hardware_interrupt
+    | Interrupt
     | Iret
     | Jump
     | Tx_abort

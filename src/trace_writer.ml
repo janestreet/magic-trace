@@ -1126,12 +1126,13 @@ and write_event' (T t) ?events_writer event =
               | Return
               | Hardware_interrupt
               | Iret
+              | Interrupt
               | Sysret
               | Jump
               | Tx_abort )
           , Some Start )
         | Some Async, None
-        | Some (Hardware_interrupt | Jump | Tx_abort), Some End ->
+        | Some (Hardware_interrupt | Jump | Interrupt | Tx_abort), Some End ->
           raise_s
             [%message
               "BUG: magic-trace devs thought this event was impossible, but you just \
@@ -1223,7 +1224,7 @@ and write_event' (T t) ?events_writer event =
                ~time;
              check_current_symbol t thread_info ~time dst)
         | Some Tx_abort, None -> check_current_symbol t thread_info ~time dst
-        | Some Jump, None ->
+        | Some (Jump | Interrupt), None ->
           Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
            Instead of crashing, ignore it and keep going. *)

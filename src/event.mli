@@ -8,6 +8,7 @@ module Kind : sig
     | Syscall
     | Sysret
     | Hardware_interrupt
+    | Interrupt
     | Iret
     | Jump
     | Tx_abort
