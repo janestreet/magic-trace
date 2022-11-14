@@ -21,7 +21,7 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -259,6 +259,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       match String.strip kind with
       | "call" -> Some Call
       | "return" -> Some Return
+      | "int" -> Some Interrupt
       | "jmp" -> Some Jump
       | "jcc" -> Some Jump
       | "syscall" -> Some Syscall
@@ -517,6 +518,19 @@ let%test_module _ =
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
+    ;;
+
+    let%expect_test "software interrupts" =
+      check
+        "1907478/1909463 457407.880965552:          1                                \
+         branches:uH:   int                      564aa58813d4 \
+         Builtins_RunMicrotasks+0x554 (/usr/local/bin/workload) =>     564aa584fa00 \
+         Builtins_Call_ReceiverIsNotNullOrUndefined+0x0 (/usr/local/bin/workload)";
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (1907478)) (tid (1909463)))) (time 5d7h3m27.880965552s)
+           (data (Trace (kind Interrupt) (src 0x564aa58813d4) (dst 0x564aa584fa00)))))) |}]
     ;;
 
     let%expect_test "decode error with a timestamp" =
