@@ -4,11 +4,15 @@ open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 
-let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file =
+let resolve_file file =
   (* CR-someday cgaebel: Get the git root by shelling out to `git rev-parse --show-toplevel`.
      This works, but is ridiculous. *)
   let git_root = "../../.." in
-  let script = In_channel.read_all (git_root ^ "/test/" ^ file) in
+  In_channel.read_all (git_root ^ "/test/" ^ file)
+;;
+
+let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file =
+  let script = resolve_file file in
   let lines = String.split script ~on:'\n' in
   let next_pid = ref 0 in
   let next_thread = ref 0 in

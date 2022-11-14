@@ -2,6 +2,9 @@ open! Core
 open! Async
 open! Magic_trace_core
 
+(* Reads the contents of a file in the test directory, as a string. *)
+val resolve_file : string -> string
+
 (* Runs some perf script end-to-end through the perf_tool_backend and the trace_writer, printing
    out generated traces as a string.
 
