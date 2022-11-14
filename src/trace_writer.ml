@@ -748,6 +748,7 @@ end = struct
           (match symbol with
            | "caml_next_frame_descriptor" -> incr frames_to_unwind
            | "caml_raise_exn" -> unwind_stack t thread_info ~time ~frames_to_unwind (-2)
+           | "caml_stash_backtrace" -> incr frames_to_unwind
            | "caml_raise_exception" ->
              unwind_stack t thread_info ~time ~frames_to_unwind 1
            | _ -> ())
