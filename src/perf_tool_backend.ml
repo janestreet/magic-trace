@@ -215,6 +215,7 @@ module Recording = struct
 
   let attach_and_record
     { Record_opts.multi_thread; full_execution; snapshot_size; callgraph_mode }
+    ~(cmd : string list option)
     ~debug_print_perf_commands
     ~(subcommand : Subcommand.t)
     ~(when_to_snapshot : When_to_snapshot.t)
@@ -376,6 +377,11 @@ module Recording = struct
       | true -> [ "--switch-output=signal" ]
       | false -> []
     in
+    let commands =
+      match cmd with
+      | Some x -> x
+      | None -> []
+    in
     let argv =
       List.concat
         [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; "--timestamp" ]
@@ -388,6 +394,7 @@ module Recording = struct
         ; kcore_opts
         ; snapshot_size_opt
         ; Callgraph_mode.to_perf_record_args selected_callgraph_mode
+        ; commands
         ]
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
