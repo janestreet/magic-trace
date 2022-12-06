@@ -216,6 +216,7 @@ module Recording = struct
   let attach_and_record
     { Record_opts.multi_thread; full_execution; snapshot_size; callgraph_mode }
     ~debug_print_perf_commands
+    ~debug_print_pid
     ~(subcommand : Subcommand.t)
     ~(when_to_snapshot : When_to_snapshot.t)
     ~(trace_scope : Trace_scope.t)
@@ -392,6 +393,9 @@ module Recording = struct
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
+    if debug_print_pid
+    then Core.printf "Passed PIDs to perf: %s\n%!" (String.concat ~sep:"" pid_opt);
+    (* No need to format `pid_opt` again, since it already is a list of comma separated PIDs *)
     let perf_pid = perf_fork_exec ~env:perf_env ~prog:"perf" ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
      makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
