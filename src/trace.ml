@@ -444,7 +444,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     =
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
-    let cmd = None in
+    let cmd = [] in
     let%bind attachment =
       attach
         record_opts
@@ -687,7 +687,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
-       and cmd = (anon (maybe (sequence ("command" %: string ))))
+       and cmd = (anon (sequence ("command" %: string )))
        and pids =
          flag
            "-pid"
