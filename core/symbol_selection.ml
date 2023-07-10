@@ -57,16 +57,16 @@ let evaluate ~supports_fzf ~elf ~header symbol_selection =
     | None -> Deferred.Or_error.error_string "No ELF found"
     | Some elf -> return elf
   in
-  let%bind () =
-    if force supports_fzf
-    then return ()
-    else
-      Deferred.Or_error.error_string
-        "magic-trace could show you a fuzzy-finding selector here if \"fzf\" were in \
-         your PATH, but it is not."
-  in
   match symbol_selection with
   | Use_fzf_to_select_one select ->
+    let%bind () =
+      if force supports_fzf
+      then return ()
+      else
+        Deferred.Or_error.error_string
+          "magic-trace could show you a fuzzy-finding selector here if \"fzf\" were in \
+           your PATH, but it is not."
+    in
     let%bind chosen_name, chosen_symbol = select_owee_symbol ~elf ~header select in
     (match Owee_elf.Symbol_table.Symbol.type_attribute chosen_symbol with
      | File ->
