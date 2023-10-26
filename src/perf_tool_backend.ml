@@ -158,21 +158,21 @@ module Recording = struct
     List.map
       extra_events
       ~f:(fun ({ when_to_sample; name; precision } : Collection_mode.Event.t) ->
-      let precision_selector =
-        match precision with
-        | Arbitrary_skid -> ""
-        | Constant_skid -> "p"
-        | Request_zero_skid -> "pp"
-        | Zero_skid -> "ppp"
-        | Maximum_possible -> "P"
-      in
-      match when_to_sample with
-      | Period period ->
-        [%string
-          "%{name#Collection_mode.Event.Name}/period=%{period#Int}/%{selector}%{precision_selector}"]
-      | Frequency freq ->
-        [%string
-          "%{name#Collection_mode.Event.Name}/freq=%{freq#Int}/%{selector}%{precision_selector}"])
+        let precision_selector =
+          match precision with
+          | Arbitrary_skid -> ""
+          | Constant_skid -> "p"
+          | Request_zero_skid -> "pp"
+          | Zero_skid -> "ppp"
+          | Maximum_possible -> "P"
+        in
+        match when_to_sample with
+        | Period period ->
+          [%string
+            "%{name#Collection_mode.Event.Name}/period=%{period#Int}/%{selector}%{precision_selector}"]
+        | Frequency freq ->
+          [%string
+            "%{name#Collection_mode.Event.Name}/freq=%{freq#Int}/%{selector}%{precision_selector}"])
   ;;
 
   let perf_args_of_collection_mode
@@ -289,9 +289,9 @@ module Recording = struct
            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
          with
          (* We choose to default to dwarf if lbr is not available. This is
-             because dwarf will work on any setup, while frame pointers requires
-             compilation with [-fno-omit-frame-pointers]. Although decoding is
-             slow and perf.data file sizes are larger. *)
+            because dwarf will work on any setup, while frame pointers requires
+            compilation with [-fno-omit-frame-pointers]. Although decoding is
+            slow and perf.data file sizes are larger. *)
          | None, false ->
            Core.eprintf
              "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
@@ -394,13 +394,13 @@ module Recording = struct
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
     let perf_pid = perf_fork_exec ~env:perf_env ~prog:"perf" ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
-     makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
-     session, it doesn't also send SIGINT to the perf process, allowing us to send it a
-     SIGUSR2 first to get it to capture a snapshot before exiting. *)
+       makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
+       session, it doesn't also send SIGINT to the perf process, allowing us to send it a
+       SIGUSR2 first to get it to capture a snapshot before exiting. *)
     Core_unix.setpgid ~of_:perf_pid ~to_:perf_pid;
     let%map () = Async.Clock_ns.after (Time_ns.Span.of_ms 500.0) in
     (* Check that the process hasn't failed after waiting, because there's no point pausing
-     to do recording if we've already failed. *)
+       to do recording if we've already failed. *)
     let res = Core_unix.wait_nohang (`Pid perf_pid) in
     let%map.Or_error () =
       match res with
@@ -441,7 +441,7 @@ module Recording = struct
   let finish_recording t =
     Signal_unix.send_i Signal.term (`Pid t.pid);
     (* This should usually be a signal exit, but we don't really care, if it didn't produce
-     a good perf.data file the next step will fail. *)
+       a good perf.data file the next step will fail. *)
     let%map (res : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid t.pid in
     perf_exit_to_or_error res
   ;;
@@ -508,8 +508,8 @@ let decode_events
       if debug_print_perf_commands
       then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
       (* CR-someday tbrindus: this should be switched over to using
-           [perf_fork_exec] to avoid the [perf script] process from outliving
-           the parent. *)
+         [perf_fork_exec] to avoid the [perf script] process from outliving
+         the parent. *)
       let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
       let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
       don't_wait_for
@@ -528,8 +528,8 @@ let decode_events
   let close_result =
     List.map result ~f:(fun (_events, close_result) -> close_result)
     |> Deferred.List.fold ~init:(Ok ()) ~f:(fun acc close_result ->
-         let%bind.Deferred.Or_error () = close_result in
-         Deferred.return acc)
+      let%bind.Deferred.Or_error () = close_result in
+      Deferred.return acc)
   in
   Ok { Decode_result.events; close_result }
 ;;

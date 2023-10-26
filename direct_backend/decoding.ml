@@ -129,7 +129,7 @@ let handle_add_section (state : state) (add : Stub.Add_section.t) =
       { elf; file_offset = add.offset; loaded_offset = add.vaddr }
     in
     state.fallback_resolvers
-      <- (add.vaddr, add.size, resolver) :: state.fallback_resolvers;
+    <- (add.vaddr, add.size, resolver) :: state.fallback_resolvers;
     Hashtbl.add_exn state.resolver_by_isid ~key:add.isid ~data:resolver
 ;;
 

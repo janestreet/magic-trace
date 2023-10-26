@@ -46,7 +46,7 @@ module Ok : sig
       | Power of { freq : int } (** Power event collected by Intel PT. *)
       | Stacktrace_sample of
           { callstack : Location.t list (** Oldest to most recent calls in order. *) }
-          (** Represents cycles event collected through sampling. *)
+      (** Represents cycles event collected through sampling. *)
       | Event_sample of
           { location : Location.t
           ; count : int

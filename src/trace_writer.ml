@@ -107,8 +107,8 @@ module Thread_info = struct
   type 'thread t =
     { thread : ('thread[@sexp.opaque])
     ; (* This isn't a canonical callstack, but represents all of the information that we
-       know about the callstack at the point in the events up to the current event being
-       processed, and is reflected in the trace at that point. *)
+         know about the callstack at the point in the events up to the current event being
+         processed, and is reflected in the trace at that point. *)
       mutable callstack : Callstack.t
     ; inactive_callstacks : Callstack.t Stack.t
     ; mutable last_decode_error_time : Mapped_time.t
@@ -260,8 +260,8 @@ let write_hits (T t) hits =
           ]
       in
       (* Args that are computed from captured registers are only meaningful on our
-           special stop symbol, we still capture them regardless, but on other symbols
-           they'll just have confusing broken values. *)
+         special stop symbol, we still capture them regardless, but on other symbols
+         they'll just have confusing broken values. *)
       let args =
         if is_default_symbol
         then
@@ -273,10 +273,10 @@ let write_hits (T t) hits =
         else args
       in
       (* For the special symbol, if present the passed timestamp comes from
-           Magic_trace.mark_start and marks the start of a region of interest.
+         Magic_trace.mark_start and marks the start of a region of interest.
 
-           We check it for validity since it's possible someone uses an older version of
-           [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
+         We check it for validity since it's possible someone uses an older version of
+         [Magic_trace.take_snapshot] and that should at least produce a valid trace. *)
       let valid_timestamp =
         Time_ns.Span.(
           hit.passed_timestamp > t.base_time && hit.passed_timestamp < hit.timestamp)
@@ -379,9 +379,9 @@ let write_pending_event'
              ; "symbol", Interned display_name
              ]
            @
-           (match info.filename with
-            | Some x -> [ "file", Interned x ]
-            | None -> []))
+             (match info.filename with
+             | Some x -> [ "file", Interned x ]
+             | None -> []))
     in
     let inferred_start_time_arg =
       if from_untraced then [ "inferred_start_time", Interned "true" ] else []
@@ -464,9 +464,9 @@ let opt_pid_to_string opt_pid =
 (* A practical, but not perfect, fix for #155: If events happen with the exact same timestamp
    as a decode error, stacks break. We implement this "#155 hack" to prevent that:
 
-       If an event happens at exactly the same time as the previous decode error, slide it forward
-       by one nanosecond. Maintain the invariant that no event which follows a decode error has the
-       same timestamp as that decode error.
+   If an event happens at exactly the same time as the previous decode error, slide it forward
+   by one nanosecond. Maintain the invariant that no event which follows a decode error has the
+   same timestamp as that decode error.
 
    This should have minimal impact on the timestamps displayed to the user, they're precise to at
    most ~40ns anyhow. But it does make sure our stacks always come out in the right order.
@@ -795,22 +795,22 @@ end = struct
            ~from:last_known_instruction_pointer
            ~to_:src.instruction_pointer
            ~f:(fun (addr, kind) ->
-           match kind with
-           | Poptrap -> clear_trap_stack t thread_info ~time
-           | Pushtrap ->
-             Stack.push thread_info.inactive_callstacks thread_info.callstack;
-             thread_info.callstack <- Callstack.create ~create_time:time;
-             if !debug
-             then
-               call
-                 t
-                 thread_info
-                 ~time
-                 ~location:
-                   { instruction_pointer = 0L
-                   ; symbol_offset = 0
-                   ; symbol = From_perf [%string "[push trap @ %{addr#Int64.Hex}]"]
-                   }));
+             match kind with
+             | Poptrap -> clear_trap_stack t thread_info ~time
+             | Pushtrap ->
+               Stack.push thread_info.inactive_callstacks thread_info.callstack;
+               thread_info.callstack <- Callstack.create ~create_time:time;
+               if !debug
+               then
+                 call
+                   t
+                   thread_info
+                   ~time
+                   ~location:
+                     { instruction_pointer = 0L
+                     ; symbol_offset = 0
+                     ; symbol = From_perf [%string "[push trap @ %{addr#Int64.Hex}]"]
+                     }));
       last_known_instruction_pointer := Some dst.instruction_pointer
   ;;
 end
@@ -850,11 +850,11 @@ let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
       (Pending_event.create_call location ~from_untraced:true)
     (* Not necessarily true, but setting [~from_untraced:true] causes the timestamp to be annotated as inferred *));
   callstack.create_time
-    <- Mapped_time.add
-         time
-         (Time_ns.Span.of_ns
-            (-1.)
-            (* Set the reset time of future untraced returns to before the rewritten callstack *))
+  <- Mapped_time.add
+       time
+       (Time_ns.Span.of_ns
+          (-1.)
+          (* Set the reset time of future untraced returns to before the rewritten callstack *))
 ;;
 
 let rewrite_all_callstacks t ~(thread_info : _ Thread_info.t) ~time =
@@ -893,8 +893,8 @@ let write_event_and_callstack
     Callstack_compression.compress_callstack
       events_writer.callstack_compression_state
       (Callstack.(callstack.stack)
-      |> Stack.to_list
-      |> List.map ~f:(fun Event.Location.{ symbol; _ } -> symbol))
+       |> Stack.to_list
+       |> List.map ~f:(fun Event.Location.{ symbol; _ } -> symbol))
   in
   let event_and_callstack =
     Event_and_callstack.{ event; callstack = compression_event }
@@ -1026,12 +1026,12 @@ let write_event (T t) ?events_writer event =
           check_current_symbol t thread_info ~time dst
         | None, Some Start ->
           (* Might get this under /u, /k, and /uk, but we need to handle them all
-       differently. *)
+             differently. *)
           if Trace_scope.equal t.trace_scope Kernel
           then (
             (* We're back in the kernel after having been in userspace. We have a
-           brand new stack to work with. [clear_callstack] here should only be
-           clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
+               brand new stack to work with. [clear_callstack] here should only be
+               clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
             clear_callstack t thread_info ~time;
             Thread_info.set_callstack_from_addr
               thread_info
@@ -1040,32 +1040,32 @@ let write_event (T t) ?events_writer event =
           else if Callstack.is_empty thread_info.callstack
           then
             (* View stopping tracing always as a call (typically the result of a call
-           into a special library / linker), with starting tracing again as
-           exiting it. The one exception is the initial start of the trace for
-           that process, when there is no stack and a prior end won't have pushed
-           a synthetic stack frame. *)
+               into a special library / linker), with starting tracing again as
+               exiting it. The one exception is the initial start of the trace for
+               that process, when there is no stack and a prior end won't have pushed
+               a synthetic stack frame. *)
             call t thread_info ~time ~location:dst
           else
             (* We don't call [check_current_symbol] here because stops don't change
-           the program location in most cases, and when a call to a symbol page
-           faults, the restart after the page fault at the new location would get
-           treated as a tail call if we did call [check_current_symbol]. *)
+               the program location in most cases, and when a call to a symbol page
+               faults, the restart after the page fault at the new location would get
+               treated as a tail call if we did call [check_current_symbol]. *)
             Ocaml_hacks.ret_track_exn_data t thread_info ~time
         | Some ((Syscall | Hardware_interrupt) as kind), None ->
           (* We should only be getting [Syscall] these under /uk, but we can get
-         [Hardware_interrupt] under /uk, /k. *)
+             [Hardware_interrupt] under /uk, /k. *)
           [ [ Trace_scope.Userspace_and_kernel ]
           ; (if [%compare.equal: Event.Kind.t] kind Hardware_interrupt
-            then [ Kernel ]
-            else [])
+             then [ Kernel ]
+             else [])
           ]
           |> List.concat
           |> assert_trace_scope t outer_event;
           (* A syscall or hardware interrupt can be modelled as operating on a new
-         stack, and shouldn't be allowed to modify the previous stack.
+             stack, and shouldn't be allowed to modify the previous stack.
 
-         Also, hardware interrupts can occur during syscalls, so we maintain a
-         "stack of callstacks" here. *)
+             Also, hardware interrupts can occur during syscalls, so we maintain a
+             "stack of callstacks" here. *)
           Stack.push thread_info.inactive_callstacks thread_info.callstack;
           Thread_info.set_callstack_from_addr
             thread_info
@@ -1079,7 +1079,7 @@ let write_event (T t) ?events_writer event =
           call t thread_info ~time ~location:Event.Location.untraced
         | Some ((Iret | Sysret) as kind), None ->
           (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
-         well (because the kernel can be interrupted). *)
+             well (because the kernel can be interrupted). *)
           [ [ Trace_scope.Userspace_and_kernel ]
           ; (if [%compare.equal: Event.Kind.t] kind Iret then [ Kernel ] else [])
           ]
@@ -1097,7 +1097,7 @@ let write_event (T t) ?events_writer event =
         | Some Jump, None ->
           Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
-       Instead of crashing, ignore it and keep going. *)
+           Instead of crashing, ignore it and keep going. *)
         | None, _ -> ());
        if !debug then print_s (sexp_of_inner t))
 ;;

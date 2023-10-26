@@ -18,10 +18,10 @@ type compression_event =
 [@@deriving sexp, bin_io]
 
 (* Compress a callstack represented as a list of symbol, and update the compression
-    state inplace.
+   state inplace.
 
-    When compressing a sequence of many callstacks, this function should be called
-    in order on all callstacks with the same compression state.
+   When compressing a sequence of many callstacks, this function should be called
+   in order on all callstacks with the same compression state.
 *)
 val compress_callstack : t -> Symbol.t list -> compression_event
 

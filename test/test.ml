@@ -43,7 +43,7 @@ end = struct
   let symbol () =
     Symbol.From_perf
       (List.init (Random.State.int_incl !rng 1 10) ~f:(fun _ -> Random.State.ascii !rng)
-      |> String.of_char_list)
+       |> String.of_char_list)
   ;;
 
   let random_location ?symbol () : Event.Location.t =
@@ -795,9 +795,9 @@ let%expect_test "get debug information from ELF" =
   let debug_table =
     Magic_trace_core.Elf.addr_table (Option.value_exn elf)
     |> Hashtbl.filter ~f:(fun info ->
-         match info.filename with
-         | Some "sample.ml" -> true
-         | _ -> false)
+      match info.filename with
+      | Some "sample.ml" -> true
+      | _ -> false)
   in
   let raise_after_col =
     Hashtbl.filter_map debug_table ~f:(fun info ->

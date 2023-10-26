@@ -40,12 +40,12 @@ let range_hit_times ~decode_events ~range_symbols =
       | Ok { data = Stacktrace_sample { callstack }; time; _ } ->
         List.rev callstack
         |> List.fold ~init:None ~f:(fun acc call ->
-             match acc, call with
-             | None, { symbol; _ } when is_start symbol ->
-               Some { Symbol_hit.kind = Start; symbol; time }
-             | None, { symbol; _ } when is_stop symbol ->
-               Some { Symbol_hit.kind = Stop; symbol; time }
-             | acc, _ -> acc))
+          match acc, call with
+          | None, { symbol; _ } when is_start symbol ->
+            Some { Symbol_hit.kind = Start; symbol; time }
+          | None, { symbol; _ } when is_stop symbol ->
+            Some { Symbol_hit.kind = Stop; symbol; time }
+          | acc, _ -> acc))
     |> Pipe.to_list)
   |> Deferred.map ~f:Or_error.return
 ;;
@@ -76,28 +76,28 @@ let decode_events_and_annotate ~decode_events ~range_symbols =
   let events =
     List.zip_exn events hit_sequences
     |> List.map ~f:(fun (events, hit_sequence) ->
-         Pipe.folding_map
-           events
-           ~init:(hit_sequence, false)
-           ~f:(fun (hits, in_filtered_region) event ->
-           let hits, in_filtered_region =
-             match hits with
-             | [] -> hits, in_filtered_region
-             | hd :: tl ->
-               (match event with
-                | Ok { data = Trace { kind = Some Call; dst; _ }; time; _ }
-                  when Time_ns_unix.Span.(time = hd.time)
-                       && Symbol.equal dst.symbol hd.symbol -> tl, not in_filtered_region
-                | Ok { data = Stacktrace_sample _; time; _ }
-                  when Time_ns_unix.Span.(time = hd.time) -> tl, not in_filtered_region
-                | Ok { data = Trace _; _ }
-                | Ok { data = Power _; _ }
-                | Ok { data = Stacktrace_sample _; _ }
-                | Ok { data = Event_sample _; _ }
-                | Error _ -> hits, in_filtered_region)
-           in
-           ( (hits, in_filtered_region)
-           , Event.With_write_info.create ~should_write:in_filtered_region event )))
+      Pipe.folding_map
+        events
+        ~init:(hit_sequence, false)
+        ~f:(fun (hits, in_filtered_region) event ->
+          let hits, in_filtered_region =
+            match hits with
+            | [] -> hits, in_filtered_region
+            | hd :: tl ->
+              (match event with
+               | Ok { data = Trace { kind = Some Call; dst; _ }; time; _ }
+                 when Time_ns_unix.Span.(time = hd.time)
+                      && Symbol.equal dst.symbol hd.symbol -> tl, not in_filtered_region
+               | Ok { data = Stacktrace_sample _; time; _ }
+                 when Time_ns_unix.Span.(time = hd.time) -> tl, not in_filtered_region
+               | Ok { data = Trace _; _ }
+               | Ok { data = Power _; _ }
+               | Ok { data = Stacktrace_sample _; _ }
+               | Ok { data = Event_sample _; _ }
+               | Error _ -> hits, in_filtered_region)
+          in
+          ( (hits, in_filtered_region)
+          , Event.With_write_info.create ~should_write:in_filtered_region event )))
   in
   return (events, close_result)
 ;;

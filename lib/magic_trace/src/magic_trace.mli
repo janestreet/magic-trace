@@ -35,8 +35,7 @@ val mark_start : unit -> unit
     ~10us breakpoint overhead on every run while magic-trace is attached.
 
     See also the [-duration-thresh] flag for use in combination with this or
-    instead of it if you can tolerate a 10us pause on every call.
-*)
+    instead of it if you can tolerate a 10us pause on every call. *)
 module Min_duration : sig
   type t
 
