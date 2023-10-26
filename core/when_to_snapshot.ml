@@ -30,7 +30,7 @@ let param =
        (*) If you pass multiple PIDs when tracing, the trigger will only be able to \
        select a function from the first PID passed.\n\n"
   |> map ~f:(function
-       | None -> Magic_trace_or_the_application_terminates
-       | Some input ->
-         Application_calls_a_function (Symbol_selection.of_command_string input))
+    | None -> Magic_trace_or_the_application_terminates
+    | Some input ->
+      Application_calls_a_function (Symbol_selection.of_command_string input))
 ;;

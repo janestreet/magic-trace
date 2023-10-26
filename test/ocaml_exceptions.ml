@@ -3,26 +3,29 @@ open! Async
 
 (* Generated as per this program:
 
-  {[
-    exception Test
+   {[
+     exception Test
 
-    let[@inline never] foo () = ()
+     let[@inline never] foo () = ()
 
-    let[@inline never] rec raise_after = function
-      | 0 -> raise Test
-      | n -> 1 + raise_after (n - 1)
-    ;;
-    let () =
-      while true do
-        let _ =
-          try raise_after 20 with
-          | Test -> 0
-        in
-        for i = 0 to 1000000; do Sys.opaque_identity () done;
-        ()
-      done
-    ;;
-  ]}
+     let[@inline never] rec raise_after = function
+       | 0 -> raise Test
+       | n -> 1 + raise_after (n - 1)
+     ;;
+
+     let () =
+       while true do
+         let _ =
+           try raise_after 20 with
+           | Test -> 0
+         in
+         for i = 0 to 1000000 do
+           Sys.opaque_identity ()
+         done;
+         ()
+       done
+     ;;
+   ]}
 *)
 
 let%expect_test "A raise_notrace OCaml exception" =

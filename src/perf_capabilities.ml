@@ -10,19 +10,19 @@ let last_branch_record = bit 4
 let dlfilter = bit 5
 
 include Flags.Make (struct
-  let allow_intersecting = false
-  let should_print_error = true
-  let remove_zero_flags = false
+    let allow_intersecting = false
+    let should_print_error = true
+    let remove_zero_flags = false
 
-  let known =
-    [ configurable_psb_period, "configurable_psb_period"
-    ; kernel_tracing, "kernel_tracing"
-    ; kcore, "kcore"
-    ; last_branch_record, "last_branch_record"
-    ; dlfilter, "dlfilter"
-    ]
-  ;;
-end)
+    let known =
+      [ configurable_psb_period, "configurable_psb_period"
+      ; kernel_tracing, "kernel_tracing"
+      ; kcore, "kcore"
+      ; last_branch_record, "last_branch_record"
+      ; dlfilter, "dlfilter"
+      ]
+    ;;
+  end)
 
 module Version = struct
   type t =

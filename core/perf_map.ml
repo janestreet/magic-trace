@@ -6,8 +6,8 @@ type t = Perf_map_location.t Int64.Map.t
 let perf_map_re =
   (* Example: 3a6caa49c2e f3 LazyCompile:~afterInspector node:internal/errors:753
 
-    Not every runtime contains the file and line, so let's just call all of that stuff the name.
-    That matches the spec linked in the mli.
+     Not every runtime contains the file and line, so let's just call all of that stuff the name.
+     That matches the spec linked in the mli.
   *)
   Re.Posix.re {|^([0-9a-fA-F]+) ([0-9a-fA-F]+) (.*)$|} |> Re.compile
 ;;

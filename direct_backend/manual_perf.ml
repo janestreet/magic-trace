@@ -88,16 +88,16 @@ let read_current_maps pid =
   Owee_linux_maps.scan_pid (Pid.to_int pid)
   |> List.filter_map
        ~f:(fun { address_start; address_end; pathname; offset; perm_execute; _ } ->
-       match perm_execute with
-       | false -> None
-       | true ->
-         let open Int64 in
-         Some
-           { Mmap.vaddr = to_int_exn address_start
-           ; length = address_end - address_start |> to_int_exn
-           ; offset = to_int_exn offset
-           ; filename = pathname
-           })
+         match perm_execute with
+         | false -> None
+         | true ->
+           let open Int64 in
+           Some
+             { Mmap.vaddr = to_int_exn address_start
+             ; length = address_end - address_start |> to_int_exn
+             ; offset = to_int_exn offset
+             ; filename = pathname
+             })
 ;;
 
 module Tracing_state = struct
@@ -131,8 +131,8 @@ module Tracing_state = struct
       ~data:
         ([%sexp
            ({ initial_maps = read_current_maps pid; trace_meta; pid = Pid.to_int pid }
-             : Setup_info.t)]
-        |> Sexp.to_string);
+            : Setup_info.t)]
+         |> Sexp.to_string);
     state
   ;;
 

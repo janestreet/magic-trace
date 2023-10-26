@@ -31,7 +31,7 @@ module Location = struct
   module Ignore_symbol = struct
     (* Ignoring symbol strings when serializing to save space. This reduces the size of events file
        by ~50% based on small tests. The symbol information is still available implicitly by looking at the top
-      of the callstack that optionally is exported together with the events. Symbol offset will be missing.*)
+       of the callstack that optionally is exported together with the events. Symbol offset will be missing.*)
 
     type nonrec t = t
 
@@ -95,8 +95,8 @@ module Decode_error = struct
   type t =
     { thread : Thread.t
         (* The time is only present sometimes. I haven't figured out when, exactly, but my
-       Skylake test machine has it while my Tiger Lake test machine doesn't. It could
-       easily be a difference between different versions of perf... *)
+           Skylake test machine has it while my Tiger Lake test machine doesn't. It could
+           easily be a difference between different versions of perf... *)
     ; time : Time_ns_unix.Span.Option.t
     ; instruction_pointer : Int64.Hex.t option
     ; message : string

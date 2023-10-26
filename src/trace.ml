@@ -229,8 +229,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
       try
         Some
           (In_channel.read_all (record_dir ^/ "recording_data.sexp")
-          |> Sexp.of_string
-          |> [%of_sexp: Backend.Recording.Data.t])
+           |> Sexp.of_string
+           |> [%of_sexp: Backend.Recording.Data.t])
       with
       | Sys_error _ -> None
     in
@@ -247,44 +247,44 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Tracing_tool_output.write_and_maybe_view
       output_config
       ~f:(fun ~events_writer ~writer () ->
-      let open Deferred.Or_error.Let_syntax in
-      let hits =
-        In_channel.read_all (Hits_file.filename ~record_dir)
-        |> Sexp.of_string
-        |> [%of_sexp: Hits_file.t]
-      in
-      let debug_info =
-        match
-          Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
-        with
-        | None ->
-          eprintf
-            "Warning: Debug info is unavailable, so filenames and line numbers will not \
-             be available in the trace.\n\
-             See \
-             https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
-             for more info.\n";
-          None
-        | Some _ as x -> x
-      in
-      let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
-      let%bind events, close_result =
-        get_events_and_close_result ~decode_events ~range_symbols
-      in
-      let%bind () =
-        write_trace_from_events
-          ?ocaml_exception_info
-          ~events_writer
-          ~writer
-          ~debug_info
-          ~trace_scope
-          ~print_events
-          ~hits
-          ~events
-          ~close_result
-          ()
-      in
-      return ())
+        let open Deferred.Or_error.Let_syntax in
+        let hits =
+          In_channel.read_all (Hits_file.filename ~record_dir)
+          |> Sexp.of_string
+          |> [%of_sexp: Hits_file.t]
+        in
+        let debug_info =
+          match
+            Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
+          with
+          | None ->
+            eprintf
+              "Warning: Debug info is unavailable, so filenames and line numbers will \
+               not be available in the trace.\n\
+               See \
+               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+               for more info.\n";
+            None
+          | Some _ as x -> x
+        in
+        let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
+        let%bind events, close_result =
+          get_events_and_close_result ~decode_events ~range_symbols
+        in
+        let%bind () =
+          write_trace_from_events
+            ?ocaml_exception_info
+            ~events_writer
+            ~writer
+            ~debug_info
+            ~trace_scope
+            ~print_events
+            ~hits
+            ~events
+            ~close_result
+            ()
+        in
+        return ())
   ;;
 
   module Record_opts = struct
@@ -458,12 +458,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~stop:(Ivar.read exited_ivar)
       Async_unix.Signal.terminating
       ~f:(fun signal ->
-      try
-        UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
-      with
-      | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
-        (* We raced, but it's OK because the child still exited. *)
-        ());
+        try
+          UnixLabels.kill ~pid:(Pid.to_int pid) ~signal:(Signal_unix.to_system_int signal)
+        with
+        | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
+          (* We raced, but it's OK because the child still exited. *)
+          ());
     (* [Monitor.try_with] because [waitpid] raises if perf died before we got here. *)
     let%bind.Deferred (waitpid_result : (Core_unix.Exit_or_signal.t, exn) result) =
       Monitor.try_with (fun () -> Async_unix.Unix.waitpid pid)
@@ -632,8 +632,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
         [ "--ppid"; pid; "-p"; pid; "--deselect" ]
       in
       (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
-       running processes. The [ps] command uses the /proc/ filesystem and is much easier
-       than walking the /proc/ system and filtering ourselves. *)
+         running processes. The [ps] command uses the /proc/ filesystem and is much easier
+         than walking the /proc/ system and filtering ourselves. *)
       let process_lines =
         [ [ "x"; "-w"; "--no-headers" ]
         ; [ "-o"; "pid,args" ]

@@ -3,7 +3,7 @@ open! Async
 
 (* JITed lanaguages like java and javascript can write perf map files which provide a mapping of
    address to symbol name.
-   
+
    They're documented here:
 
    https://github.com/torvalds/linux/blob/master/tools/perf/Documentation/jit-interface.txt
@@ -26,7 +26,7 @@ module Table : sig
   type t
 
   (** Uses default filenames for PID of [/tmp/perf-%{pid}.map]. Ignores perf
-     maps which don't exist. *)
+      maps which don't exist. *)
   val load_by_pids : Pid.t list -> t Deferred.t
 
   (** Requires filenames to be in [perf-%{pid}.map] format in order to infer

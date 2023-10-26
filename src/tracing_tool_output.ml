@@ -173,10 +173,10 @@ let write_and_maybe_serve
   | false ->
     let fd = Core_unix.openfile output_path ~mode:[ O_RDWR; O_CREAT; O_CLOEXEC ] in
     (* Write to and serve from an indirect reference to [fxt_path], through our process'
-    fd table. This is a little grotesque, but avoids a race where the user runs
-    magic-trace twice with the same [-output], such that the filename changes under
-    [-serve] -- without this hack, the earlier magic-trace serving instance would start
-    serving the new trace, which is unlikely to be what the user expected. *)
+       fd table. This is a little grotesque, but avoids a race where the user runs
+       magic-trace twice with the same [-output], such that the filename changes under
+       [-serve] -- without this hack, the earlier magic-trace serving instance would start
+       serving the new trace, which is unlikely to be what the user expected. *)
     let indirect_store_path = [%string "/proc/self/fd/%{fd#Core_unix.File_descr}"] in
     let writer =
       Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:indirect_store_path ()

@@ -120,7 +120,7 @@ let parse_symbol_and_offset ?perf_maps pid str ~addr =
        (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
         | [| _; dso |] ->
           (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
-           from [offset] here. *)
+             from [offset] here. *)
           Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
         | _ | (exception _) -> failed)
      | Some perf_map, Some pid ->
@@ -128,7 +128,7 @@ let parse_symbol_and_offset ?perf_maps pid str ~addr =
         | None -> failed
         | Some location ->
           (* It's strange that perf isn't resolving these symbols. It says on the
-           tin that it supports perf map files! *)
+             tin that it supports perf map files! *)
           let offset = saturating_sub_i64 addr location.start_addr in
           From_perf_map location, offset))
 ;;
@@ -438,12 +438,12 @@ let%test_module _ =
 
        {[
          let%expect_test "Unknown Go symbol" =
-         check
-           {|2118573/2118573 770614.599007116:                                branches:uH:   tr strt tr end                      0 [unknown] (foo.so) =>           4591e1 [unknown] (foo.so)|};
+           check
+             {|2118573/2118573 770614.599007116:                                branches:uH:   tr strt tr end                      0 [unknown] (foo.so) =>           4591e1 [unknown] (foo.so)|};
            [%expect]
          ;;
        ]}
-      *)
+    *)
 
     let%expect_test "manufactured example 1" =
       check

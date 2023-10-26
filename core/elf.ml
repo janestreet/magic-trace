@@ -302,11 +302,11 @@ let selection_stop_info t pid selection =
     else
       Owee_linux_maps.scan_pid (Pid.to_int pid)
       |> List.filter_map ~f:(fun { address_start; address_end; pathname; offset; _ } ->
-           let open Int64 in
-           let length = address_end - address_start in
-           if String.(pathname = filename) && addr >= offset && addr < offset + length
-           then Some (addr - offset + address_start)
-           else None)
+        let open Int64 in
+        let length = address_end - address_start in
+        if String.(pathname = filename) && addr >= offset && addr < offset + length
+        then Some (addr - offset + address_start)
+        else None)
       |> List.hd_exn
   in
   let compute_filter ~name ~addr ~size =
