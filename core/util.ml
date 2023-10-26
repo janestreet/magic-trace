@@ -24,7 +24,7 @@ let intable_of_hex_string
 ;;
 
 let int64_of_hex_string = intable_of_hex_string (module Int64)
-let int_of_hex_string = intable_of_hex_string (module Int)
+let int_trunc_of_hex_string = intable_of_hex_string (module Int)
 
 let%test_module _ =
   (module struct
@@ -34,8 +34,8 @@ let%test_module _ =
       print_s
         [%message
           ""
-            ~int64:(int64_of_hex_string ?remove_hex_prefix str : Int64.Hex.t)
-            ~int:(int_of_hex_string ?remove_hex_prefix str : Int.Hex.t)]
+            ~int64:(int64_of_hex_string ?remove_hex_prefix str |> sprintf "0x%Lx")
+            ~int:(int_trunc_of_hex_string ?remove_hex_prefix str |> sprintf "0x%x")]
     ;;
 
     let%expect_test "int64 hex parsing" =
@@ -56,7 +56,10 @@ let%test_module _ =
           ((int64 0xfa0f) (int 0xfa0f)) |}];
       check "0";
       [%expect {|
-        ((int64 0x0) (int 0x0)) |}]
+        ((int64 0x0) (int 0x0)) |}];
+      (* Test a value that doesn't fit in a 63-bit int. *)
+      check "0xffffffffff22f000";
+      [%expect {| ((int64 0xffffffffff22f000) (int 0x7fffffffff22f000)) |}]
     ;;
   end)
 ;;
