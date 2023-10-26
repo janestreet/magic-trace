@@ -104,15 +104,28 @@ let parse_event_header line =
       in
       Event { thread = { pid; tid }; time; period; event; remaining_line }
     | results ->
+      Core.print_endline "[failed]";
       raise_s
         [%message
           "Regex of perf output did not match expected fields" (results : string array)])
 ;;
 
-let parse_symbol_and_offset ?perf_maps pid str ~addr =
+let parse_symbol_and_offset ?perf_maps pid str ~addr : Symbol.t * int =
   match Re.Group.all (Re.exec symbol_and_offset_re str) with
   | [| _; symbol; offset |] ->
-    Symbol.From_perf symbol, Util.int_of_hex_string ~remove_hex_prefix:true offset
+    let offset =
+      (* Sometimes [perf] reports symbols and offsets like
+         [memcpy@plt+0xffffffffff22f000], which are definitely wrong (the implied
+         execution address lies in kernel space, but we're in userspace).
+
+         This is a [perf] bug, but we need to be resililent to it.
+
+         [int_trunc_of_hex_string] will drop the leading 1 bit, resulting in a differently
+         wrong offset, but won't crash. We don't want to use [int64_of_hex_string] here to
+         avoid the extra allocation. *)
+      Util.int_trunc_of_hex_string ~remove_hex_prefix:true offset
+    in
+    From_perf symbol, offset
   | _ | (exception _) ->
     let failed = Symbol.Unknown, 0 in
     (match perf_maps, pid with
@@ -121,7 +134,7 @@ let parse_symbol_and_offset ?perf_maps pid str ~addr =
         | [| _; dso |] ->
           (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
              from [offset] here. *)
-          Symbol.From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
+          From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
         | _ | (exception _) -> failed)
      | Some perf_map, Some pid ->
        (match Perf_map.Table.symbol ~pid perf_map ~addr with
@@ -306,6 +319,7 @@ let parse_perf_extra_sampled_event
 let to_event ?perf_maps lines : Event.t option =
   try
     match lines with
+    | [] -> raise_s [%message "Unexpected line while parsing perf output."]
     | first_line :: lines ->
       let header = parse_event_header first_line in
       (match header with
@@ -328,7 +342,7 @@ let to_event ?perf_maps lines : Event.t option =
                  period
                  remaining_line
                  lines
-                 Collection_mode.Event.Name.Branch_misses)
+                 Branch_misses)
           | `Cache_misses ->
             Some
               (parse_perf_extra_sampled_event
@@ -338,8 +352,7 @@ let to_event ?perf_maps lines : Event.t option =
                  period
                  remaining_line
                  lines
-                 Collection_mode.Event.Name.Cache_misses)))
-    | [] -> raise_s [%message "Unexpected line while parsing perf output."]
+                 Cache_misses)))
   with
   | exn ->
     raise_s
@@ -664,6 +677,16 @@ let%test_module _ =
           ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h47m8.52679923s)
            (data
             (Event_sample (location 0x7fca99943c60) (count 50) (name Branch_misses)))))) |}]
+    ;;
+
+    let%expect_test "perf reports a garbage symbol offset" =
+      check
+        {| 25375/25375 4509191.343298468:                            1   branches:uH:   call                     7f6fce0b71f4 [unknown] (foo.so) =>     7ffd193838e0 memcpy@plt+0xffffffffff22f000 (foo.so)|};
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (data (Trace (kind Call) (src 0x7f6fce0b71f4) (dst 0x7ffd193838e0)))))) |}]
     ;;
   end)
 ;;

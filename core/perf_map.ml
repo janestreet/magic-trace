@@ -22,8 +22,10 @@ let parse_line line =
       | [| _; start_addr; size; function_ |] ->
         let start_addr = Util.int64_of_hex_string start_addr in
         ( start_addr
-        , { Perf_map_location.start_addr; size = Util.int_of_hex_string size; function_ }
-        )
+        , { Perf_map_location.start_addr
+          ; size = Util.int_trunc_of_hex_string size
+          ; function_
+          } )
         |> Some
       | _ -> failwith "doesn't match regex"
     with
