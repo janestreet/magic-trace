@@ -37,8 +37,8 @@ module Pending_event = struct
   module Kind = struct
     type t =
       | Call of
-          { addr : int64
-          ; offset : int
+          { addr : Int64.Hex.t
+          ; offset : Int.Hex.t
           ; from_untraced : bool
           }
       | Ret
@@ -72,6 +72,7 @@ module Callstack = struct
   let pop t = Stack.pop t.stack
   let top t = Stack.top t.stack
   let is_empty t = Stack.is_empty t.stack
+  let depth t = Stack.length t.stack
 
   let how_many_match { stack; create_time = _ } (future_callstack : Event.Location.t list)
     =
@@ -773,7 +774,16 @@ end = struct
     | With_exception_info { ocaml_exception_info; _ }
       when Ocaml_exception_info.is_entertrap
              ocaml_exception_info
-             ~addr:dst.instruction_pointer -> clear_trap_stack t thread_info ~time
+             ~addr:dst.instruction_pointer ->
+      (* CR-someday tbrindus: unwind this hack. This recreates the callstack but with the
+         first (synthetic) frame missing. A more principled approach would be the one
+         outlined in another CR-someday below, where we teach [Callstack] about traps
+         directly. *)
+      let s = thread_info.callstack.stack |> Stack.to_list in
+      let s = List.take s (List.length s - 1) in
+      Stack.clear thread_info.callstack.stack;
+      List.iter (List.rev s) ~f:(fun x -> Stack.push thread_info.callstack.stack x);
+      clear_trap_stack t thread_info ~time
     | _ -> check_current_symbol t thread_info ~time dst
   ;;
 
@@ -794,23 +804,37 @@ end = struct
            ocaml_exception_info
            ~from:last_known_instruction_pointer
            ~to_:src.instruction_pointer
-           ~f:(fun (addr, kind) ->
+           ~f:(fun (_addr, kind) ->
              match kind with
-             | Poptrap -> clear_trap_stack t thread_info ~time
              | Pushtrap ->
+               (* CR-someday tbrindus: maybe we should have [Callstack.t] know about the
+                  concept of trap handlers, and have e.g. [Callstack.{pushtrap,poptrap}]
+                  insert markers into an auxilliary data structure.
+
+                  Then we could have operations like "close all frames until the last
+                  trap", and enforce invariants like "you can't [ret] past a trap without
+                  calling [poptrap] first" there rather than here. *)
+               (* Push a synthetic frame equal to the top of the existing stack, to avoid
+                  erroneously inferring frames that shouldn't exist when execution happens
+                  within a [try ... with] block that doesn't involve calls (and thus
+                  generation of new frames). *)
+               let top = Callstack.top thread_info.callstack |> Option.value_exn in
                Stack.push thread_info.inactive_callstacks thread_info.callstack;
                thread_info.callstack <- Callstack.create ~create_time:time;
-               if !debug
+               Callstack.push thread_info.callstack top
+             | Poptrap ->
+               (* We should only have the synthetic frame we created at this point. If we
+                  have more than that, we've gotten confused in our state tracking
+                  somewhere. *)
+               if Callstack.depth thread_info.callstack <> 1
                then
-                 call
-                   t
-                   thread_info
-                   ~time
-                   ~location:
-                     { instruction_pointer = 0L
-                     ; symbol_offset = 0
-                     ; symbol = From_perf [%string "[push trap @ %{addr#Int64.Hex}]"]
-                     }));
+                 eprint_s
+                   [%message
+                     "BUG: expected callstack to be depth 1 at the time we encountered a \
+                      poptrap, but it wasn't"
+                       ~callstack:(thread_info.callstack : Callstack.t)];
+               ignore (Callstack.pop thread_info.callstack : _);
+               clear_trap_stack t thread_info ~time));
       last_known_instruction_pointer := Some dst.instruction_pointer
   ;;
 end
@@ -819,7 +843,7 @@ let assert_trace_scope t event trace_scopes =
   if List.find trace_scopes ~f:(Trace_scope.equal t.trace_scope) |> Option.is_none
   then
     (* CR-someday cgaebel: Should this raise? *)
-    Core.eprint_s
+    eprint_s
       [%message
         "BUG: assumptions violated, saw an unexpected event for this trace mode"
           ~trace_scope:(t.trace_scope : Trace_scope.t)
@@ -1023,7 +1047,10 @@ let write_event (T t) ?events_writer event =
           call t thread_info ~time ~location:Event.Location.returned
         | Some Return, None ->
           Ocaml_hacks.ret_track_exn_data t thread_info ~time;
-          check_current_symbol t thread_info ~time dst
+          (* [caml_raise_exn], at least at the time of writing, modifies the stack
+             and then [ret]s when raising. The OCaml compiler's codegen uses indirect
+             [jmp]s instead. *)
+          Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         | None, Some Start ->
           (* Might get this under /u, /k, and /uk, but we need to handle them all
              differently. *)

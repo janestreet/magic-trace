@@ -54,7 +54,7 @@ let%expect_test "an mcall/gogo pair from a small go program" =
     -> 71.242us END   runtime.releaseSudog
     3109264/3109264 3363099.850069422:                            1   branches:uH:   return                         404861 runtime.chanrecv1+0x21 (foo.so) =>           413f76 runtime.gcenable+0xb6 (foo.so)
     -> 71.263us END   runtime.chanrecv
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN runtime.gcenable [inferred start time]
     ->      0ns BEGIN runtime.chanrecv1 [inferred start time]
     ->      0ns BEGIN runtime.chanrecv

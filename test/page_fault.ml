@@ -639,7 +639,7 @@ let%expect_test "A page fault during demo.c" =
     ->  1.303us BEGIN native_iret
     1439745/1439745 2472089.651286186:                            1   branches:uH:   return                   7f5948676e24 _fini+0xc (foo.so) =>     7f5948832e75 _dl_catch_exception+0xe5 (foo.so)
     ->  1.347us END   native_iret
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->    224ns BEGIN _dl_catch_exception [inferred start time]
     ->    224ns BEGIN _fini [inferred start time]
     ->  1.373us END   _fini

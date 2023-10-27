@@ -100,6 +100,6 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
           let event = Event.With_write_info.create ~should_write:true event in
           Trace_writer.write_event ?events_writer trace_writer event
         | None -> ());
-      printf "END\n";
+      printf "INPUT TRACE STREAM ENDED, any lines printed below this were deferred\n";
       Trace_writer.end_of_trace trace_writer)
 ;;
