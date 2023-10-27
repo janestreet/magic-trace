@@ -11144,7 +11144,7 @@ let%expect_test "A raise_notrace OCaml exception" =
     -> 132.055ms END   _dl_map_object
     -> 132.055ms BEGIN _dl_map_object
     -> 132.176ms BEGIN _dl_name_match_p
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN main
     -> 132.297ms END   _dl_name_match_p
     -> 132.297ms END   _dl_map_object

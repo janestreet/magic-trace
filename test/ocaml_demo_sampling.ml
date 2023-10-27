@@ -782,7 +782,7 @@ let%expect_test "A raise_notrace OCaml exception" =
     -> 17.002ms BEGIN caml_ml_input
     -> 17.169ms BEGIN caml_read_fd
     -> 17.336ms BEGIN caml_leave_blocking_section
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN Demo3.code_begin
     -> 17.503ms END   caml_leave_blocking_section
     -> 17.503ms END   caml_read_fd

@@ -13498,7 +13498,7 @@ let%expect_test "C Demo with sampling including new extra events" =
       "\t    7f8bd9423964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)"
       "\t    7f8bd9423285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so)"
       "\t          4008de main+0x87 (/usr/local/home/demo)"))
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN main
     -> 34.378ms END   [unknown @ -0x637fef00 ([unknown])]
     -> 34.378ms END   _dl_load_cache_lookup
@@ -19987,7 +19987,7 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.609ms BEGIN ceilf32x
     3871580/3871580 434242.821999646:          1                                branches:uH:   call                     7fca9993cda5 _dl_relocate_object+0x7f5 (/usr/lib64/ld-2.28.so) =>     7fca9900cb10 __pow_finite+0x0 (/usr/lib64/libm-2.28.so)
     -> 12.609ms END   ceilf32x
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN main [inferred start time]
     ->      0ns BEGIN dlopen@@GLIBC_2.2.5 [inferred start time]
     ->      0ns BEGIN _dlerror_run [inferred start time]
@@ -27152,7 +27152,7 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585817057:          1                                branches:uH:   return                   7fca9993a6e0 do_lookup_x+0x3b0 (/usr/lib64/ld-2.28.so) =>     7fca9993af91 _dl_lookup_symbol_x+0x121 (/usr/lib64/ld-2.28.so)
     -> 112.66ms BEGIN do_lookup_x
     3871580/3871580 431345.585817057:          1                                branches:uH:   call                     7fca9993af8c _dl_lookup_symbol_x+0x11c (/usr/lib64/ld-2.28.so) =>     7fca9993a330 do_lookup_x+0x0 (/usr/lib64/ld-2.28.so)
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN main [inferred start time]
     ->      0ns BEGIN fprintf [inferred start time]
     ->      0ns BEGIN vfprintf [inferred start time]

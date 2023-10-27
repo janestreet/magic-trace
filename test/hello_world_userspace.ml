@@ -3687,7 +3687,7 @@ let%expect_test "C hello world, userspace only, gcc" =
     -> 155.596us BEGIN [untraced]
     30549/30549 174427.938616444:                           1    branches:uH:   tr end  syscall          7ffff7ad2da7 _Exit+0x37 (/usr/lib64/libc-2.17.so) =>                0 [unknown] ([unknown])
     -> 156.002us END   [untraced]
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN _start
     -> 156.068us BEGIN [syscall]
     -> 156.068us END   [syscall]

@@ -20,7 +20,7 @@ let%expect_test "decode error during memmove" =
     293415/293415 47170.086912872:                            1   branches:uH:   tr strt                             0 [unknown] (foo.so) =>     7ffff7327786 __memmove_avx_unaligned_erms+0x56 (foo.so)
     293415/293415 47170.086912946:                            1   branches:uH:   return                   7ffff73277d4 __memmove_avx_unaligned_erms+0xa4 (foo.so) =>           40b099 itch_bbo::book::Book::add_order+0x549 (foo.so)
     ->     67ns BEGIN __memmove_avx_unaligned_erms
-    END
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->     21ns BEGIN itch_bbo::book::Book::add_order [inferred start time]
     ->    141ns END   __memmove_avx_unaligned_erms
     ->    141ns END   itch_bbo::book::Book::add_order |}]
@@ -95,5 +95,5 @@ let%expect_test "decode error during rust B-tree rebalance" =
     ->    419ns END   _int_free
     ->    419ns END   merge_tracking_child_edge
     ->    420ns END   remove_leaf_kv
-    END |}]
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred |}]
 ;;
