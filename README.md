@@ -1,5 +1,8 @@
 <h1 align="center">
-  <img src="docs/assets/logo-dark.svg?sanitize=true#gh-dark-mode-only" width="150px"><img src="docs/assets/logo-light.svg?sanitize=true#gh-light-mode-only" width="150px">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg?sanitize=true">
+    <img src="docs/assets/logo-light.svg?sanitize=true" width="150px">
+  </picture>
   <br>
   magic-trace
 </h1>
