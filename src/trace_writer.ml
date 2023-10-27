@@ -511,7 +511,7 @@ let create_thread t event =
   let tid = opt_pid_to_string thread.tid in
   let default_name =
     if String.(pid = tid)
-    then [%string "[(p|t)id=%{pid}]"]
+    then [%string "[pid=%{pid}]"]
     else [%string "[pid=%{pid}] [tid=%{tid}]"]
   in
   let name =
