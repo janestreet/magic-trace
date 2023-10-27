@@ -26,3 +26,7 @@ let experimental = Option.is_some (Unix.getenv "MAGIC_TRACE_EXPERIMENTAL")
    [--dlfilter], this environment variable allows the user to forcibly disable
    filtering. *)
 let no_dlfilter = Option.is_some (Unix.getenv "MAGIC_TRACE_NO_DLFILTER")
+
+(* Demangle symbols in the fuzzy finder. This is currently slow on large binaries, so is
+   disabled by default. *)
+let fzf_demangle_symbols = Option.is_some (Unix.getenv "MAGIC_TRACE_FZF_DEMANGLE_SYMBOLS")

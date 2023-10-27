@@ -18,13 +18,17 @@ let select_owee_symbol ~elf ~header select =
   let open Deferred.Or_error.Let_syntax in
   let all_symbols = Elf.all_symbols ~select elf in
   let all_symbol_names = List.map all_symbols ~f:Tuple2.get1 in
-  let demangled_symbols =
-    List.map all_symbol_names ~f:(fun mangled_symbol ->
-      match Demangle_ocaml_symbols.demangle mangled_symbol with
-      | None -> mangled_symbol, mangled_symbol
-      | Some demangled_symbol -> demangled_symbol, mangled_symbol)
+  let fzf_pick_from : _ Fzf.Pick_from.t =
+    if not Env_vars.fzf_demangle_symbols
+    then Inputs all_symbol_names
+    else
+      List.map all_symbol_names ~f:(fun mangled_symbol ->
+        match Demangle_ocaml_symbols.demangle mangled_symbol with
+        | None -> mangled_symbol, mangled_symbol
+        | Some demangled_symbol -> demangled_symbol, mangled_symbol)
+      |> Assoc
   in
-  match%bind Fzf.pick_one ~header (Assoc demangled_symbols) with
+  match%bind Fzf.pick_one ~header fzf_pick_from with
   | None -> Deferred.Or_error.error_string "No symbol selected"
   | Some chosen_name ->
     let chosen_symbol =
