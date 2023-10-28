@@ -295,13 +295,13 @@ module Recording = struct
          | None, false ->
            Core.eprintf
              "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
-              overhead and decoding time. For more info: https://magic-trace.org/w/c\n";
+              overhead and decoding time. For more info: https://magic-trace.org/w/b\n";
            return (Some Callgraph_mode.Dwarf)
          | None, true ->
            Core.eprintf
              "Warning: [-callgraph-mode] is defaulting to [Last_branch_record] which may \
               lose data and has limited callstack depth. For more info: \
-              https://magic-trace.org/w/c\n";
+              https://magic-trace.org/w/b\n";
            return (Some (Callgraph_mode.Last_branch_record { stitched = true }))
          | Some (Last_branch_record _), false ->
            Deferred.Or_error.error_string
