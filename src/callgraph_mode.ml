@@ -26,7 +26,7 @@ let param =
       " When magic-trace is running with sampling collection mode, this sets how it \
        should reconstruct callstacks. The options are [lbr]/[lbr-no-stitch]/[dwarf]/[fp] \
        or a sexp. Will default to [lbr] is available and [dwarf] otherwise. For more \
-       info: https://magic-trace.org/w/c"
+       info: https://magic-trace.org/w/b"
 ;;
 
 let to_perf_record_args = function
