@@ -1029,8 +1029,10 @@ let write_event (T t) ?events_writer event =
          ~time;
        (match kind, trace_state_change with
         | Some Call, (None | Some End) -> call t thread_info ~time ~location:dst
-        | ( Some (Call | Syscall | Return | Hardware_interrupt | Iret | Sysret | Jump)
+        | ( Some
+              (Async | Call | Syscall | Return | Hardware_interrupt | Iret | Sysret | Jump)
           , Some Start )
+        | Some Async, None
         | Some (Hardware_interrupt | Jump), Some End ->
           raise_s
             [%message
@@ -1038,7 +1040,8 @@ let write_event (T t) ?events_writer event =
                proved them wrong. Please report this to \
                https://github.com/janestreet/magic-trace/issues/"
                 (event : Event.t)]
-        | None, Some End -> call t thread_info ~time ~location:Event.Location.untraced
+        | (None | Some Async), Some End ->
+          call t thread_info ~time ~location:Event.Location.untraced
         | Some Syscall, Some End ->
           (* We should only be getting these under /u *)
           assert_trace_scope t outer_event [ Userspace ];

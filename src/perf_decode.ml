@@ -22,7 +22,7 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -262,6 +262,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       | "hw int" -> Some Hardware_interrupt
       | "iret" -> Some Iret
       | "sysret" -> Some Sysret
+      | "async" -> Some Async
       | "" -> None
       | _ ->
         printf "Warning: skipping unrecognized perf output: %s\n%!" line;
@@ -687,6 +688,18 @@ let%test_module _ =
         ((Ok
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data (Trace (kind Call) (src 0x7f6fce0b71f4) (dst 0x7ffd193838e0)))))) |}]
+    ;;
+
+    let%expect_test "tr end  async" =
+      check
+        {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr end  async                     7f6fce0b71f4 [unknown] (foo.so) =>     0 [unknown] ([unknown])|};
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (data
+            (Trace (trace_state_change End) (kind Async) (src 0x7f6fce0b71f4)
+             (dst 0x0)))))) |}]
     ;;
   end)
 ;;
