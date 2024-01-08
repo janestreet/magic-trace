@@ -2,6 +2,7 @@ open! Core
 
 module Kind = struct
   type t =
+    | Async
     | Call
     | Return
     | Syscall
