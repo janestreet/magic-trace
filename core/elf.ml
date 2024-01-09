@@ -216,13 +216,13 @@ let find_selection t name : Selection.t option =
           | None -> None
           | Some address -> Some (Selection.Address { address; name })))
   in
-  let find_addr_selection name =
+  let find_addr_selection addr =
     Option.bind
       (Option.try_with (fun () ->
-         let name =
-           if String.is_prefix ~prefix:"0x" name then String.drop_prefix name 2 else name
+         let addr =
+           if not (String.is_prefix ~prefix:"0x" addr) then "0x" ^ addr else addr
          in
-         Int.Hex.of_string name))
+         Int.Hex.of_string addr))
       ~f:(fun address -> Some (Selection.Address { address; name }))
   in
   let find_symbol_selection name =
