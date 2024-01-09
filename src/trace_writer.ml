@@ -522,7 +522,10 @@ let create_thread t event =
        | None -> default_name
        | Some cmdline ->
          let concat_cmdline = String.concat ~sep:" " cmdline in
-         [%string "%{concat_cmdline} %{default_name}"])
+         let name = [%string "%{concat_cmdline} %{default_name}"] in
+         if String.length name > Tracing_zero.Writer.max_interned_string_length
+         then default_name
+         else name)
   in
   let track_group_id = allocate_pid t ~name in
   let thread = allocate_thread t ~pid:track_group_id ~name:"main" in
