@@ -75,6 +75,15 @@ let debug_print_perf_commands =
   |> debug_flag
 ;;
 
+let debug_print_pid =
+  let open Command.Param in
+  flag
+    "-z-print-pid"
+    no_arg
+    ~doc:"Prints the PIDs of the processes magic-trace attaches to."
+  |> debug_flag
+;;
+
 module Null_writer : Trace_writer_intf.S_trace = struct
   type thread = unit
 
@@ -314,6 +323,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     (opts : Record_opts.t)
     ~elf
     ~debug_print_perf_commands
+    ~debug_print_pid
     ~subcommand
     ~collection_mode
     pids
@@ -350,6 +360,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       Backend.Recording.attach_and_record
         opts.backend_opts
         ~debug_print_perf_commands
+        ~debug_print_pid
         ~subcommand
         ~when_to_snapshot:opts.when_to_snapshot
         ~trace_scope:opts.trace_scope
@@ -436,6 +447,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     record_opts
     ~elf
     ~debug_print_perf_commands
+    ~debug_print_pid
     ~prog
     ~argv
     ~collection_mode
@@ -447,6 +459,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         record_opts
         ~elf
         ~debug_print_perf_commands
+        ~debug_print_pid
         ~subcommand:Run
         ~collection_mode
         [ pid ]
@@ -482,12 +495,20 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return pid
   ;;
 
-  let attach_and_record record_opts ~elf ~debug_print_perf_commands ~collection_mode pids =
+  let attach_and_record
+    record_opts
+    ~elf
+    ~debug_print_perf_commands
+    ~debug_print_pid
+    ~collection_mode
+    pids
+    =
     let%bind.Deferred.Or_error attachment =
       attach
         record_opts
         ~elf
         ~debug_print_perf_commands
+        ~debug_print_pid
         ~subcommand:Attach
         ~collection_mode
         pids
@@ -585,6 +606,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_pid = debug_print_pid
        and prog = anon ("COMMAND" %: string)
        and argv =
          flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
@@ -608,6 +630,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                opts
                ~elf
                ~debug_print_perf_commands
+               ~debug_print_pid
                ~prog
                ~argv
                ~collection_mode:opts.collection_mode
@@ -680,6 +703,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_pid = debug_print_pid
        and pids =
          flag
            "-pid"
@@ -719,6 +743,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
                  opts
                  ~elf
                  ~debug_print_perf_commands
+                 ~debug_print_pid
                  ~collection_mode
                  pids
              in
