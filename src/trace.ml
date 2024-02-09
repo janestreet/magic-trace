@@ -575,7 +575,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ~readme:(fun () ->
         "=== examples ===\n\n\
          # Run a process, snapshotting at ^C or exit\n\
-         magic-trace run ./program -- arg1 arg2\n\n\
+         magic-trace run -- ./program arg1 arg2\n\n\
          # Run and trace all threads of a process, not just the main one, snapshotting \
          at ^C or exit\n\
          magic-trace run -multi-thread ./program -- arg1 arg2\n\n\
@@ -585,13 +585,21 @@ module Make_commands (Backend : Backend_intf.S) = struct
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
-       and prog = anon ("COMMAND" %: string)
        and argv =
-         flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
+         let%map_open.Command command = anon (maybe ("COMMAND" %: string))
+         and more_command =
+           flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
+         in
+         Option.to_list command @ Option.value more_command ~default:[]
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
          let%bind () = check_for_perf () in
+         let prog =
+           match List.hd argv with
+           | None -> failwith "no program name provided at the command line"
+           | Some prog -> prog
+         in
          let executable =
            match Shell.which prog with
            | Some path -> path
@@ -603,7 +611,6 @@ module Make_commands (Backend : Backend_intf.S) = struct
              evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
            in
            let%bind pid =
-             let argv = prog :: List.concat (Option.to_list argv) in
              run_and_record
                opts
                ~elf
