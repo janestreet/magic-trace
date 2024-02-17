@@ -21,7 +21,7 @@ end
 let range_hit_times ~decode_events ~range_symbols =
   let open Deferred.Or_error.Let_syntax in
   let%bind { Decode_result.events; _ } = decode_events () in
-  Deferred.List.map events ~f:(fun events ->
+  Deferred.List.map events ~how:`Sequential ~f:(fun events ->
     let { Trace_filter.start_symbol; stop_symbol } = range_symbols in
     let is_start symbol = String.(Symbol.display_name symbol = start_symbol) in
     let is_stop symbol = String.(Symbol.display_name symbol = stop_symbol) in

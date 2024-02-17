@@ -166,12 +166,12 @@ let lookup_string_exn t ~index =
   if index = 0
   then ""
   else (
-    try Int.Table.find_exn t.string_table index with
+    try Hashtbl.find_exn t.string_table index with
     | _ -> raise String_not_found)
 ;;
 
 let lookup_thread_exn t ~index =
-  try Int.Table.find_exn t.thread_table index with
+  try Hashtbl.find_exn t.thread_table index with
   | _ -> raise Thread_not_found
 ;;
 
@@ -216,7 +216,7 @@ let parse_metadata_record t =
     let provider_name =
       consume_tail_padded_string_exn t.cur_record ~len:(name_len + padding)
     in
-    Int.Table.set t.provider_name_by_id ~key:provider_id ~data:provider_name;
+    Hashtbl.set t.provider_name_by_id ~key:provider_id ~data:provider_name;
     t.current_provider <- Some provider_id
   | 2 (* Provider section metadata *) ->
     let provider_id = extract_field header ~pos:20 ~size:32 in
@@ -268,7 +268,7 @@ let parse_string_record t =
     let interned_string =
       consume_tail_padded_string_exn t.cur_record ~len:(str_len + padding)
     in
-    Int.Table.set t.string_table ~key:string_index ~data:interned_string;
+    Hashtbl.set t.string_table ~key:string_index ~data:interned_string;
     Some (Record.Interned_string { index = string_index; value = interned_string }))
 ;;
 
@@ -286,12 +286,12 @@ let parse_thread_record t =
     let thread =
       { Thread.pid = process_koid
       ; tid = thread_koid
-      ; process_name = Int.Table.find t.process_names process_koid
+      ; process_name = Hashtbl.find t.process_names process_koid
       ; thread_name =
-          Thread_kernel_object.Table.find t.thread_names (process_koid, thread_koid)
+          Hashtbl.find t.thread_names (process_koid, thread_koid)
       }
     in
-    Int.Table.set t.thread_table ~key:thread_index ~data:thread;
+    Hashtbl.set t.thread_table ~key:thread_index ~data:thread;
     Some (Record.Interned_thread { index = thread_index; value = thread }))
 ;;
 
@@ -348,9 +348,9 @@ let parse_kernel_object_record t =
   match obj_type with
   | 1 (* process *) ->
     let koid = consume_int64_trunc_exn t.cur_record in
-    Int.Table.set t.process_names ~key:koid ~data:name_str;
+    Hashtbl.set t.process_names ~key:koid ~data:name_str;
     (* Update the name of any matching process in the process table. *)
-    Int.Table.iter t.thread_table ~f:(fun thread ->
+    Hashtbl.iter t.thread_table ~f:(fun thread ->
       if thread.pid = koid then thread.process_name <- Some name_str);
     if num_args > 0
     then t.warnings.num_unparsed_args <- t.warnings.num_unparsed_args + num_args;
@@ -368,12 +368,12 @@ let parse_kernel_object_record t =
       then (
         consume_int32_exn t.cur_record |> (ignore : int -> unit);
         let process_koid = consume_int64_trunc_exn t.cur_record in
-        Thread_kernel_object.Table.set
+        Hashtbl.set
           t.thread_names
           ~key:(process_koid, koid)
           ~data:name_str;
         (* Update the name of any matching thread in the thread table. *)
-        Int.Table.iter t.thread_table ~f:(fun thread ->
+        Hashtbl.iter t.thread_table ~f:(fun thread ->
           if thread.pid = process_koid && thread.tid = koid
           then thread.thread_name <- Some name_str);
         (* Mark any remaining arguments as unparsed. *)
