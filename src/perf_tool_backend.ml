@@ -440,10 +440,13 @@ module Recording = struct
 
   let finish_recording t =
     Signal_unix.send_i Signal.term (`Pid t.pid);
-    (* This should usually be a signal exit, but we don't really care, if it didn't produce
-       a good perf.data file the next step will fail. *)
-    let%map (res : Core_unix.Exit_or_signal.t) = Async_unix.Unix.waitpid t.pid in
-    perf_exit_to_or_error res
+    (* This should usually be a signal exit, but we don't really care, if it didn't
+       produce a good perf.data file the next step will fail.
+
+       [Monitor.try_with] because [waitpid] raises if perf exited before we get here. *)
+    match%map.Deferred Monitor.try_with (fun () -> Async_unix.Unix.waitpid t.pid) with
+    | Ok res -> perf_exit_to_or_error res
+    | Error _exn -> Ok ()
   ;;
 end
 
