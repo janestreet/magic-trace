@@ -115,7 +115,7 @@ We just did this one: <kbd>Ctrl</kbd>+<kbd>C</kbd> magic-trace. If magic-trace t
 You can also trigger snapshots when the application calls a function. To do so, pass magic-trace
 the `-trigger` flag.
 
-- `-trigger ?` brings up a fuzzy-finding selector that lets you choose from all
+- `-trigger '?'` brings up a fuzzy-finding selector that lets you choose from all
   symbols in your executable,
 - `-trigger SYMBOL` selects a specific, fully mangled, symbol you know ahead of time, and
 - `-trigger .` selects the default symbol `magic_trace_stop_indicator`.
