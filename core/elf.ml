@@ -262,7 +262,7 @@ let all_symbols ?(select = `File_or_func) t =
            symbol tables. *)
         (match Hashtbl.add res ~key:name ~data:symbol with
          | `Ok | `Duplicate -> ())));
-  String.Table.to_alist res
+  Hashtbl.to_alist res
 ;;
 
 let all_file_selections t symbol =

@@ -207,7 +207,7 @@ module Recording = struct
     Sys.readdir record_dir
     |> Deferred.bind
          ~f:
-           (Deferred.Array.iter ~f:(fun file ->
+           (Deferred.Array.iter ~how:`Sequential ~f:(fun file ->
               if String.is_prefix file ~prefix:"perf.data"
               then Sys.remove (record_dir ^/ file)
               else Deferred.return ()))
@@ -482,7 +482,7 @@ let decode_events
     >>| List.filter ~f:(String.is_prefix ~prefix:"perf.data")
   in
   let%map result =
-    Deferred.List.map files ~f:(fun perf_data_file ->
+    Deferred.List.map files ~how:`Sequential ~f:(fun perf_data_file ->
       let itrace_opts =
         match collection_mode with
         | Intel_processor_trace _ -> [ "--itrace=bep" ]

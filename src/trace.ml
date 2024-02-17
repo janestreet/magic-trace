@@ -175,7 +175,7 @@ let write_trace_from_events
     Trace_writer.write_event writer ?events_writer ev
   in
   let%bind () =
-    Deferred.List.iteri events ~f:(fun index events ->
+    Deferred.List.iteri events ~how:`Sequential ~f:(fun index events ->
       Pipe.iter_without_pushback events ~f:(process_event index))
   in
   (match events_writer with

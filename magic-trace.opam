@@ -10,7 +10,7 @@ build: [
   ["dune" "build" "-p" name "-j" jobs]
 ]
 depends: [
-  "ocaml"        {>= "4.12"}
+  "ocaml"        {>= "4.14"}
   "async"
   "cohttp"
   "cohttp_static_handler"

@@ -215,13 +215,13 @@ module Table = struct
   ;;
 
   let load_by_files files =
-    Deferred.List.map files ~f:(fun filename ->
+    Deferred.List.map files ~how:`Sequential ~f:(fun filename ->
       load filename |> Deferred.map ~f:(fun map -> pid_of_filename filename, map))
     >>| create
   ;;
 
   let load_by_pids pids =
-    Deferred.List.map pids ~f:(fun pid ->
+    Deferred.List.map pids ~how:`Sequential ~f:(fun pid ->
       load (default_filename ~pid) |> Deferred.map ~f:(fun map -> pid, map))
     >>| create
   ;;
