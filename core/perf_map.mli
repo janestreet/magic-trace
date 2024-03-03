@@ -1,7 +1,7 @@
 open! Core
 open! Async
 
-(* JITed lanaguages like java and javascript can write perf map files which provide a mapping of
+(* JITed languages like java and javascript can write perf map files which provide a mapping of
    address to symbol name.
 
    They're documented here:

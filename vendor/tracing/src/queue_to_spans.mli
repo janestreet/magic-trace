@@ -3,7 +3,7 @@
 
     This module lets you guess a start time for events using the simple property that in a
     single-threaded system an event can't start processing until the later of when it
-    arrives and when you finished processing the preceeding event to be sent out. *)
+    arrives and when you finished processing the preceding event to be sent out. *)
 
 open! Core
 

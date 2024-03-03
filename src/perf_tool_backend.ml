@@ -248,7 +248,7 @@ module Recording = struct
            "Warning: magic-trace will only be able to snapshot when magic-trace is \
             Ctrl+C'd, not when the application it's running ends. If that application \
             ends before magic-trace can snapshot it, the resulting trace will be empty. \
-            The ability to snapshot when an application teminates was added to perf's \
+            The ability to snapshot when an application terminates was added to perf's \
             userspace tools in version 5.4. For more information, see:\n\
             https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
             %!"
