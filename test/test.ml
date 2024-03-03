@@ -618,7 +618,7 @@ let%expect_test "time batch spreading" =
   return ()
 ;;
 
-let%expect_test "enqueing events at start" =
+let%expect_test "enqueuing events at start" =
   let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
   let events =
     Trace_helpers.(

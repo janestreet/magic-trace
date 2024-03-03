@@ -44,7 +44,7 @@ val max_interned_string_length : int
 val intern_string : t -> string -> String_id.t
 
 (** This interns a string while re-using a set of 100 reserved string IDs (by default, the
-    number can be overriden at writer creation). Setting the string in a slot overwrites
+    number can be overridden at writer creation). Setting the string in a slot overwrites
     what was previously in that slot so any further events written in the trace see the new
     value. This allows arbitrarily many unique strings to be used in a trace, unlike
     [intern_string].*)
@@ -99,7 +99,7 @@ module Arg_types : sig
 end
 
 (** Most event writer functions take a common set of arguments including a commitment to
-    what event arguments will be added ([arg_types]), a thread the event occured on, a
+    what event arguments will be added ([arg_types]), a thread the event occurred on, a
     [category] which is an arbitrary string classifying the event visible in UIs and
     potentially used for filtering, a [name] that's the main label for the event, and a
     timestamp in "ticks" which defaults to nanoseconds since the start of the trace, but
@@ -220,7 +220,7 @@ module Expert : sig
       using the usual [write_*] functions, saving about 6ns per event.
 
       The only caller-visible check omission should be that it doesn't check the
-      corectness of arguments, which can result in invalid trace files if the arguments
+      correctness of arguments, which can result in invalid trace files if the arguments
       written don't match the header. Users of this function must use
       [Write_arg_unchecked] because it doesn't set the necessary state for checking. *)
   val write_from_header_with_tsc : t -> header:header -> unit

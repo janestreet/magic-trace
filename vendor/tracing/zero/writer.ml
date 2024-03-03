@@ -27,7 +27,7 @@ module Header_template = struct
 
   (* Because of the two bitfields for total size and argument count, we can effectively
      treat the full [Header_template] as the sum of integers representing the arguments
-     we've comitted to. We can subtract integers representing those individual arguments
+     we've committed to. We can subtract integers representing those individual arguments
      to remove them from the template, and if we reach zero then we've subtracted
      compatible arguments. Except for issues involving overflow between the two fields,
      which are unlikely to happen accidentally in practice, and this is only used by

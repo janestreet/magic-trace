@@ -32,6 +32,6 @@ let param =
     (optional Unevaluated.arg_type)
     ~doc:
       "_ [-filter \"(<START> <STOP>)\"] restricts the output of magic-trace to events \
-       ocurring between consecutive occurences of START and STOP. If either function is \
+       occurring between consecutive occurrences of START and STOP. If either function is \
        not called in the trace, no output will be produced."
 ;;

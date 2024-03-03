@@ -438,7 +438,7 @@ let parse_event_record t =
     None
 ;;
 
-(* This function advances through the trace until it finds a Fuschia record matching one
+(* This function advances through the trace until it finds a Fuchsia record matching one
    of the records types defined in [Record.t]. *)
 let rec parse_until_next_external_record t =
   if Iobuf.length t.iobuf < 8 then raise End_of_file;

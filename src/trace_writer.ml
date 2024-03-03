@@ -812,7 +812,7 @@ end = struct
              | Pushtrap ->
                (* CR-someday tbrindus: maybe we should have [Callstack.t] know about the
                   concept of trap handlers, and have e.g. [Callstack.{pushtrap,poptrap}]
-                  insert markers into an auxilliary data structure.
+                  insert markers into an auxiliary data structure.
 
                   Then we could have operations like "close all frames until the last
                   trap", and enforce invariants like "you can't [ret] past a trap without
@@ -961,7 +961,7 @@ let warn_decode_error ~instruction_pointer ~message =
        [%string "'%{message}' @ IP %{instruction_pointer#Int64.Hex}."])
 ;;
 
-(* Write perf_events into a file as a Fuschia trace (stack events). Events should be
+(* Write perf_events into a file as a Fuchsia trace (stack events). Events should be
    collected with --itrace=be or cre, and -F pid,tid,time,flags,addr,sym,symoff as per
    the constants defined above. *)
 let write_event (T t) ?events_writer event =
