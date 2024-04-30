@@ -1,4 +1,4 @@
-#!/usr/bin/env -S java --source 11
+#!/usr/bin/env -S java -XX:+UnlockDiagnosticVMOptions -XX:+DebugNonSafepoints -XX:+DumpPerfMapAtExit -XX:+PreserveFramePointer --source 17
 
 import java.io.FileReader;
 import java.io.FileWriter;

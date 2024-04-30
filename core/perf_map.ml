@@ -9,7 +9,7 @@ let perf_map_re =
      Not every runtime contains the file and line, so let's just call all of that stuff the name.
      That matches the spec linked in the mli.
   *)
-  Re.Posix.re {|^([0-9a-fA-F]+) ([0-9a-fA-F]+) (.*)$|} |> Re.compile
+  Re.Posix.re {|^(0x)?([0-9a-fA-F]+) (0x)?([0-9a-fA-F]+) (.*)$|} |> Re.compile
 ;;
 
 let parse_line line =
@@ -19,7 +19,7 @@ let parse_line line =
   else (
     try
       match Re.Group.all (Re.exec perf_map_re line) with
-      | [| _; start_addr; size; function_ |] ->
+      | [| _; _; start_addr; _; size; function_ |] ->
         let start_addr = Util.int64_of_hex_string start_addr in
         ( start_addr
         , { Perf_map_location.start_addr
@@ -55,6 +55,9 @@ let%test_module _ =
 3a6caa5241e cfd LazyCompile:~formatRaw node:internal/util/inspect:820
 3a6caa537c6 13f LazyCompile:~getConstructorName node:internal/util/inspect:567
 3a6caa53a96 d LazyCompile:~isInstanceof node:internal/util/inspect:559
+0x000075595c6a34a0 0x0000000000000170 long java.util.Spliterator.getExactSizeIfKnown()
+0x00007afaa486ce20 0x00000000000000c8 com.fasterxml.jackson.core.JsonToken com.fasterxml.jackson.core.base.ParserMinimalBase.currentToken()
+0x00007557305a01a0 0x00000000000001f8 boolean jdk.internal.misc.Unsafe.compareAndSetLong(java.lang.Object, long, long, long)
 00007F5D97BCAE50 22 instance void [System.Private.CoreLib] System.Collections.Generic.Dictionary`2[System.__Canon,System.Double]::.ctor()[QuickJitted]
 00007F5D97BCAD40 10 stub<1023> AllocateTemporaryEntryPoints<PRECODE_FIXUP>
 00007F5D97BCAD58 48 stub<1024> AllocateTemporaryEntryPoints<PRECODE_FIXUP>
@@ -117,6 +120,20 @@ let%test_module _ =
           ((0x3a6caa53a96
             ((start_addr 0x3a6caa53a96) (size 0xd)
              (function_ "LazyCompile:~isInstanceof node:internal/util/inspect:559")))))
+         ("0x000075595c6a34a0 0x0000000000000170 long java.util.Spliterator.getExactSizeIfKnown()"
+          ((0x75595c6a34a0
+            ((start_addr 0x75595c6a34a0) (size 0x170)
+             (function_ "long java.util.Spliterator.getExactSizeIfKnown()")))))
+         ("0x00007afaa486ce20 0x00000000000000c8 com.fasterxml.jackson.core.JsonToken com.fasterxml.jackson.core.base.ParserMinimalBase.currentToken()"
+          ((0x7afaa486ce20
+            ((start_addr 0x7afaa486ce20) (size 0xc8)
+             (function_
+              "com.fasterxml.jackson.core.JsonToken com.fasterxml.jackson.core.base.ParserMinimalBase.currentToken()")))))
+         ("0x00007557305a01a0 0x00000000000001f8 boolean jdk.internal.misc.Unsafe.compareAndSetLong(java.lang.Object, long, long, long)"
+          ((0x7557305a01a0
+            ((start_addr 0x7557305a01a0) (size 0x1f8)
+             (function_
+              "boolean jdk.internal.misc.Unsafe.compareAndSetLong(java.lang.Object, long, long, long)")))))
          ("00007F5D97BCAE50 22 instance void [System.Private.CoreLib] System.Collections.Generic.Dictionary`2[System.__Canon,System.Double]::.ctor()[QuickJitted]"
           ((0x7f5d97bcae50
             ((start_addr 0x7f5d97bcae50) (size 0x22)
