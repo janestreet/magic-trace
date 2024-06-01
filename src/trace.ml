@@ -312,6 +312,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
 
   let attach
     (opts : Record_opts.t)
+    ~cmd
     ~elf
     ~debug_print_perf_commands
     ~subcommand
@@ -349,6 +350,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%map.Deferred.Or_error recording, recording_data =
       Backend.Recording.attach_and_record
         opts.backend_opts
+        ~cmd
         ~debug_print_perf_commands
         ~subcommand
         ~when_to_snapshot:opts.when_to_snapshot
@@ -442,9 +444,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     =
     let open Deferred.Or_error.Let_syntax in
     let pid = Ptrace.fork_exec_stopped ~prog ~argv () in
+    let cmd = [] in
     let%bind attachment =
       attach
         record_opts
+        ~cmd
         ~elf
         ~debug_print_perf_commands
         ~subcommand:Run
@@ -486,10 +490,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
     return pid
   ;;
 
-  let attach_and_record record_opts ~elf ~debug_print_perf_commands ~collection_mode pids =
+  let attach_and_record record_opts ~cmd ~elf ~debug_print_perf_commands ~collection_mode pids =
     let%bind.Deferred.Or_error attachment =
       attach
         record_opts
+        ~cmd
         ~elf
         ~debug_print_perf_commands
         ~subcommand:Attach
@@ -688,10 +693,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace attach\n\n\
          # Fuzzy-find to select a running process and symbol to trigger on, snapshotting \
          the next time the symbol is called\n\
-         magic-trace attach -trigger ?\n")
+         magic-trace attach -trigger ?\n\n\
+         # Add a command in the end to forward it to perf\n\
+         magic-trace attach -trigger sym sleep 5\n\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands = debug_print_perf_commands
+       and cmd = (anon (sequence ("command" %: string )))
        and pids =
          flag
            "-pid"
@@ -729,6 +737,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
              let%bind () =
                attach_and_record
                  opts
+                 ~cmd
                  ~elf
                  ~debug_print_perf_commands
                  ~collection_mode

@@ -20,6 +20,7 @@ module type S = sig
 
     val attach_and_record
       :  Record_opts.t
+      -> cmd:string list
       -> debug_print_perf_commands:bool
       -> subcommand:Subcommand.t
       -> when_to_snapshot:When_to_snapshot.t
