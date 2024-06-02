@@ -1,5 +1,6 @@
 open! Core
 open! Async
+open! Unix
 
 let bit n = Int63.of_int (1 lsl n)
 let configurable_psb_period = bit 0
@@ -77,13 +78,20 @@ let supports_last_branch_record () =
 ;;
 
 let supports_tracing_kernel () =
-  (* Only allow tracing the kernel if we are root. `perf` will start even without this,
-     but the generated traces will be broken, so disallow it here.
-
-     This check is technically stricter than it has to be. We could query the capability
-     bits of the perf binary here instead, as per
-     <https://perf.wiki.kernel.org/index.php/Perf_tools_support_for_Intel%C2%AE_Processor_Trace#Adding_capabilities_to_perf> *)
-  Int.(Core_unix.geteuid () = 0)
+  if Int.(Core_unix.geteuid () = 0)
+  then Deferred.return true
+  else (
+    (* get capability string *)
+    let%bind perf_path = Process.create_exn ~prog:"which" ~args:[ "perf" ] () in
+    let%bind path_string_slashn = Reader.contents (Process.stdout perf_path) in
+    let path_string = String.chop_suffix_exn path_string_slashn ~suffix:"\n" in
+    let%bind linux_version = Process.create_exn ~prog:"uname" ~args:[ "-r" ] () in
+    let%bind version_string_slashn = Reader.contents (Process.stdout linux_version) in
+    let version_string = String.chop_suffix_exn version_string_slashn ~suffix:"\n" in
+    let%bind capabilities = Process.create_exn ~prog:"getcap" ~args:[ path_string ] () in
+    let%map cap_string = Reader.contents (Process.stdout capabilities) in
+    (* parse string and check for kernel tracing capabilities *)
+    Capability.check_perf_support cap_string version_string)
 ;;
 
 let kernel_version_at_least ~major ~minor version =
@@ -101,12 +109,13 @@ let supports_dlfilter = kernel_version_at_least ~major:5 ~minor:14
 
 let detect_exn () =
   let%bind perf_version_proc = Process.create_exn ~prog:"perf" ~args:[ "--version" ] () in
-  let%map version_string = Reader.contents (Process.stdout perf_version_proc) in
+  let%bind version_string = Reader.contents (Process.stdout perf_version_proc) in
+  let%map supports_tracing_kernel_output = supports_tracing_kernel () in
   let version = Version.of_perf_version_string_exn version_string in
   let set_if bool flag cap = cap + if bool then flag else empty in
   empty
   |> set_if (supports_configurable_psb_period ()) configurable_psb_period
-  |> set_if (supports_tracing_kernel ()) kernel_tracing
+  |> set_if supports_tracing_kernel_output kernel_tracing
   |> set_if (supports_kcore version) kcore
   |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
   |> set_if (supports_last_branch_record ()) last_branch_record
