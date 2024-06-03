@@ -1,6 +1,5 @@
 open Core
 open Magic_trace_lib
-open Import
 
 let compressed_test_string =
   {|(

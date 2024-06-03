@@ -2,7 +2,6 @@
 
 open! Core
 open! Async
-open! Import
 
 let supports_command command =
   Lazy.from_fun (fun () ->

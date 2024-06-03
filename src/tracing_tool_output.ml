@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open! Import
 
 module Serve = struct
   type enabled =

@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open! Magic_trace_core
 
 (* Runs some perf script end-to-end through the perf_tool_backend and the trace_writer, printing
    out generated traces as a string.
@@ -17,7 +16,7 @@ open! Magic_trace_core
 val run
   :  ?debug:bool
   -> ?events_writer:Magic_trace_lib.Tracing_tool_output.events_writer
-  -> ?ocaml_exception_info:Ocaml_exception_info.t
-  -> trace_scope:Trace_scope.t
+  -> ?ocaml_exception_info:Magic_trace_lib.Ocaml_exception_info.t
+  -> trace_scope:Magic_trace_lib.Trace_scope.t
   -> Filename.t
   -> unit Deferred.t

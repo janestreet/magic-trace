@@ -1,5 +1,4 @@
 open! Core
-open! Import
 
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)

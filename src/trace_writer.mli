@@ -1,5 +1,4 @@
 open! Core
-open! Import
 
 (* Enable this in tests to see [t] after every perf event. Don't forget to disable it when
    you're done!

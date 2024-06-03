@@ -1,5 +1,4 @@
 open! Core
-open! Import
 open Trace_writer_intf
 
 (* Creates an abstract [S_trace] out of a real [Tracing] backend. I know this isn't a great reason,

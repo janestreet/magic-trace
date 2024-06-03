@@ -1,5 +1,4 @@
 open! Core
-open! Import
 open Trace_writer_intf
 
 let create (trace : Tracing.Trace.t) =

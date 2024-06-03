@@ -17,7 +17,7 @@
   (names breakpoint_stubs boot_time_stubs ptrace_stubs))
  (libraries core async core_unix.filename_unix fzf re shell
    core_unix.sys_unix cohttp cohttp_static_handler core_unix.signal_unix
-   tracing magic_trace magic_trace_core)
+   tracing magic_trace owee angstrom expect_test_helpers_core)
  (inline_tests)
  (preprocess
   (pps ppx_jane)))

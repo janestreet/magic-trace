@@ -1,5 +1,4 @@
 open! Core
-open! Import
 
 module type S_trace = sig
   type thread

@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open! Import
 
 (* PAGER=cat because perf spawns [less] if you get the arguments wrong, and that keeps the
    parent process alive even though it just failed. That, in turn, makes magic-trace stop
