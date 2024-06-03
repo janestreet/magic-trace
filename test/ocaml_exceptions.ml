@@ -30,7 +30,7 @@ open! Async
 
 let%expect_test "A raise_notrace OCaml exception" =
   let ocaml_exception_info =
-    Magic_trace_core.Ocaml_exception_info.create
+    Magic_trace_lib.Ocaml_exception_info.create
       ~entertraps:[| 0x411030L |]
       ~pushtraps:[| 0x41100bL |]
       ~poptraps:[| 0x411026L |]
@@ -91,7 +91,7 @@ let%expect_test "A raise_notrace OCaml exception" =
 
 let%expect_test "a corner case where a call doesn't return directly into a poptrap" =
   let ocaml_exception_info =
-    Magic_trace_core.Ocaml_exception_info.create
+    Magic_trace_lib.Ocaml_exception_info.create
       ~entertraps:[| 0xffffffL (* not used *) |]
       ~pushtraps:[| 0xcb457dL |]
       ~poptraps:[| 0xcb459cL |]
@@ -115,7 +115,7 @@ let%expect_test "a corner case where a call doesn't return directly into a poptr
 
 let%expect_test "the same test case above, as if there was no exception block" =
   let ocaml_exception_info =
-    Magic_trace_core.Ocaml_exception_info.create
+    Magic_trace_lib.Ocaml_exception_info.create
       ~entertraps:[||]
       ~pushtraps:[||]
       ~poptraps:[||]

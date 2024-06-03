@@ -2,6 +2,6 @@
  (name magic_trace_app_test)
  (inline_tests)
  (libraries async core expect_test_helpers_core expect_test_helpers_async
-   magic_trace_lib magic_trace_core)
+   magic_trace_lib)
  (preprocess
   (pps ppx_jane)))

@@ -1,5 +1,4 @@
 open Core
-open Import
 
 type t =
   { symbol_to_id : (Symbol.t, int) Hashtbl.t

@@ -2,7 +2,6 @@
 
 open! Core
 open! Async
-open! Import
 
 val to_events
   :  ?perf_maps:Perf_map.Table.t

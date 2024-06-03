@@ -3,7 +3,7 @@ open! Async
 open! Magic_trace_lib.Trace.For_testing
 
 include struct
-  open Magic_trace_core
+  open Magic_trace_lib
   module Decode_result = Decode_result
   module Event = Event
   module Symbol = Symbol
@@ -791,9 +791,9 @@ let%expect_test "filtered trace" =
 ;;
 
 let%expect_test "get debug information from ELF" =
-  let elf = Magic_trace_core.Elf.create "sample-targets/ocaml-raise/sample.exe" in
+  let elf = Magic_trace_lib.Elf.create "sample-targets/ocaml-raise/sample.exe" in
   let debug_table =
-    Magic_trace_core.Elf.addr_table (Option.value_exn elf)
+    Magic_trace_lib.Elf.addr_table (Option.value_exn elf)
     |> Hashtbl.filter ~f:(fun info ->
       match info.filename with
       | Some "sample.ml" -> true

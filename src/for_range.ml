@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open! Import
 
 module Symbol_hit = struct
   module Kind = struct

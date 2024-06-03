@@ -1,6 +1,5 @@
 open! Core
 open! Async
-open Magic_trace_core
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 

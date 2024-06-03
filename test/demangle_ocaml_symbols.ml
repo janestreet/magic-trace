@@ -1,8 +1,7 @@
 open! Core
-open Magic_trace_core
 
 let demangle_symbol_test symbol =
-  let demangle_symbol = Demangle_ocaml_symbols.demangle symbol in
+  let demangle_symbol = Magic_trace_lib.Demangle_ocaml_symbols.demangle symbol in
   print_s [%sexp (demangle_symbol : string option)]
 ;;
 
