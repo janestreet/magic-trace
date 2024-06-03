@@ -22,12 +22,12 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(?:\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
 let perf_cbr_event_re =
-  Re.Perl.re {|^ *([a-z ]*)? +cbr: +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|} |> Re.compile
+  Re.Perl.re {|^ *([a-z )(]*)? +cbr: +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|} |> Re.compile
 ;;
 
 let trace_error_re =
@@ -263,6 +263,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       | "iret" -> Some Iret
       | "sysret" -> Some Sysret
       | "async" -> Some Async
+      | "tx abrt" -> Some Jump
       | "" -> None
       | _ ->
         printf "Warning: skipping unrecognized perf output: %s\n%!" line;
