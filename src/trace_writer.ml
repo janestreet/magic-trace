@@ -144,6 +144,7 @@ type 'thread inner =
   ; trace : (module Trace with type thread = 'thread)
   ; annotate_inferred_start_times : bool
   ; mutable in_filtered_region : bool
+  ; suppressed_errors : Hash_set.M(Source_code_position).t
   }
 
 type t = T : 'thread inner -> t
@@ -153,6 +154,13 @@ let sexp_of_inner inner =
 ;;
 
 let sexp_of_t (T inner) = sexp_of_inner inner
+
+let eprint_s_once t here sexp =
+  if not (Hash_set.mem t.suppressed_errors here)
+  then (
+    Hash_set.add t.suppressed_errors here;
+    eprint_s sexp)
+;;
 
 let allocate_pid (type thread) (t : thread inner) ~name : int =
   let module T = (val t.trace) in
@@ -312,6 +320,7 @@ let create_expert
       ; trace
       ; annotate_inferred_start_times
       ; in_filtered_region = true
+      ; suppressed_errors = Hash_set.create (module Source_code_position)
       }
   in
   write_hits t hits;
@@ -831,12 +840,20 @@ end = struct
                   some data. *)
                if Callstack.depth thread_info.callstack <> 1
                then
-                 eprintf
-                   "Warning: expected callstack depth to be the same going into a [try] \
-                    block as when leaving it, but it wasn't (off by %d). Did Intel \
-                    Processor Trace drop some data? Will attempt to recover.\n\
-                    %!"
-                   (Callstack.depth thread_info.callstack - 1)
+                 (* Conditional on happening once, this is likely to happen again... don't
+                    spam the user's terminal. *)
+                 eprint_s_once
+                   t
+                   [%here]
+                   [%message
+                     "WARNING: expected callstack depth to be the same going into a \
+                      [try] block as when leaving it, but it wasn't. Did Intel Processor \
+                      Trace drop some data? Will attempt to recover. Further errors will \
+                      be suppressed.\n"
+                       ~depth:(Callstack.depth thread_info.callstack - 1 : int)
+                       (src : Event.Location.t)
+                       (dst : Event.Location.t)
+                       (last_known_instruction_pointer : Int64.Hex.t)]
                else (
                  (* Only pop the exception callstack if we're at the same callstack
                     depth as we were when we saw [Pushtrap]. This should let us recover
