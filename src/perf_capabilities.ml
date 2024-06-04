@@ -100,7 +100,9 @@ let supports_snapshot_on_exit = kernel_version_at_least ~major:5 ~minor:4
 let supports_dlfilter = kernel_version_at_least ~major:5 ~minor:14
 
 let detect_exn () =
-  let%bind perf_version_proc = Process.create_exn ~prog:"perf" ~args:[ "--version" ] () in
+  let%bind perf_version_proc =
+    Process.create_exn ~prog:Env_vars.perf_path ~args:[ "--version" ] ()
+  in
   let%map version_string = Reader.contents (Process.stdout perf_version_proc) in
   let version = Version.of_perf_version_string_exn version_string in
   let set_if bool flag cap = cap + if bool then flag else empty in
