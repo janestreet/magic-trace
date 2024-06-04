@@ -19,7 +19,7 @@ let supports_command command =
 ;;
 
 let supports_fzf = supports_command "fzf"
-let supports_perf = supports_command "perf"
+let supports_perf = supports_command Env_vars.perf_path
 
 let check_for_perf () =
   if force supports_perf

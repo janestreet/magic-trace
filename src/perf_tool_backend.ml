@@ -5,6 +5,7 @@ open! Async
    parent process alive even though it just failed. That, in turn, makes magic-trace stop
    responding to Ctrl+C. *)
 let perf_env = `Extend [ "PAGER", "cat" ]
+let perf = Env_vars.perf_path
 
 module Record_opts = struct
   type t =
@@ -377,7 +378,7 @@ module Recording = struct
     in
     let argv =
       List.concat
-        [ [ "perf"; "record"; "-o"; record_dir ^/ "perf.data"; "--timestamp" ]
+        [ [ perf; "record"; "-o"; record_dir ^/ "perf.data"; "--timestamp" ]
         ; event_opts
         ; overwrite_opts
         ; switch_opts
@@ -391,7 +392,7 @@ module Recording = struct
     in
     if debug_print_perf_commands then Core.printf "%s\n%!" (String.concat ~sep:" " argv);
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
-    let perf_pid = perf_fork_exec ~env:perf_env ~prog:"perf" ~argv () in
+    let perf_pid = perf_fork_exec ~env:perf_env ~prog:perf ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
        makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
        session, it doesn't also send SIGINT to the perf process, allowing us to send it a
@@ -508,11 +509,11 @@ let decode_events
           ]
       in
       if debug_print_perf_commands
-      then Core.printf "perf %s\n%!" (String.concat ~sep:" " args);
+      then Core.printf "%s %s\n%!" perf (String.concat ~sep:" " args);
       (* CR-someday tbrindus: this should be switched over to using
          [perf_fork_exec] to avoid the [perf script] process from outliving
          the parent. *)
-      let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:"perf" ~args () in
+      let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:perf ~args () in
       let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
       don't_wait_for
         (Reader.transfer
