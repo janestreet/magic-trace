@@ -319,24 +319,29 @@ module Recording = struct
       |> Deferred.return
     in
     let kcore_opts =
-      match
-        collection_mode, trace_scope, Perf_capabilities.(do_intersect capabilities kcore)
-      with
-      | Intel_processor_trace _, Userspace, _ | Stacktrace_sampling _, _, _ -> []
-      | Intel_processor_trace _, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
-      | Intel_processor_trace _, (Kernel | Userspace_and_kernel), false ->
-        (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
-           here instead of bailing. But that's tricky, and upgrading to a newer
-           perf is easier. *)
-        Core.eprintf
-          "Warning: old perf version detected! perf userspace tools v5.5 contain an \
-           important feature, kcore, that make decoding kernel traces more reliable. In \
-           our experience, tracing the kernel mostly works without this feature, but you \
-           may run into problems if you're trying to trace through self-modifying code \
-           (the kernel may do this more than you think). Install a perf version >= 5.5 \
-           to avoid this.\n\
-           %!";
-        []
+      if Env_vars.perf_no_kcore
+      then []
+      else (
+        match
+          ( collection_mode
+          , trace_scope
+          , Perf_capabilities.(do_intersect capabilities kcore) )
+        with
+        | Intel_processor_trace _, Userspace, _ | Stacktrace_sampling _, _, _ -> []
+        | Intel_processor_trace _, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
+        | Intel_processor_trace _, (Kernel | Userspace_and_kernel), false ->
+          (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
+             here instead of bailing. But that's tricky, and upgrading to a newer
+             perf is easier. *)
+          Core.eprintf
+            "Warning: old perf version detected! perf userspace tools v5.5 contain an \
+             important feature, kcore, that make decoding kernel traces more reliable. \
+             In our experience, tracing the kernel mostly works without this feature, \
+             but you may run into problems if you're trying to trace through \
+             self-modifying code (the kernel may do this more than you think). Install a \
+             perf version >= 5.5 to avoid this.\n\
+             %!";
+          [])
     in
     let snapshot_size_opt =
       match snapshot_size, collection_mode with

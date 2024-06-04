@@ -15,6 +15,9 @@ let perf_path = Option.value ~default:"perf" (Unix.getenv "MAGIC_TRACE_PERF_PATH
    checks around kernel tracing when not root. *)
 let perf_is_privileged = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_IS_PRIVILEGED")
 
+(** Override whether kcore will be used (in the case that [perf] supports it at all). *)
+let perf_no_kcore = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_NO_KCORE")
+
 (* Turns on hidden command line options and attached "[inferred start time]" to functions
    with inferred start times.
 
