@@ -266,7 +266,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
             None
           | Some _ as x -> x
         in
-        let ocaml_exception_info = Option.bind elf ~f:Elf.ocaml_exception_info in
+        let ocaml_exception_info =
+          match Env_vars.no_ocaml_exception_debug_info with
+          | true -> None
+          | false -> Option.bind elf ~f:Elf.ocaml_exception_info
+        in
         let%bind events, close_result =
           get_events_and_close_result ~decode_events ~range_symbols
         in

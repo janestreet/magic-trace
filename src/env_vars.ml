@@ -7,15 +7,15 @@ open Async
    files around. *)
 let perfetto_dir = Unix.getenv "MAGIC_TRACE_PERFETTO_DIR"
 
-(** Override which [perf] to use. If this isn't set, magic-trace will use whatever's first
-    in $PATH. *)
+(* Override which [perf] to use. If this isn't set, magic-trace will use whatever's first
+   in $PATH. *)
 let perf_path = Option.value ~default:"perf" (Unix.getenv "MAGIC_TRACE_PERF_PATH")
 
 (* Whether [perf] should be considered privileged when running as not-root. Bypasses error
    checks around kernel tracing when not root. *)
 let perf_is_privileged = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_IS_PRIVILEGED")
 
-(** Override whether kcore will be used (in the case that [perf] supports it at all). *)
+(* Override whether kcore will be used (in the case that [perf] supports it at all). *)
 let perf_no_kcore = Option.is_some (Unix.getenv "MAGIC_TRACE_PERF_NO_KCORE")
 
 (* Turns on hidden command line options and attached "[inferred start time]" to functions
@@ -37,3 +37,8 @@ let no_dlfilter = Option.is_some (Unix.getenv "MAGIC_TRACE_NO_DLFILTER")
 (* Demangle symbols in the fuzzy finder. This is currently slow on large binaries, so is
    disabled by default. *)
 let fzf_demangle_symbols = Option.is_some (Unix.getenv "MAGIC_TRACE_FZF_DEMANGLE_SYMBOLS")
+
+(* Use old-style trace generation for exceptions in all cases. *)
+let no_ocaml_exception_debug_info =
+  Option.is_some (Unix.getenv "MAGIC_TRACE_NO_OCAML_EXCEPTION_DEBUG_INFO")
+;;
