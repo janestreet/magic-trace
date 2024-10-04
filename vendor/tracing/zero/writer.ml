@@ -620,8 +620,14 @@ module Expert = struct
   module Write_arg_unchecked = Write_arg_unchecked
 end
 
-let create_for_file ?num_temp_strs ~filename () =
-  let destination = Destinations.file_destination ~filename () in
+
+module File_format = Writer_intf.File_format
+
+(** Allocates a writer which writes to [filename] with [num_temp_strs] temporary string
+    slots (see [set_temp_string_slot]), with increases in [num_temp_strs] reducing the
+    number of strings which can be allocated with [intern_string]. *)
+let create_for_file ?num_temp_strs ?file_format ~filename () =
+  let destination = Destinations.file_destination ?file_format ~filename () in
   Expert.create ?num_temp_strs ~destination ()
 ;;
 

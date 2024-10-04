@@ -51,7 +51,8 @@ open! Core
 type t
 
 (** Open a file to write trace events to in the Fuchsia Trace Format, suggested extension
-    is [.fxt].
+    is [.fxt] for an uncompressed file and [.fxt.gz] for a gzip compressed one. While [.zst]
+    will produce a Zstandard compressed file, the perfetto viewer does not yet support it.
 
     If [base_time] is provided, a time initialization record will be written which
     records what absolute time corresponds to [Time_ns.Span.zero]. *)

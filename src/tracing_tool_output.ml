@@ -129,7 +129,7 @@ type t =
 
 let param =
   let%map_open.Command output_path =
-    let default = "trace.fxt" in
+    let default = "trace.fxt.gz" in
     flag
       "output"
       (optional_with_default default string)
@@ -178,7 +178,18 @@ let write_and_maybe_serve
        serving the new trace, which is unlikely to be what the user expected. *)
     let indirect_store_path = [%string "/proc/self/fd/%{fd#Core_unix.File_descr}"] in
     let writer =
-      Tracing_zero.Writer.create_for_file ?num_temp_strs ~filename:indirect_store_path ()
+      let file_format : Tracing_zero.Writer.File_format.t =
+        if Filename.check_suffix filename ".gz"
+        then Gzip
+        else if Filename.check_suffix filename ".zst"
+        then Zstandard
+        else Uncompressed
+      in
+      Tracing_zero.Writer.create_for_file
+        ?num_temp_strs
+        ~file_format
+        ~filename:indirect_store_path
+        ()
     in
     let%bind.Deferred.Or_error res = f ~events_writer:None ~writer:(Some writer) () in
     let%map () =

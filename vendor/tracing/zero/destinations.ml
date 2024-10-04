@@ -1,6 +1,5 @@
 open! Core
 
-
 let direct_file_destination ?(buffer_size = 4096 * 16) ~filename () =
   let buf = Iobuf.create ~len:buffer_size in
   let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_RDWR ] filename in
@@ -32,7 +31,121 @@ let direct_file_destination ?(buffer_size = 4096 * 16) ~filename () =
   (module Dest : Writer_intf.Destination)
 ;;
 
-let file_destination ~filename () = direct_file_destination ~filename ()
+(* While Zstandard has the best compression, perfetto does not yet understand the format. *)
+let zstd_file_destination ?(buffer_size = 64 * 1024) ~filename () =
+  let buf = Iobuf.create ~len:buffer_size in
+  let compression_level = 5 in
+  (* Ensure the compression buffer is large enough for the worst case of an input of
+     [buffer_size]. *)
+  let compressed_buf =
+    let len =
+      buffer_size
+      |> Int64.of_int
+      |> Zstandard.compression_output_size_bound
+      |> Int64.to_int_exn
+    in
+    Iobuf.create ~len
+  in
+  let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_CLOEXEC; O_RDWR ] filename in
+  let written = ref 0 in
+  let compression_context = Zstandard.Compression_context.create () in
+  let flush () =
+    Iobuf.rewind buf;
+    Iobuf.advance buf !written;
+    Iobuf.flip_lo buf;
+    let input =
+      Zstandard.Input.from_bigstring
+        ~pos:(Iobuf.Expert.lo buf)
+        ~len:(Iobuf.length buf)
+        (Iobuf.Expert.buf buf)
+    in
+    let output =
+      Zstandard.Output.in_buffer
+        ~pos:(Iobuf.Expert.lo compressed_buf)
+        ~len:(Iobuf.length compressed_buf)
+        (Iobuf.Expert.buf compressed_buf)
+    in
+    let compressed_length =
+      Zstandard.With_explicit_context.compress
+        compression_context
+        ~compression_level
+        ~input
+        ~output
+    in
+    Iobuf.advance compressed_buf compressed_length;
+    Iobuf.flip_lo compressed_buf;
+    Iobuf_unix.write compressed_buf file;
+    written := 0;
+    Iobuf.reset buf;
+    Iobuf.reset compressed_buf
+  in
+  let module Dest = struct
+    let next_buf ~ensure_capacity =
+      flush ();
+      if ensure_capacity > Iobuf.length buf
+      then failwith "Not enough buffer space in [zstd_file_destination]";
+      buf
+    ;;
+
+    let wrote_bytes count = written := !written + count
+
+    let close () =
+      flush ();
+      Zstandard.Compression_context.free compression_context;
+      Core_unix.close file
+    ;;
+  end
+  in
+  (module Dest : Writer_intf.Destination)
+;;
+
+let gzip_file_destination ?(buffer_size = 64 * 1024) ~filename () =
+  let buf = Iobuf.create ~len:buffer_size in
+  let bytes = Bytes.create buffer_size in
+  let file = Core_unix.openfile ~mode:[ O_CREAT; O_TRUNC; O_CLOEXEC; O_RDWR ] filename in
+  let out_channel =
+    let oc = Core_unix.out_channel_of_descr file in
+    (* Consider making the compression level an environment variable for
+       experimentation. *)
+    Gzip.open_out_chan ~level:6 oc
+  in
+  let written = ref 0 in
+  let flush () =
+    Iobuf.rewind buf;
+    Iobuf.advance buf !written;
+    Iobuf.flip_lo buf;
+    Iobuf.Peek.To_bytes.blit
+      ~src:(Iobuf.read_only buf) ~src_pos:0 ~dst:bytes ~dst_pos:0 ~len:!written;
+    Gzip.output out_channel bytes 0 !written;
+    written := 0;
+    Iobuf.reset buf;
+  in
+  let module Dest = struct
+    let next_buf ~ensure_capacity =
+      flush ();
+      if ensure_capacity > Iobuf.length buf
+      then failwith "Not enough buffer space in [gzip_file_destination]";
+      buf
+    ;;
+
+    let wrote_bytes count = written := !written + count
+
+    let close () =
+      flush ();
+      (* [close_out] also closes the underlying file descr. *)
+      Gzip.close_out out_channel
+    ;;
+  end
+  in
+  (module Dest : Writer_intf.Destination)
+;;
+
+let file_destination ?(file_format = Writer_intf.File_format.Uncompressed) ~filename () =
+  match file_format with
+  | Uncompressed -> direct_file_destination ~filename ()
+  | Gzip -> gzip_file_destination ~filename ()
+  | Zstandard -> zstd_file_destination ~filename ()
+;;
 
 let iobuf_destination buf =
   (* We give out an [Iobuf] with a shared underlying [Bigstring] but different pointers

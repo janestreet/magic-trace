@@ -37,10 +37,31 @@ jobs:
           wget http://ftp.debian.org/debian/pool/main/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
           sudo dpkg -i upx-ucl_3.96-2_amd64.deb
 
-      - name: Use OCaml ${{ matrix.ocaml-version }}
+      - name: "Install apt packages"
         run: |
           sudo apt-get update
           sudo apt-get install bubblewrap musl-tools
+
+      - name: Build zlib with musl
+        run: |
+          mkdir musl-zlib
+          curl -L https://zlib.net/zlib-1.3.1.tar.gz | tar -xz -C musl-zlib --strip-components=1
+          cd musl-zlib
+          CC=musl-gcc ./configure --libdir=/usr/lib/x86_64-linux-musl --includedir=/usr/include/x86_64-linux-musl
+          make -j$(nproc)
+          sudo make install
+      
+      - name: Build zstd with musl
+        run: |
+          mkdir musl-zstd
+          curl -L https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz | \
+            tar -xz -C musl-zstd --strip-components=1
+          cd musl-zstd
+          CC=musl-gcc make -j$(nproc)
+          sudo make INCLUDEDIR=/usr/include/x86_64-linux-musl LIBDIR=/usr/lib/x86_64-linux-musl install
+
+      - name: Use OCaml ${{ matrix.ocaml-version }}
+        run: |
           sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.1.2/opam-2.1.2-x86_64-linux
           sudo chmod a+x /usr/local/bin/opam
 

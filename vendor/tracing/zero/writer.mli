@@ -11,10 +11,12 @@ open! Core
 
 type t
 
+module File_format = Writer_intf.File_format
+
 (** Allocates a writer which writes to [filename] with [num_temp_strs] temporary string
     slots (see [set_temp_string_slot]), with increases in [num_temp_strs] reducing the
     number of strings which can be allocated with [intern_string]. *)
-val create_for_file : ?num_temp_strs:int -> filename:string -> unit -> t
+val create_for_file : ?num_temp_strs:int -> ?file_format:Writer_intf.File_format.t -> filename:string -> unit -> t
 
 val close : t -> unit
 

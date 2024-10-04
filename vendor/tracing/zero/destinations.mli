@@ -7,8 +7,25 @@ val direct_file_destination
   -> unit
   -> (module Writer_intf.Destination)
 
-(** Write to a file in some way with the best available performance. *)
-val file_destination : filename:string -> unit -> (module Writer_intf.Destination)
+(** Write to a zstd compressed file using synchronous writes, not suitable for low latency
+    applications. *)
+val zstd_file_destination
+  :  ?buffer_size:int
+  -> filename:string
+  -> unit
+  -> (module Writer_intf.Destination)
+
+(** Write to a gzip compressed file using synchronous writes, not suitable for low latency
+    applications. *)
+val gzip_file_destination
+  :  ?buffer_size:int
+  -> filename:string
+  -> unit
+  -> (module Writer_intf.Destination)
+
+(** Write to a file in some way with the best available performance. [format] defaults to
+    [Uncompressed]. *)
+val file_destination : ?file_format:Writer_intf.File_format.t -> filename:string -> unit -> (module Writer_intf.Destination)
 
 (** Write to a provided [Iobuf.t], throws an exception if the buffer runs out of space.
     Mostly intended for use in tests. After the [Destination] is closed, sets the window
