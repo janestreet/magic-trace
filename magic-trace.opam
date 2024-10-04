@@ -12,6 +12,7 @@ build: [
 depends: [
   "ocaml"        {>= "4.14"}
   "async"
+  "camlzip"
   "cohttp"
   "cohttp_static_handler"
   "core"
@@ -23,6 +24,7 @@ depends: [
   "dune"         {>= "2.0.0"}
   "owee"         {>= "0.6"}
   "re"           {>= "1.8.0"}
+  "zstandard"
 ]
 synopsis: "Collects and displays high-resolution traces of what a process is doing"
 description: "https://github.com/janestreet/magic-trace"

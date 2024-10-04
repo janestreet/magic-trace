@@ -47,3 +47,10 @@ module Tick_translation = struct
     { ticks_per_second = 1_000_000_000; base_ticks = 0; base_time = Time_ns.epoch }
   ;;
 end
+
+module File_format = struct
+  type t =
+    | Uncompressed
+    | Gzip
+    | Zstandard
+end
