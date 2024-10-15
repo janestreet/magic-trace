@@ -5,6 +5,7 @@ let%expect_test "A page fault during demo.c" =
   let%map () = Perf_script.run ~trace_scope:Userspace_and_kernel "page_fault.perf" in
   [%expect
     {|
+    Warning: perf reported an error decoding the trace: 'Overflow packet (foo.so)' @ IP 0x7f5948676e18.
     1439745/1439745 2472089.651284813:                            1   branches:uH:   jmp                      7f59488f90f7 call_destructors+0x67 (foo.so) =>     7f5948676e18 _fini+0x0 (foo.so)
      instruction trace error type 1 time 2472089.651285037 cpu -1 pid 1439745 tid 1439745 ip 0x7f5948676e18 code 7: Overflow packet (foo.so)
     ->    224ns BEGIN [decode error: Overflow packet (foo.so)]
@@ -643,7 +644,5 @@ let%expect_test "A page fault during demo.c" =
     ->    224ns BEGIN _dl_catch_exception [inferred start time]
     ->    224ns BEGIN _fini [inferred start time]
     ->  1.373us END   _fini
-    ->  1.373us END   _dl_catch_exception
-    Warning: perf reported an error decoding the trace: 'Overflow packet (foo.so)' @ IP 0x7f5948676e18.
-    ! |}]
+    ->  1.373us END   _dl_catch_exception |}]
 ;;

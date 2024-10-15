@@ -63,6 +63,7 @@ end = struct
           ; src = random_location ()
           ; dst = random_location ?symbol ()
           }
+    ; in_transaction = false
     }
   ;;
 
@@ -94,6 +95,7 @@ end = struct
          { thread
          ; time
          ; data = Trace { trace_state_change = None; kind = Some kind; src; dst }
+         ; in_transaction = false
          })
   ;;
 

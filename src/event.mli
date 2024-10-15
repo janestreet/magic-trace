@@ -10,6 +10,7 @@ module Kind : sig
     | Hardware_interrupt
     | Iret
     | Jump
+    | Tx_abort
   [@@deriving sexp, compare]
 end
 
@@ -60,6 +61,7 @@ module Ok : sig
     { thread : Thread.t
     ; time : Time_ns.Span.t
     ; data : Data.t
+    ; in_transaction : bool
     }
   [@@deriving sexp]
 end

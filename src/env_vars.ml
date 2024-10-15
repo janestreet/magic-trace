@@ -42,3 +42,8 @@ let fzf_demangle_symbols = Option.is_some (Unix.getenv "MAGIC_TRACE_FZF_DEMANGLE
 let no_ocaml_exception_debug_info =
   Option.is_some (Unix.getenv "MAGIC_TRACE_NO_OCAML_EXCEPTION_DEBUG_INFO")
 ;;
+
+(* Skip any special case transaction handling, intended for debugging tx/tx_abrt. *)
+let skip_transaction_handling =
+  Option.is_some (Unix.getenv "MAGIC_TRACE_SKIP_TX_HANDLING")
+;;
