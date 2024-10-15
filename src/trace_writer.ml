@@ -145,6 +145,7 @@ type 'thread inner =
   ; annotate_inferred_start_times : bool
   ; mutable in_filtered_region : bool
   ; suppressed_errors : Hash_set.M(Source_code_position).t
+  ; mutable transaction_events : Event.With_write_info.t Deque.t
   }
 
 type t = T : 'thread inner -> t
@@ -321,6 +322,7 @@ let create_expert
       ; annotate_inferred_start_times
       ; in_filtered_region = true
       ; suppressed_errors = Hash_set.create (module Source_code_position)
+      ; transaction_events = Deque.create ()
       }
   in
   write_hits t hits;
@@ -970,7 +972,7 @@ let write_event_and_callstack
 
 let warn_decode_error ~instruction_pointer ~message =
   eprintf
-    "Warning: perf reported an error decoding the trace: %s\n!"
+    "Warning: perf reported an error decoding the trace: %s\n%!"
     (match instruction_pointer with
      | None -> [%string "'%{message}'"]
      | Some instruction_pointer ->
@@ -978,9 +980,48 @@ let warn_decode_error ~instruction_pointer ~message =
 ;;
 
 (* Write perf_events into a file as a Fuchsia trace (stack events). Events should be
-   collected with --itrace=be or cre, and -F pid,tid,time,flags,addr,sym,symoff as per
+   collected with --itrace=bep or cre, and -F pid,tid,time,flags,addr,sym,symoff as per
    the constants defined above. *)
-let write_event (T t) ?events_writer event =
+let rec write_event (T t) ?events_writer original_event =
+  if Env_vars.skip_transaction_handling
+  then write_event' (T t) ?events_writer original_event
+  else (
+    let { Event.With_write_info.event; should_write = _ } = original_event in
+    (* 1. If this event is within a transaction, queue it.
+       2. If this event ends a transaction, deliver all queued events (then deliver it)
+       3. If this event is a transaction abort, clear all queued events and discard
+       the [Tx_abort]. *)
+    match event with
+    | Ok { Event.Ok.thread = _; time = _; data; in_transaction } ->
+      let is_abort =
+        match data with
+        | Trace { kind = Some Tx_abort; _ } -> true
+        | _ -> false
+      in
+      if is_abort
+      then (
+        Deque.clear t.transaction_events;
+        write_event' (T t) ?events_writer original_event)
+      else if in_transaction
+      then Deque.enqueue_back t.transaction_events original_event
+      else (
+        if not (Deque.is_empty t.transaction_events)
+        then (
+          Deque.iter' t.transaction_events `front_to_back ~f:(fun ev ->
+            write_event' (T t) ?events_writer ev);
+          Deque.clear t.transaction_events);
+        write_event' (T t) ?events_writer original_event)
+    | Error _ ->
+      (* Unsure how to best handle errors during a transaction. *)
+      if not (Deque.is_empty t.transaction_events)
+      then (
+        eprintf
+          "Warning: error received during transaction, dropping all transaction events\n\
+           %!";
+        Deque.clear t.transaction_events);
+      write_event' (T t) ?events_writer original_event)
+
+and write_event' (T t) ?events_writer event =
   let { Event.With_write_info.event; should_write } = event in
   let thread = Event.thread event in
   let thread_info =
@@ -1008,7 +1049,11 @@ let write_event (T t) ?events_writer event =
       Option.iter events_writer ~f:(fun events_writer ->
         write_event_and_callstack events_writer event thread_info.callstack);
     (match event_value with
-     | { Event.Ok.thread = _; time = _; data = Event_sample { location; count; name } } ->
+     | { Event.Ok.thread = _
+       ; time = _
+       ; data = Event_sample { location; count; name }
+       ; in_transaction = _
+       } ->
        let track_name = Collection_mode.Event.Name.to_string name in
        let track_thread =
          Hashtbl.find_or_add thread_info.extra_event_tracks name ~default:(fun () ->
@@ -1041,6 +1086,7 @@ let write_event (T t) ?events_writer event =
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
        ; data = Power { freq }
+       ; in_transaction = _
        } ->
        write_counter
          t
@@ -1051,6 +1097,7 @@ let write_event (T t) ?events_writer event =
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
        ; data = Stacktrace_sample { callstack }
+       ; in_transaction = _
        } ->
        let how_many_ret =
          Stack.length thread_info.callstack.stack
@@ -1062,6 +1109,7 @@ let write_event (T t) ?events_writer event =
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
        ; data = Trace { kind; trace_state_change; src; dst }
+       ; in_transaction = _
        } ->
        Ocaml_hacks.track_executed_pushtraps_and_poptraps_in_range
          t
@@ -1072,10 +1120,18 @@ let write_event (T t) ?events_writer event =
        (match kind, trace_state_change with
         | Some Call, (None | Some End) -> call t thread_info ~time ~location:dst
         | ( Some
-              (Async | Call | Syscall | Return | Hardware_interrupt | Iret | Sysret | Jump)
+              ( Async
+              | Call
+              | Syscall
+              | Return
+              | Hardware_interrupt
+              | Iret
+              | Sysret
+              | Jump
+              | Tx_abort )
           , Some Start )
         | Some Async, None
-        | Some (Hardware_interrupt | Jump), Some End ->
+        | Some (Hardware_interrupt | Jump | Tx_abort), Some End ->
           raise_s
             [%message
               "BUG: magic-trace devs thought this event was impossible, but you just \
@@ -1166,6 +1222,7 @@ let write_event (T t) ?events_writer event =
                ~addr:dst.instruction_pointer
                ~time;
              check_current_symbol t thread_info ~time dst)
+        | Some Tx_abort, None -> check_current_symbol t thread_info ~time dst
         | Some Jump, None ->
           Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         (* (None, _) comes up when perf spews something magic-trace doesn't recognize.

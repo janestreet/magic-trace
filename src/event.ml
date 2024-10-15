@@ -10,6 +10,7 @@ module Kind = struct
     | Hardware_interrupt
     | Iret
     | Jump
+    | Tx_abort
   [@@deriving sexp, compare, bin_io]
 end
 
@@ -88,6 +89,7 @@ module Ok = struct
     { thread : Thread.t
     ; time : Time_ns.Span.t
     ; data : Data.t
+    ; in_transaction : bool [@sexp.bool]
     }
   [@@deriving sexp, bin_io]
 end

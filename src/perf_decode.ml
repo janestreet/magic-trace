@@ -21,7 +21,7 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(?:\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -170,7 +170,8 @@ let trace_error_to_event line : Event.Decode_error.t =
 let parse_perf_cbr_event thread time line : Event.t =
   match Re.Group.all (Re.exec perf_cbr_event_re line) with
   | [| _; _; _; freq; _ |] ->
-    Ok { thread; time; data = Power { freq = Int.of_string freq } }
+    Ok
+      { thread; time; data = Power { freq = Int.of_string freq }; in_transaction = false }
   | results ->
     raise_s
       [%message
@@ -202,13 +203,14 @@ let parse_perf_cycles_event ?perf_maps (thread : Event.Thread.t) time lines : Ev
   let callstack =
     List.map lines ~f:(parse_callstack_entry ?perf_maps thread) |> List.rev
   in
-  Ok { thread; time; data = Stacktrace_sample { callstack } }
+  Ok { thread; time; data = Stacktrace_sample { callstack }; in_transaction = false }
 ;;
 
 let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : Event.t =
   match Re.Group.all (Re.exec perf_branches_event_re line) with
   | [| _
      ; kind
+     ; aux_flags
      ; src_instruction_pointer
      ; src_symbol_and_offset
      ; dst_instruction_pointer
@@ -251,6 +253,8 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
          to show a broken trace instead of crashing here. *)
       | true, true -> None
     in
+    (* record the flag indicating we're within a transaction *)
+    let in_transaction = String.contains aux_flags 'x' in
     let kind : Event.Kind.t option =
       match String.strip kind with
       | "call" -> Some Call
@@ -262,7 +266,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       | "iret" -> Some Iret
       | "sysret" -> Some Sysret
       | "async" -> Some Async
-      | "tx abrt" -> Some Jump
+      | "tx abrt" -> Some Tx_abort
       | "" -> None
       | _ ->
         printf "Warning: skipping unrecognized perf output: %s\n%!" line;
@@ -286,6 +290,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
                 ; symbol_offset = dst_symbol_offset
                 }
             }
+      ; in_transaction
       }
   | results ->
     raise_s
@@ -314,7 +319,12 @@ let parse_perf_extra_sampled_event
              "Regex of perf event did not match expected fields" (results : string array)])
     | lines -> List.hd_exn lines |> parse_callstack_entry ?perf_maps thread
   in
-  Ok { thread; time; data = Event_sample { location; count = period; name } }
+  Ok
+    { thread
+    ; time
+    ; data = Event_sample { location; count = period; name }
+    ; in_transaction = false
+    }
 ;;
 
 let to_event ?perf_maps lines : Event.t option =

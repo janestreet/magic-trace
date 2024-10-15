@@ -5,6 +5,7 @@ let%expect_test "decode error during memmove" =
   let%map () = Perf_script.run ~trace_scope:Userspace "memmove_decode_error.perf" in
   [%expect
     {|
+    Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
     293415/293415 47170.086912824:                            1   branches:uH:   call                           40b06c itch_bbo::book::Book::add_order+0x51c (foo.so) =>     7ffff7327730 __memmove_avx_unaligned_erms+0x0 (foo.so)
     293415/293415 47170.086912825:                            1   branches:uH:   return                   7ffff73277c7 __memmove_avx_unaligned_erms+0x97 (foo.so) =>           40b072 itch_bbo::book::Book::add_order+0x522 (foo.so)
     ->     19ns BEGIN __memmove_avx_unaligned_erms
@@ -23,9 +24,7 @@ let%expect_test "decode error during memmove" =
     INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->     21ns BEGIN itch_bbo::book::Book::add_order [inferred start time]
     ->    141ns END   __memmove_avx_unaligned_erms
-    ->    141ns END   itch_bbo::book::Book::add_order
-    Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
-    ! |}]
+    ->    141ns END   itch_bbo::book::Book::add_order |}]
 ;;
 
 let%expect_test "decode error during rust B-tree rebalance" =
@@ -34,6 +33,8 @@ let%expect_test "decode error during rust B-tree rebalance" =
   in
   [%expect
     {|
+    Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
+    Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
     364691/364691 62709.735347729:                            1   branches:uH:   call                           40bc5a itch_bbo::book::Book::delete_order+0x3ca (foo.so) =>           40a550 remove_leaf_kv+0x0 (foo.so)
     364691/364691 62709.735347731:                            1   branches:uH:   call                           40a5b2 remove_leaf_kv+0x62 (foo.so) =>     7ffff7327730 __memmove_avx_unaligned_erms+0x0 (foo.so)
     ->     28ns BEGIN remove_leaf_kv
@@ -97,8 +98,5 @@ let%expect_test "decode error during rust B-tree rebalance" =
     ->    419ns END   _int_free
     ->    419ns END   merge_tracking_child_edge
     ->    420ns END   remove_leaf_kv
-    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
-    Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
-    !Warning: perf reported an error decoding the trace: 'Overflow packet' @ IP 0x7ffff7327730.
-    ! |}]
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred |}]
 ;;
