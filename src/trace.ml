@@ -478,7 +478,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            %!"
          error);
     (* This is still a little racey, but it's the best we can do without pidfds. *)
-    Ivar.fill exited_ivar ();
+    Ivar.fill_exn exited_ivar ();
     (* CR-someday tbrindus: [~stop] doesn't make [Async_unix.Signal.handle] restore signal
        handlers to their default state, so the decoding step won't be ^C-able. Restore
        SIGINT's handler here. Ideally we'd restore all [terminating] handlers to their
