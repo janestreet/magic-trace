@@ -103,8 +103,8 @@ let detect_exn () =
   let%bind perf_version_proc =
     Process.create_exn ~prog:Env_vars.perf_path ~args:[ "--version" ] ()
   in
-  let%map version_string = Reader.contents (Process.stdout perf_version_proc) in
-  let version = Version.of_perf_version_string_exn version_string in
+  let%map { stdout; _ } = Process.collect_output_and_wait perf_version_proc in
+  let version = Version.of_perf_version_string_exn stdout in
   let set_if bool flag cap = cap + if bool then flag else empty in
   empty
   |> set_if (supports_configurable_psb_period ()) configurable_psb_period
