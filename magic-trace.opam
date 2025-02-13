@@ -22,7 +22,7 @@ depends: [
   "ppx_jane"
   "shell"
   "dune"         {>= "2.0.0"}
-  "owee"         {>= "0.6"}
+  "owee"         {>= "0.8"}
   "re"           {>= "1.8.0"}
   "zstandard"
 ]
