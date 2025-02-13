@@ -6,6 +6,7 @@ type t =
   ; string : Owee_elf.String_table.t
   ; all_elf : Owee_buf.t
   ; sections : Owee_elf.section array
+  ; programs : Owee_elf.program array
   ; debug : Owee_buf.t option
   ; ocaml_exception_info : Ocaml_exception_info.t option
   ; base_offset : int
@@ -90,6 +91,7 @@ let create filename =
     let header, sections = Owee_elf.read_elf buffer in
     let string = Owee_elf.find_string_table buffer sections in
     let symbol = Owee_elf.find_symbol_table buffer sections in
+    let programs = Owee_elf.read_programs buffer header in
     match string, symbol with
     | Some string, Some symbol ->
       let base_offset =
@@ -106,6 +108,7 @@ let create filename =
         ; debug
         ; all_elf = buffer
         ; sections
+        ; programs
         ; base_offset
         ; filename
         ; statically_mappable
@@ -303,15 +306,32 @@ let selection_stop_info t pid selection =
   let compute_addr addr =
     if t.statically_mappable
     then addr
-    else
+    else (
+      (* Find the lowest p_vaddr from the program headers and use this as the base address *)
+      let base_address =
+        match
+          List.fold_left
+            ~f:(fun acc ph ->
+              if ph.p_type = 1
+              then (
+                match acc with
+                | None -> Some ph.p_vaddr
+                | Some min_vaddr -> Some (Int64.min min_vaddr ph.p_vaddr))
+              else acc)
+            ~init:None
+            (Array.to_list t.programs)
+        with
+        | Some vaddr -> vaddr
+        | None -> failwith "No program headers of type LOAD found"
+      in
+      (* Find the first address that the binary is actually mapped into *)
       Owee_linux_maps.scan_pid (Pid.to_int pid)
-      |> List.filter_map ~f:(fun { address_start; address_end; pathname; offset; _ } ->
+      |> List.filter_map ~f:(fun { address_start; pathname; _ } ->
         let open Int64 in
-        let length = address_end - address_start in
-        if String.(pathname = filename) && addr >= offset && addr < offset + length
-        then Some (addr - offset + address_start)
+        if String.(pathname = filename)
+        then Some (address_start - base_address + addr)
         else None)
-      |> List.hd_exn
+      |> List.hd_exn)
   in
   let compute_filter ~name ~addr ~size =
     let offset = Int64.( - ) addr (Int64.of_int t.base_offset) in
