@@ -30,17 +30,17 @@ jobs:
             tar -xz -C musl-kernel --strip-components=1
           echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
 
+      - name: "Install apt packages"
+        run: |
+          sudo apt-get update
+          sudo apt-get install bubblewrap musl-tools libucl1
+
       - name: Install upx
         run: |
           # The version that comes with focal is broken for musl binaries, so we have to download
           # from another location.
           wget http://ftp.debian.org/debian/pool/main/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
           sudo dpkg -i upx-ucl_3.96-2_amd64.deb
-
-      - name: "Install apt packages"
-        run: |
-          sudo apt-get update
-          sudo apt-get install bubblewrap musl-tools
 
       - name: Build zlib with musl
         run: |
