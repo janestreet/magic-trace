@@ -77,7 +77,7 @@ jobs:
 
       - run: opam install ./magic-trace.opam --deps-only
 
-      - run: opam install ocamlformat
+      - run: opam install ocamlformat.0.26.2
       - run: opam exec -- dune build @fmt
 
       - run: opam exec -- make PROFILE=static
