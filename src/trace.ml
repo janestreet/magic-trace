@@ -170,7 +170,10 @@ let write_trace_from_events
          | None -> Trace_writer.end_of_trace writer
          | Some to_time -> Trace_writer.end_of_trace ~to_time writer);
         last_index := index
-      | Ok { data = Event_sample _; _ } | Ok { data = Power _; _ } | Error _ -> ());
+      | Ok { data = Event_sample _; _ }
+      | Ok { data = Ptwrite _; _ }
+      | Ok { data = Power _; _ }
+      | Error _ -> ());
     Trace_writer.write_event writer ?events_writer ev
   in
   let%bind () =
