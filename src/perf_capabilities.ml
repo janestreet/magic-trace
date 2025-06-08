@@ -8,6 +8,7 @@ let kcore = bit 2
 let snapshot_on_exit = bit 3
 let last_branch_record = bit 4
 let dlfilter = bit 5
+let ptwrite = bit 6
 
 include Flags.Make (struct
     let allow_intersecting = false
@@ -20,6 +21,7 @@ include Flags.Make (struct
       ; kcore, "kcore"
       ; last_branch_record, "last_branch_record"
       ; dlfilter, "dlfilter"
+      ; ptwrite, "ptwrite"
       ]
     ;;
   end)
@@ -50,6 +52,18 @@ let supports_configurable_psb_period () =
       In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc"
     in
     String.( = ) cyc_cap "1\n"
+  with
+  (* Even if this file is not present (i.e. when Intel PT isn't present), we
+     don't want capability checking to fail. *)
+  | Sys_error _ -> false
+;;
+
+let supports_ptwrite () =
+  try
+    let ptwrite_cap =
+      In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/ptwrite"
+    in
+    String.( = ) ptwrite_cap "1\n"
   with
   (* Even if this file is not present (i.e. when Intel PT isn't present), we
      don't want capability checking to fail. *)
@@ -108,6 +122,7 @@ let detect_exn () =
   let set_if bool flag cap = cap + if bool then flag else empty in
   empty
   |> set_if (supports_configurable_psb_period ()) configurable_psb_period
+  |> set_if (supports_ptwrite ()) ptwrite
   |> set_if (supports_tracing_kernel ()) kernel_tracing
   |> set_if (supports_kcore version) kcore
   |> set_if (supports_snapshot_on_exit version) snapshot_on_exit

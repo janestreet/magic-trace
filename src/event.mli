@@ -55,6 +55,10 @@ module Ok : sig
           ; count : int
           ; name : Collection_mode.Event.Name.t
           } (** Represents counter based events collected through sampling. *)
+      | Ptwrite of
+          { location : Location.t
+          ; data : string
+          } (** Represents ptwrite events collected through Intel PT using PTWRITE. *)
     [@@deriving sexp]
   end
 
