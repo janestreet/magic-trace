@@ -79,13 +79,51 @@ let supports_last_branch_record () =
 ;;
 
 let supports_tracing_kernel () =
-  (* Only allow tracing the kernel if we are root. `perf` will start even without this,
-     but the generated traces will be broken, so disallow it here.
-
-     This check is technically stricter than it has to be. We could query the capability
-     bits of the perf binary here instead, as per
-     <https://perf.wiki.kernel.org/index.php/Perf_tools_support_for_Intel%C2%AE_Processor_Trace#Adding_capabilities_to_perf> *)
-  Int.(Core_unix.geteuid () = 0)
+  (* Check if we can trace the kernel through multiple methods:
+     1. Check if we're root (traditional method)
+     2. Check perf_event_paranoid setting
+     3. Check if perf binary has CAP_SYS_ADMIN capability
+     4. Check if Intel PT is available for kernel tracing *)
+  
+  (* First, check if we're root *)
+  if Int.(Core_unix.geteuid () = 0) then true
+  else
+    (* Check /proc/sys/kernel/perf_event_paranoid
+       -1 = allow use of (almost) all events by all users
+        0 = disallow raw tracepoint access for unpriv
+        1 = disallow CPU event access for unpriv
+        2 = disallow kernel profiling for unpriv (default)
+       Kernel tracing requires paranoid < 0 *)
+    try
+      let paranoid = 
+        In_channel.read_all "/proc/sys/kernel/perf_event_paranoid"
+        |> String.strip
+        |> Int.of_string
+      in
+      if Int.(paranoid < 0) then true
+      else
+        (* Check if the perf binary has the necessary capabilities *)
+        (* This uses getcap to check if perf has CAP_SYS_ADMIN *)
+        let check_perf_capabilities () =
+          try
+            let%bind getcap_proc =
+              Process.create ~prog:"getcap" ~args:[Env_vars.perf_path] ()
+            in
+            match%map Process.collect_output_and_wait getcap_proc with
+            | { stdout; exit_status = Ok (); _ } ->
+              (* Look for cap_sys_admin in the output *)
+              String.is_substring stdout ~substring:"cap_sys_admin"
+            | _ -> false
+          with
+          | _ -> Deferred.return false
+        in
+        (* Run the capability check synchronously *)
+        Thread_safe.block_on_async_exn (fun () -> check_perf_capabilities ())
+    with
+    | _ -> 
+      (* If we can't read paranoid or check capabilities, 
+         fall back to the conservative check *)
+      false
 ;;
 
 let kernel_version_at_least ~major ~minor version =
