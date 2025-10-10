@@ -7,6 +7,13 @@ open Async
    files around. *)
 let perfetto_dir = Unix.getenv "MAGIC_TRACE_PERFETTO_DIR"
 
+(* Documentation string for [-share] *)
+let share_doc = Unix.getenv "MAGIC_TRACE_SHARE_DOC"
+
+(* Points to a filesystem path that will be invoked with a trace filename to implement
+   [-share]. *)
+let share_command_filename = Unix.getenv "MAGIC_TRACE_SHARE_COMMAND"
+
 (* Override which [perf] to use. If this isn't set, magic-trace will use whatever's first
    in $PATH. *)
 let perf_path = Option.value ~default:"perf" (Unix.getenv "MAGIC_TRACE_PERF_PATH")
