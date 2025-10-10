@@ -2,21 +2,15 @@ open! Core
 open! Async
 
 module Serve = struct
-  type enabled =
+  type t =
     { port : int
     ; perfetto_ui_base_directory : string
     }
 
-  type t =
-    | Disabled
-    | Enabled of enabled
-
-  let param =
-    match Env_vars.perfetto_dir with
-    | None -> Command.Param.return Disabled
-    | Some perfetto_ui_base_directory ->
-      let%map_open.Command serve =
-        flag "serve" no_arg ~doc:" Host the magic-trace UI locally."
+  let maybe_param =
+    Option.map Env_vars.perfetto_dir ~f:(fun perfetto_ui_base_directory ->
+      let%map_open.Command () =
+        flag "serve" (no_arg_required ()) ~doc:" Host the magic-trace UI locally."
       and port =
         let default = 8080 in
         flag
@@ -27,7 +21,7 @@ module Serve = struct
               "PORT Chooses the port that the local copy of the magic-trace UI will be \
                served on if [-serve] is specified. (default: %{default#Int})"]
       in
-      if serve then Enabled { port; perfetto_ui_base_directory } else Disabled
+      { port; perfetto_ui_base_directory })
   ;;
 
   let url t =
@@ -112,6 +106,24 @@ module Serve = struct
   ;;
 end
 
+module Share = struct
+  type t = { share_command_filename : string }
+
+  let maybe_param =
+    Option.both Env_vars.share_doc Env_vars.share_command_filename
+    |> Option.map ~f:(fun (doc, share_command_filename) ->
+      let%map_open.Command () = flag "share" (no_arg_required ()) ~doc in
+      { share_command_filename })
+  ;;
+
+  let share_trace_file t ~filename =
+    Process.run_forwarding
+      ~prog:t.share_command_filename
+      ~args:[ Filename_unix.realpath filename ]
+      ()
+  ;;
+end
+
 type events_output_format =
   | Sexp
   | Binio
@@ -122,8 +134,13 @@ type events_writer =
   ; callstack_compression_state : Callstack_compression.t
   }
 
+type display_mode =
+  | Disabled
+  | Serve of Serve.t
+  | Share of Share.t
+
 type t =
-  { serve : Serve.t
+  { display_mode : display_mode
   ; output_path : string
   }
 
@@ -138,8 +155,14 @@ let param =
         [%string
           "FILE File to output the trace to. File format depends on suffix [*.sexp \
            *.binio *.fxt] (default: '%{default}')"]
-  and serve = Serve.param in
-  { serve; output_path }
+  and display_mode =
+    [ Serve.maybe_param |> Option.map ~f:(map ~f:(fun s -> Serve s))
+    ; Share.maybe_param |> Option.map ~f:(map ~f:(fun s -> Share s))
+    ]
+    |> List.filter_opt
+    |> choose_one_non_optional ~if_nothing_chosen:(Default_to Disabled)
+  in
+  { display_mode; output_path }
 ;;
 
 let notify_trace ~store_path =
@@ -165,7 +188,7 @@ let write_and_maybe_serve
   =
   let open Deferred.Or_error.Let_syntax in
   maybe_stash_old_trace ~filename;
-  let { serve; output_path } = t in
+  let { display_mode; output_path } = t in
   let matches_sexp = String.is_suffix ~suffix:".sexp" output_path in
   let matches_binio = String.is_suffix ~suffix:".binio" output_path in
   match matches_sexp || matches_binio with
@@ -191,17 +214,18 @@ let write_and_maybe_serve
         ~filename:indirect_store_path
         ()
     in
-    let%bind.Deferred.Or_error res = f ~events_writer:None ~writer:(Some writer) () in
-    let%map () =
-      match serve with
+    let%bind res = f ~events_writer:None ~writer:(Some writer) () in
+    let%bind () =
+      match display_mode with
       | Disabled -> notify_trace ~store_path:output_path
-      | Enabled serve ->
+      | Share share -> Share.share_trace_file share ~filename
+      | Serve serve ->
         Serve.serve_trace_file serve ~filename ~store_path:indirect_store_path
     in
     Core_unix.close fd;
-    res
+    return res
   | true ->
-    let%map.Deferred.Or_error res =
+    let%map res =
       let format =
         match matches_sexp with
         | true -> Sexp
