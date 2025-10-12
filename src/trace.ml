@@ -468,7 +468,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | Core_unix.Unix_error (_, (_ : string), (_ : string)) ->
         (* We raced, but it's OK because the child still exited. *)
         ());
-    (* [Monitor.try_with] because [waitpid] raises if perf died before we got here. *)
+    (* [Monitor.try_with] because [waitpid] raises if the tracee died before we got here. *)
     let%bind.Deferred (waitpid_result : (Core_unix.Exit_or_signal.t, exn) result) =
       Monitor.try_with (fun () -> Async_unix.Unix.waitpid pid)
     in

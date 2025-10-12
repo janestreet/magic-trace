@@ -89,9 +89,138 @@ module Recording = struct
     type t = { callgraph_mode : Callgraph_mode.t option } [@@deriving sexp]
   end
 
+  module Snapshot_when = struct
+    type t =
+      | Never
+      | At_exit
+      | Function_call
+  end
+
+  module Control = struct
+    (* Perf has several mechanisms to cause a snapshot:
+       - The `snapshot` control command
+       - snapshot-on-exit; exit can occur due to tracee exit, a signal, or the `stop`
+         control command.
+       - SIGUSR2
+
+       The mechanism we use depends on the user-selected event.
+
+       # Snapshot on function call (breakpoint)
+       snapshot-on-exit doesn't apply because it can't support multi-snapshot. Prefer
+       ctlfd, fallback to SIGUSR2.
+
+       If a tracee exits soon after hitting the breakpoint, perf may exit before we tell
+       it to snapshot. We could fix this in single-snapshot mode by using snapshot-on-exit
+       in combination with SIGINT or the stop command. But this is rare enough that we
+       don't implement this.
+
+       # Snapshot on Exit
+       Practically, this means take a snapshot when the tracee exits or when the user
+       sends SIGINT to magic-trace.
+
+       In run mode, it is guaranteed via waitpid that the tracee exits before backend
+       snapshotting logic runs. In attach mode, magic-trace doesn't get any notification when
+       the tracee exits. So, when we enter [maybe_take_snapshot] any of these could have
+       happened:
+       1. tracee died, perf has exited (and took a snapshot if snapshot-on-exit)
+       2. tracee died, perf is snapshotting due to snapshot-on-exit
+       3. tracee alive, perf is nominal (attach mode, magic-trace got SIGINT)
+
+       perf snapshot-on-exit means that we cause perf to exit in the process of
+       snapshotting (otherwise we would get an extra unwanted snapshot), so our perf
+       shutdown logic becomes redundant. Similarly, if the tracee exits before we reach
+       snapshot logic, the snapshot logic is redundant.
+
+       # Implementation
+
+       perf support | MT event | --snapshot=e | snapshot | shutdown | note
+       ================================================================================================
+       old          | *        | unsupported  | SIGUSR2  | SIGTERM  | tracee exit won't induce snapshot
+       snap-on-exit | on-exit  | yes          | SIGINT   | SIGTERM  | one or both signal is redundant
+       snap-on-exit | function | no           | SIGUSR2  | SIGTERM  |
+       ctlfd        | on-exit  | yes          | stop     | stop     | one or both controls is redundant
+       ctlfd        | function | no           | snapshot | stop     |
+    *)
+
+    type t =
+      | Signals of
+          { snapshot : Signal.t
+          ; shutdown : Signal.t
+          }
+      | Ctlfd of
+          { ctlfd : Perf_ctlfd.t
+          ; snapshot : Perf_ctlfd.Command.t
+          ; shutdown : Perf_ctlfd.Command.t
+          }
+
+    let control_opt = function
+      | Ctlfd { ctlfd; _ } -> Perf_ctlfd.control_opt ctlfd
+      | Signals _ -> [], Fn.id
+    ;;
+
+    let create ~capabilities ~(snapshot_when : Snapshot_when.t) =
+      let select ~at_exit ~function_call =
+        match snapshot_when with
+        | Never | Function_call -> function_call
+        | At_exit -> at_exit
+      in
+      let perf_snapshot_on_exit =
+        Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
+      in
+      let snapshot_opt =
+        match snapshot_when with
+        | Never -> []
+        | At_exit when perf_snapshot_on_exit -> [ "--snapshot=e" ]
+        | At_exit | Function_call -> [ "--snapshot" ]
+      in
+      let control =
+        if Perf_capabilities.(do_intersect capabilities ctlfd)
+        then (
+          assert perf_snapshot_on_exit;
+          let shutdown = Perf_ctlfd.Command.stop in
+          let snapshot =
+            select
+              ~at_exit:Perf_ctlfd.Command.stop
+              ~function_call:Perf_ctlfd.Command.snapshot
+          in
+          Ctlfd { ctlfd = Perf_ctlfd.create (); shutdown; snapshot })
+        else if perf_snapshot_on_exit
+        then (
+          let shutdown = Signal.term in
+          let snapshot = select ~at_exit:Signal.int ~function_call:Signal.usr2 in
+          Signals { shutdown; snapshot })
+        else (
+          let shutdown = Signal.term in
+          let snapshot = Signal.usr2 in
+          Signals { shutdown; snapshot })
+      in
+      let control_opt, invoke_after_fork = control_opt control in
+      control, snapshot_opt @ control_opt, invoke_after_fork
+    ;;
+
+    let ignore_perf_exit = function
+      | Ok () | Error `Perf_exited -> ()
+    ;;
+
+    let take_snapshot t pid =
+      match t with
+      | Signals { snapshot; _ } -> Signal_unix.send_i snapshot (`Pid pid)
+      | Ctlfd { ctlfd; snapshot; _ } ->
+        Perf_ctlfd.dispatch_and_block_for_ack ctlfd snapshot |> ignore_perf_exit
+    ;;
+
+    let shutdown t pid =
+      match t with
+      | Signals { shutdown; _ } -> Signal_unix.send_i shutdown (`Pid pid)
+      | Ctlfd { ctlfd; shutdown; _ } ->
+        Perf_ctlfd.dispatch_and_block_for_ack ctlfd shutdown |> ignore_perf_exit
+    ;;
+  end
+
   type t =
     { pid : Pid.t
-    ; when_to_snapshot : [ `at_exit of [ `sigint | `sigusr2 ] | `function_call | `never ]
+    ; snapshot_when : Snapshot_when.t
+    ; control : Control.t
     }
 
   let perf_selector_of_trace_scope : Trace_scope.t -> string = function
@@ -249,12 +378,9 @@ module Recording = struct
             "magic-trace must be run as root in order to trace the kernel"
         else return (Ok ())
     in
-    let perf_supports_snapshot_on_exit =
-      Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
-    in
     (match when_to_snapshot, subcommand with
      | Magic_trace_or_the_application_terminates, Run ->
-       if not perf_supports_snapshot_on_exit
+       if not Perf_capabilities.(do_intersect capabilities snapshot_on_exit)
        then
          printf
            "Warning: magic-trace will only be able to snapshot when magic-trace is \
@@ -365,23 +491,20 @@ module Recording = struct
         []
       | None, Intel_processor_trace _ | None, Stacktrace_sampling _ -> []
     in
-    let when_to_snapshot =
+    let snapshot_when : Snapshot_when.t =
       if full_execution
-      then `never
+      then Never
       else (
         match when_to_snapshot with
-        | Magic_trace_or_the_application_terminates ->
-          if perf_supports_snapshot_on_exit then `at_exit `sigint else `at_exit `sigusr2
-        | Application_calls_a_function _ -> `function_call)
+        | Magic_trace_or_the_application_terminates -> Snapshot_when.At_exit
+        | Application_calls_a_function _ -> Function_call)
     in
-    let snapshot_opt =
+    let control, control_opt, invoke_after_fork =
       match collection_mode with
-      | Stacktrace_sampling _ -> []
-      | Intel_processor_trace _ ->
-        (match when_to_snapshot with
-         | `never -> []
-         | `at_exit `sigint -> [ "--snapshot=e" ]
-         | `function_call | `at_exit `sigusr2 -> [ "--snapshot" ])
+      | Intel_processor_trace _ -> Control.create ~capabilities ~snapshot_when
+      | Stacktrace_sampling _ ->
+        (* We don't take perf AUX snapshots in stacktrace sampling mode *)
+        Control.create ~capabilities ~snapshot_when:Never
     in
     let overwrite_opts =
       match collection_mode, full_execution with
@@ -401,7 +524,7 @@ module Recording = struct
         ; switch_opts
         ; thread_opts
         ; pid_opt
-        ; snapshot_opt
+        ; control_opt
         ; kcore_opts
         ; snapshot_size_opt
         ; Callgraph_mode.to_perf_record_args selected_callgraph_mode
@@ -415,6 +538,7 @@ module Recording = struct
        session, it doesn't also send SIGINT to the perf process, allowing us to send it a
        SIGUSR2 first to get it to capture a snapshot before exiting. *)
     Core_unix.setpgid ~of_:perf_pid ~to_:perf_pid;
+    invoke_after_fork ();
     let%map () = Async.Clock_ns.after (Time_ns.Span.of_ms 500.0) in
     (* Check that the process hasn't failed after waiting, because there's no point pausing
        to do recording if we've already failed. *)
@@ -424,39 +548,28 @@ module Recording = struct
       | Some (_, exit) -> perf_exit_to_or_error exit
       | _ -> Ok ()
     in
-    ( { pid = perf_pid; when_to_snapshot }
+    ( { pid = perf_pid; snapshot_when; control }
     , { Data.callgraph_mode = selected_callgraph_mode } )
   ;;
 
   let maybe_take_snapshot t ~source =
-    let signal =
-      match t.when_to_snapshot, source with
-      (* [`never] only comes up in [-full-execution] mode. In that mode, perf always gives a
-         complete trace; there's no snapshotting. *)
-      | `never, _ -> None
-      (* Do not snapshot at the end of a program if the user has set up a trigger symbol. *)
-      | `function_call, `ctrl_c -> None
-      (* This shouldn't happen unless there was a bug elsewhere. It would imply that a trigger
-         symbol was hit when there is no trigger symbol configured. *)
-      | `at_exit _, `function_call -> None
-      (* Trigger symbol was hit, and we're configured to look for them. *)
-      | `function_call, `function_call -> Some Signal.usr2
-      (* Ctrl-C was hit, and we're configured to look for that. *)
-      | `at_exit signal, `ctrl_c ->
-        (* The actual signal to use varies depending on whether or not the user's version of perf
-           supports snapshot-at-exit. *)
-        Some
-          (match signal with
-           | `sigint -> Signal.int
-           | `sigusr2 -> Signal.usr2)
-    in
-    match signal with
-    | None -> ()
-    | Some signal -> Signal_unix.send_i signal (`Pid t.pid)
+    match t.snapshot_when, source with
+    (* [Never] only comes up in [-full-execution] mode. In that mode, perf always gives a
+       complete trace; there's no snapshotting. *)
+    | Never, _ -> ()
+    (* Do not snapshot at the end of a program if the user has set up a trigger symbol. *)
+    | Function_call, `ctrl_c -> ()
+    (* This shouldn't happen unless there was a bug elsewhere. It would imply that a trigger
+       symbol was hit when there is no trigger symbol configured. *)
+    | At_exit, `function_call -> ()
+    (* Trigger symbol was hit, and we're configured to look for them. *)
+    | Function_call, `function_call -> Control.take_snapshot t.control t.pid
+    (* Ctrl-C was hit, and we're configured to look for that. *)
+    | At_exit, `ctrl_c -> Control.take_snapshot t.control t.pid
   ;;
 
   let finish_recording t =
-    Signal_unix.send_i Signal.term (`Pid t.pid);
+    Control.shutdown t.control t.pid;
     (* This should usually be a signal exit, but we don't really care, if it didn't
        produce a good perf.data file the next step will fail.
 
