@@ -246,29 +246,41 @@ module Recording = struct
         Timer_resolution.Low
       | _, _ -> timer_resolution
     in
-    match timer_resolution with
-    | Low -> Or_error.return ""
-    | Normal -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0"
-    | High -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
-    | Sample _ ->
-      Or_error.error_string
-        "[-timer-resolution Sample] can only be used in sampling mode. (Did you forget \
-         [-sampling]?)"
-    | Custom { cyc; cyc_thresh; mtc; mtc_period; noretcomp; psb_period } ->
-      let make_config key = function
-        | None -> None
-        | Some value -> Some [%string "%{key}=%{value#Int}"]
-      in
-      [ make_config "cyc" (Option.map ~f:Bool.to_int cyc)
-      ; make_config "cyc_thresh" cyc_thresh
-      ; make_config "mtc" (Option.map ~f:Bool.to_int mtc)
-      ; make_config "mtc_period" mtc_period
-      ; make_config "noretcomp" (Option.map ~f:Bool.to_int noretcomp)
-      ; make_config "psb_period" psb_period
-      ]
-      |> List.filter_opt
-      |> String.concat ~sep:","
-      |> Or_error.return
+    let ptw =
+      if Perf_capabilities.(do_intersect capabilities ptwrite) then "ptw" else ""
+    in
+    (* If ptwrite is not supported, we don't need to add it to the config string. *)
+    let config =
+      match timer_resolution with
+      | Low -> Or_error.return ""
+      | Normal -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0"
+      | High -> Or_error.return "cyc=1,cyc_thresh=1,mtc_period=0,noretcomp=1"
+      | Sample _ ->
+        Or_error.error_string
+          "[-timer-resolution Sample] can only be used in sampling mode. (Did you forget \
+           [-sampling]?)"
+      | Custom { cyc; cyc_thresh; mtc; mtc_period; noretcomp; psb_period } ->
+        let make_config key = function
+          | None -> None
+          | Some value -> Some [%string "%{key}=%{value#Int}"]
+        in
+        [ make_config "cyc" (Option.map ~f:Bool.to_int cyc)
+        ; make_config "cyc_thresh" cyc_thresh
+        ; make_config "mtc" (Option.map ~f:Bool.to_int mtc)
+        ; make_config "mtc_period" mtc_period
+        ; make_config "noretcomp" (Option.map ~f:Bool.to_int noretcomp)
+        ; make_config "psb_period" psb_period
+        ]
+        |> List.filter_opt
+        |> String.concat ~sep:","
+        |> Or_error.return
+    in
+    match config with
+    | Ok config ->
+      if String.is_empty config
+      then Or_error.return [%string "%{ptw}"]
+      else Or_error.return [%string "%{config},%{ptw}"]
+    | Error _ as e -> e
   ;;
 
   let perf_cycles_config_of_timer_resolution (timer_resolution : Timer_resolution.t) =
@@ -606,7 +618,7 @@ let decode_events
     Deferred.List.map files ~how:`Sequential ~f:(fun perf_data_file ->
       let itrace_opts =
         match collection_mode with
-        | Intel_processor_trace _ -> [ "--itrace=bep" ]
+        | Intel_processor_trace _ -> [ "--itrace=bepw" ]
         | Stacktrace_sampling _ -> []
       in
       let fields_opts =

@@ -12,4 +12,5 @@ val snapshot_on_exit : t
 val last_branch_record : t
 val dlfilter : t
 val ctlfd : t
+val ptwrite : t
 val detect_exn : unit -> t Deferred.t
