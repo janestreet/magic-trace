@@ -8,7 +8,11 @@ module Command = struct
 end
 
 let ack_msg = Bytes.of_string "ack\n\000"
-let ack_timeout = `After (Time_ns.Span.of_int_sec 1)
+
+(* If we send a command while perf is shutting down, [ack_rx] will become ready only after
+   perf exits, so this timeout must be at least as long as it takes perf to finish
+   shutting down. *)
+let ack_timeout = `After (Time_ns.Span.of_int_sec 8)
 
 type t =
   { mutable ctl_rx : Core_unix.File_descr.t option
@@ -56,7 +60,7 @@ let block_read_ack t =
         ~timeout:ack_timeout
         ()
     with
-    | { read = []; _ } -> failwith "Perf didn't ack snapshot within timeout"
+    | { read = []; _ } -> failwith "Perf didn't ack command within timeout"
     | { read = [ _fd ]; _ } ->
       let bytes_read =
         Core_unix.read ~restart:true t.ack_rx ~buf:t.ack_buf ~pos:total_bytes_read
