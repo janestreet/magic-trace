@@ -116,10 +116,10 @@ module Share = struct
       { share_command_filename })
   ;;
 
-  let share_trace_file t ~filename =
+  let share_trace_file t ~output_path =
     Process.run_forwarding
       ~prog:t.share_command_filename
-      ~args:[ Filename_unix.realpath filename ]
+      ~args:[ Filename_unix.realpath output_path ]
       ()
   ;;
 end
@@ -218,7 +218,7 @@ let write_and_maybe_serve
     let%bind () =
       match display_mode with
       | Disabled -> notify_trace ~store_path:output_path
-      | Share share -> Share.share_trace_file share ~filename
+      | Share share -> Share.share_trace_file share ~output_path
       | Serve serve ->
         Serve.serve_trace_file serve ~filename ~store_path:indirect_store_path
     in
