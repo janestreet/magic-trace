@@ -1071,8 +1071,8 @@ and write_event' (T t) ?events_writer event =
                  ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])
                  ~default:[]
              ; Option.value_map
-                 (Event.thread outer_event).pid
-                 ~f:(fun pid -> [ "tid", Int (Pid.to_int pid) ])
+                 (Event.thread outer_event).tid
+                 ~f:(fun tid -> [ "tid", Int (Pid.to_int tid) ])
                  ~default:[]
              ])
        in
@@ -1083,6 +1083,29 @@ and write_event' (T t) ?events_writer event =
          ~name:track_name
          ~time
          ~time_end:time
+     | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
+       ; time = _
+       ; data = Ptwrite { location; data }
+       ; in_transaction = _
+       } ->
+       let args =
+         Tracing.Trace.Arg.(
+           List.concat
+             [ [ "timestamp", Int (Time_ns.Span.to_int_ns (time :> Time_ns.Span.t)) ]
+             ; [ "symbol", String (Symbol.display_name location.symbol) ]
+             ; [ "addr", Pointer location.instruction_pointer ]
+             ; [ "data", String data ]
+             ; Option.value_map
+                 (Event.thread outer_event).pid
+                 ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])
+                 ~default:[]
+             ; Option.value_map
+                 (Event.thread outer_event).tid
+                 ~f:(fun tid -> [ "tid", Int (Pid.to_int tid) ])
+                 ~default:[]
+             ])
+       in
+       write_duration_complete t ~thread ~args ~name:"PTWRITE" ~time ~time_end:time
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _ (* Already in scope. Also, this time hasn't been [map_time]'d. *)
        ; data = Power { freq }

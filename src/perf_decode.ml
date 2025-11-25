@@ -29,6 +29,12 @@ let perf_cbr_event_re =
   Re.Perl.re {|^ *([a-z )(]*)? +cbr: +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|} |> Re.compile
 ;;
 
+let perf_ptwrite_event_re =
+  Re.Perl.re
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +(0x[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
+  |> Re.compile
+;;
+
 let trace_error_re =
   Re.Posix.re
     {|^ instruction trace error type [0-9]+ (time ([0-9]+)\.([0-9]+) )?cpu [\-0-9]+ pid ([\-0-9]+) tid ([\-0-9]+) ip (0x[0-9a-fA-F]+|0) code [0-9]+: (.*)$|}
@@ -44,7 +50,15 @@ type header =
       { thread : Event.Thread.t
       ; time : Time_ns.Span.t
       ; period : int
-      ; event : [ `Branches | `Cbr | `Psb | `Cycles | `Branch_misses | `Cache_misses ]
+      ; event :
+          [ `Branches
+          | `Cbr
+          | `Psb
+          | `Cycles
+          | `Branch_misses
+          | `Cache_misses
+          | `Ptwrite
+          ]
       ; remaining_line : string
       }
 
@@ -96,6 +110,7 @@ let parse_event_header line =
         | "cycles" -> `Cycles
         | "branch-misses" -> `Branch_misses
         | "cache-misses" -> `Cache_misses
+        | "ptwrite" -> `Ptwrite
         | _ ->
           raise_s
             [%message
@@ -328,6 +343,33 @@ let parse_perf_extra_sampled_event
     }
 ;;
 
+let parse_perf_ptwrite_event ?perf_maps (thread : Event.Thread.t) time line : Event.t =
+  match Re.Group.all (Re.exec perf_ptwrite_event_re line) with
+  | [| _
+     ; _branch_kind
+     ; _fup_ip
+     ; payload
+     ; _payload_ascii
+     ; _unknown
+     ; instruction_pointer
+     ; symbol_and_offset
+    |] ->
+    let location =
+      parse_location ?perf_maps ~pid:thread.pid instruction_pointer symbol_and_offset
+    in
+    Ok
+      { thread
+      ; time
+      ; data = Ptwrite { location; data = payload }
+      ; in_transaction = false
+      }
+  | results ->
+    raise_s
+      [%message
+        "Regex of perf ptwrite event did not match expected fields"
+          (results : string array)]
+;;
+
 let to_event ?perf_maps lines : Event.t option =
   try
     match lines with
@@ -364,7 +406,9 @@ let to_event ?perf_maps lines : Event.t option =
                  period
                  remaining_line
                  lines
-                 Cache_misses)))
+                 Cache_misses)
+          | `Ptwrite ->
+            Some (parse_perf_ptwrite_event ?perf_maps thread time remaining_line)))
   with
   | exn ->
     raise_s
@@ -724,6 +768,46 @@ let%test_module _ =
            (data
             (Trace (trace_state_change End) (kind Async) (src 0x7f6fce0b71f4)
              (dst 0x0)))))) |}]
+    ;;
+
+    let%expect_test "perf ptwrite event" =
+      check
+        {| 2769074/2769293 2592496.569782106:          1                                        ptwrite:   call                   IP: 0 payload: 0x1b5                            0     55c7952ad2d0 [unknown] (foo.bin)|};
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (2769074)) (tid (2769293)))) (time 30d8m16.569782106s)
+           (data (Ptwrite (location 0x55c7952ad2d0) (data 0x1b5)))))) |}]
+    ;;
+
+    let%expect_test "perf ptwrite event with printable payload" =
+      check
+        {|2817453/2817483 2596547.813541321:          1                                        ptwrite:   call                   IP: 0 payload: 0x62 b                           0     613d946b42d0 [unknown] (foo.bin)|};
+      [%expect
+        {|
+        ((Ok
+          ((thread ((pid (2817453)) (tid (2817483)))) (time 30d1h15m47.813541321s)
+           (data (Ptwrite (location 0x613d946b42d0) (data 0x62)))))) |}]
+    ;;
+
+    let%expect_test "perf ptwrite event with jcc instruction" =
+      check
+        {|3256341/3256760 2632746.069047397:          1                                        ptwrite:   jcc                    IP: 0 payload: 0x5000000000061b2                 0     577bcad80555 [unknown] (foo.bin)|};
+      [%expect
+        {|
+      ((Ok
+        ((thread ((pid (3256341)) (tid (3256760)))) (time 30d11h19m6.069047397s)
+         (data (Ptwrite (location 0x577bcad80555) (data 0x5000000000061b2)))))) |}]
+    ;;
+
+    let%expect_test "perf ptwrite event without instruction" =
+      check
+        {|3285832/3286108 2634666.172476558:          1                                        ptwrite:                          IP: 0 payload: 0xa00000000000000                 0     64d20fb10432 [unknown] (foo.bin)|};
+      [%expect
+        {|
+      ((Ok
+        ((thread ((pid (3285832)) (tid (3286108)))) (time 30d11h51m6.172476558s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000)))))) |}]
     ;;
   end)
 ;;
