@@ -14,7 +14,7 @@ module type Destination = sig
       other situations even if there's enough space in the previous buffer.
       Any older buffers will no longer be used after calling this function, so it's legal
       for a [Destination] to re-use [Iobuf.t]s to avoid allocating. *)
-  val next_buf : ensure_capacity:int -> (read_write, Iobuf.seek) Iobuf.t
+  val next_buf : ensure_capacity:int -> (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
 
   (** Record that the writer appended a certain number of bytes to the buffer, will be
       called some time after the bytes are written but before [next_buf] is called. *)

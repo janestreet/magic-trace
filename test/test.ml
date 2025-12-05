@@ -813,7 +813,7 @@ let%expect_test "get debug information from ELF" =
   (* print_s [%sexp (debug_table : Magic_trace_lib.Address_info.t Int.Table.t)]; *)
   (* We should hopefully be able to rely on the [function] of [raise_after] having
      an entry with the correct column. *)
-  Expect_test_helpers_base.require_equal [%here] (module Int) raise_after_col 22;
+  Expect_test_helpers_base.require_equal (module Int) raise_after_col 22;
   [%expect {| |}];
   return ()
 ;;
