@@ -31,7 +31,7 @@ val file_destination : ?file_format:Writer_intf.File_format.t -> filename:string
     Mostly intended for use in tests. After the [Destination] is closed, sets the window
     of the [Iobuf.t] to the data written. *)
 val iobuf_destination
-  :  (read_write, Iobuf.seek) Iobuf.t
+  :  (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
   -> (module Writer_intf.Destination)
 
 (** Creates a new buffer, which is reset and reused on every call to [next_buf],

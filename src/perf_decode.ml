@@ -410,244 +410,243 @@ let to_events ?perf_maps pipe =
   Pipe.map pipe ~f:(to_event ?perf_maps) |> Pipe.filter_map ~f:Fn.id
 ;;
 
-let%test_module _ =
-  (module struct
-    open Core
+module%test _ = struct
+  open Core
 
-    let check s =
-      to_event (String.split ~on:'\n' s) |> [%sexp_of: Event.t option] |> print_s
-    ;;
+  let check s =
+    to_event (String.split ~on:'\n' s) |> [%sexp_of: Event.t option] |> print_s
+  ;;
 
-    let%expect_test "C symbol" =
-      check
-        {| 25375/25375 4509191.343298468:                            1   branches:uH:   call                     7f6fce0b71f4 __clock_gettime+0x24 (foo.so) =>     7ffd193838e0 __vdso_clock_gettime+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "C symbol" =
+    check
+      {| 25375/25375 4509191.343298468:                            1   branches:uH:   call                     7f6fce0b71f4 __clock_gettime+0x24 (foo.so) =>     7ffd193838e0 __vdso_clock_gettime+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data (Trace (kind Call) (src 0x7f6fce0b71f4) (dst 0x7ffd193838e0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "C symbol trace start" =
-      check
-        {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "C symbol trace start" =
+    check
+      {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7f6fce0b71d0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "C++ symbol" =
-      check
-        {| 7166/7166  4512623.871133092:                            1   branches:uH:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb (foo.so) =>           9f68b0 J::K<int, std::string>+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "C++ symbol" =
+    check
+      {| 7166/7166  4512623.871133092:                            1   branches:uH:   call                           9bc6db a::B<a::C, a::D<a::E>, a::F, a::F, G::H, a::I>::run+0x1eb (foo.so) =>           9f68b0 J::K<int, std::string>+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (7166)) (tid (7166)))) (time 52d5h30m23.871133092s)
            (data (Trace (kind Call) (src 0x9bc6db) (dst 0x9f68b0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "OCaml symbol" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b Base.Comparable.=_2352+0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "OCaml symbol" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b Base.Comparable.=_2352+0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
-       comment above as well.
+  (* CR-someday wduff: Leaving this concrete example here for when we support this. See my
+     comment above as well.
 
-       {[
-         let%expect_test "Unknown Go symbol" =
-           check
-             {|2118573/2118573 770614.599007116:                                branches:uH:   tr strt tr end                      0 [unknown] (foo.so) =>           4591e1 [unknown] (foo.so)|};
-           [%expect]
-         ;;
-       ]}
-    *)
+     {[
+       let%expect_test "Unknown Go symbol" =
+         check
+           {|2118573/2118573 770614.599007116:                                branches:uH:   tr strt tr end                      0 [unknown] (foo.so) =>           4591e1 [unknown] (foo.so)|};
+         [%expect]
+       ;;
+     ]}
+  *)
 
-    let%expect_test "manufactured example 1" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "manufactured example 1" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "manufactured example 2" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 => +0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "manufactured example 2" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b x => +0xb (foo.so) =>     56234f4bc7a0 => +0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "manufactured example 3" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b + +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "manufactured example 3" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b + +0xb (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "unknown symbol in DSO" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b [unknown] (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "unknown symbol in DSO" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b [unknown] (foo.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "DSO with spaces in it" =
-      check
-        {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b [unknown] (this is a spaced dso.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "DSO with spaces in it" =
+    check
+      {|2017001/2017001 761439.053336670:                            1   branches:uH:   call                     56234f77576b [unknown] (this is a spaced dso.so) =>     56234f4bc7a0 caml_apply2+0x0 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2017001)) (tid (2017001)))) (time 8d19h30m39.05333667s)
            (data (Trace (kind Call) (src 0x56234f77576b) (dst 0x56234f4bc7a0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "software interrupts" =
-      check
-        "1907478/1909463 457407.880965552:          1                                \
-         branches:uH:   int                      564aa58813d4 \
-         Builtins_RunMicrotasks+0x554 (/usr/local/bin/workload) =>     564aa584fa00 \
-         Builtins_Call_ReceiverIsNotNullOrUndefined+0x0 (/usr/local/bin/workload)";
-      [%expect
-        {|
+  let%expect_test "software interrupts" =
+    check
+      "1907478/1909463 457407.880965552:          1                                \
+       branches:uH:   int                      564aa58813d4 Builtins_RunMicrotasks+0x554 \
+       (/usr/local/bin/workload) =>     564aa584fa00 \
+       Builtins_Call_ReceiverIsNotNullOrUndefined+0x0 (/usr/local/bin/workload)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (1907478)) (tid (1909463)))) (time 5d7h3m27.880965552s)
            (data (Trace (kind Interrupt) (src 0x564aa58813d4) (dst 0x564aa584fa00)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "decode error with a timestamp" =
-      check
-        " instruction trace error type 1 time 47170.086912826 cpu -1 pid 293415 tid \
-         293415 ip 0x7ffff7327730 code 7: Overflow packet";
-      [%expect
-        {|
+  let%expect_test "decode error with a timestamp" =
+    check
+      " instruction trace error type 1 time 47170.086912826 cpu -1 pid 293415 tid 293415 \
+       ip 0x7ffff7327730 code 7: Overflow packet";
+    [%expect
+      {|
           ((Error
             ((thread ((pid (293415)) (tid (293415)))) (time (13h6m10.086912826s))
              (instruction_pointer (0x7ffff7327730)) (message "Overflow packet")))) |}]
-    ;;
+  ;;
 
-    let%expect_test "decode error without a timestamp" =
-      check
-        " instruction trace error type 1 cpu -1 pid 293415 tid 293415 ip 0x7ffff7327730 \
-         code 7: Overflow packet";
-      [%expect
-        {|
+  let%expect_test "decode error without a timestamp" =
+    check
+      " instruction trace error type 1 cpu -1 pid 293415 tid 293415 ip 0x7ffff7327730 \
+       code 7: Overflow packet";
+    [%expect
+      {|
           ((Error
             ((thread ((pid (293415)) (tid (293415)))) (time ())
              (instruction_pointer (0x7ffff7327730)) (message "Overflow packet")))) |}]
-    ;;
+  ;;
 
-    let%expect_test "lost trace data" =
-      check
-        " instruction trace error type 1 time 2651115.104731379 cpu -1 pid 1801680 tid \
-         1801680 ip 0 code 8: Lost trace data";
-      [%expect
-        {|
+  let%expect_test "lost trace data" =
+    check
+      " instruction trace error type 1 time 2651115.104731379 cpu -1 pid 1801680 tid \
+       1801680 ip 0 code 8: Lost trace data";
+    [%expect
+      {|
           ((Error
             ((thread ((pid (1801680)) (tid (1801680)))) (time (30d16h25m15.104731379s))
              (instruction_pointer ()) (message "Lost trace data")))) |}]
-    ;;
+  ;;
 
-    let%expect_test "never-ending loop" =
-      check
-        " instruction trace error type 1 time 406036.830210719 cpu -1 pid 114362 tid \
-         114362 ip 0xffffffffb0999ed5 code 10: Never-ending loop (refer perf config \
-         intel-pt.max-loops)";
-      [%expect
-        {|
+  let%expect_test "never-ending loop" =
+    check
+      " instruction trace error type 1 time 406036.830210719 cpu -1 pid 114362 tid \
+       114362 ip 0xffffffffb0999ed5 code 10: Never-ending loop (refer perf config \
+       intel-pt.max-loops)";
+    [%expect
+      {|
           ((Error
             ((thread ((pid (114362)) (tid (114362)))) (time (4d16h47m16.830210719s))
              (instruction_pointer (-0x4f66612b))
              (message "Never-ending loop (refer perf config intel-pt.max-loops)")))) |}]
-    ;;
+  ;;
 
-    let%expect_test "power event cbr" =
-      check
-        "2937048/2937048 448556.689322817:                                   1    \
-         cbr:                        cbr: 46 freq: 4606 MHz (159%)                   \
-         0                0 [unknown] ([unknown])";
-      [%expect
-        {|
+  let%expect_test "power event cbr" =
+    check
+      "2937048/2937048 448556.689322817:                                   1    \
+       cbr:                        cbr: 46 freq: 4606 MHz (159%)                   \
+       0                0 [unknown] ([unknown])";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2937048)) (tid (2937048)))) (time 5d4h35m56.689322817s)
            (data (Power (freq 4606)))))) |}]
-    ;;
+  ;;
 
-    (* Perf seems to change spacing when frequency is small and our regex was
-       crashing on this case. *)
-    let%expect_test "cbr event with double spaces" =
-      check
-        "2420596/2420596 525062.244538101:          \
-         1                                        cbr:   syscall              cbr:  8 \
-         freq:  801 MHz ( 28%)                   0     7f77dc9f4646 __nanosleep+0x16 \
-         (/usr/lib64/libc-2.28.so)";
-      [%expect
-        {|
+  (* Perf seems to change spacing when frequency is small and our regex was
+     crashing on this case. *)
+  let%expect_test "cbr event with double spaces" =
+    check
+      "2420596/2420596 525062.244538101:          \
+       1                                        cbr:   syscall              cbr:  8 \
+       freq:  801 MHz ( 28%)                   0     7f77dc9f4646 __nanosleep+0x16 \
+       (/usr/lib64/libc-2.28.so)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2420596)) (tid (2420596)))) (time 6d1h51m2.244538101s)
            (data (Power (freq 801)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "cbr event with tr end" =
-      check
-        "21302/21302 82318.700445693:         1           cbr:  tr end               \
-         cbr: 45 freq: 4500 MHz (118%)                   0          5368e58 \
-         __symbol+0x168 (/dev/foo.exe)";
-      [%expect
-        {|
+  let%expect_test "cbr event with tr end" =
+    check
+      "21302/21302 82318.700445693:         1           cbr:  tr end               cbr: \
+       45 freq: 4500 MHz (118%)                   0          5368e58 __symbol+0x168 \
+       (/dev/foo.exe)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (21302)) (tid (21302)))) (time 22h51m58.700445693s)
            (data (Power (freq 4500)))))) |}]
-    ;;
+  ;;
 
-    (* Expected [None] because we ignore these events currently. *)
-    let%expect_test "power event psb offs" =
-      check
-        "2937048/2937048 448556.689403475:                             1          \
-         psb:                        psb offs: 0x4be8                                \
-         0     7f068fbfd330 mmap64+0x50 (/usr/lib64/ld-2.28.so)";
-      [%expect {|
+  (* Expected [None] because we ignore these events currently. *)
+  let%expect_test "power event psb offs" =
+    check
+      "2937048/2937048 448556.689403475:                             1          \
+       psb:                        psb offs: 0x4be8                                0     \
+       7f068fbfd330 mmap64+0x50 (/usr/lib64/ld-2.28.so)";
+    [%expect {|
         () |}]
-    ;;
+  ;;
 
-    let%expect_test "sampled callstack" =
-      check
-        "2060126/2060126 178090.391624068:     555555 cycles:u:\n\
-         \tffffffff97201100 [unknown] ([unknown])\n\
-         \t7f9bd48c1d80 _dl_setup_hash+0x0 (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd48bd18f _dl_map_object_from_fd+0xb8f (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd48bf6b0 _dl_map_object+0x1e0 (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd48ca184 dl_open_worker_begin+0xa4 (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
-         \t7f9bd48c9ac2 dl_open_worker+0x32 (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
-         \t7f9bd48c9d0c _dl_open+0xac (/usr/lib64/ld-2.28.so)\n\
-         \t7f9bd46ae1e8 dlopen_doit+0x58 (/usr/lib64/libdl-2.28.so)\n\
-         \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
-         \t7f9bd445225e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
-         \t7f9bd46ae964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
-         \t7f9bd46ae285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so)\n\
-         \t4008de main+0x87 (/home/demo)";
-      [%expect
-        {|
+  let%expect_test "sampled callstack" =
+    check
+      "2060126/2060126 178090.391624068:     555555 cycles:u:\n\
+       \tffffffff97201100 [unknown] ([unknown])\n\
+       \t7f9bd48c1d80 _dl_setup_hash+0x0 (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd48bd18f _dl_map_object_from_fd+0xb8f (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd48bf6b0 _dl_map_object+0x1e0 (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd48ca184 dl_open_worker_begin+0xa4 (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+       \t7f9bd48c9ac2 dl_open_worker+0x32 (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+       \t7f9bd48c9d0c _dl_open+0xac (/usr/lib64/ld-2.28.so)\n\
+       \t7f9bd46ae1e8 dlopen_doit+0x58 (/usr/lib64/libdl-2.28.so)\n\
+       \t7f9bd44521a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+       \t7f9bd445225e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
+       \t7f9bd46ae964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
+       \t7f9bd46ae285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so)\n\
+       \t4008de main+0x87 (/home/demo)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (2060126)) (tid (2060126)))) (time 2d1h28m10.391624068s)
            (data
@@ -657,76 +656,75 @@ let%test_module _ =
                0x7f9bd46ae1e8 0x7f9bd48c9d0c 0x7f9bd44521a2 0x7f9bd48c9ac2
                0x7f9bd44521a2 0x7f9bd48ca184 0x7f9bd48bf6b0 0x7f9bd48bd18f
                0x7f9bd48c1d80 -0x68dfef00))))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "cache-misses event with ipt" =
-      check
-        "3871580/3871580 430720.265503976:         50                   \
-         cache-misses/period=50/u:                                      0     \
-         7fca9945c595 __sleep+0x55 (/usr/lib64/libc-2.28.so)";
-      [%expect
-        {|
+  let%expect_test "cache-misses event with ipt" =
+    check
+      "3871580/3871580 430720.265503976:         50                   \
+       cache-misses/period=50/u:                                      0     7fca9945c595 \
+       __sleep+0x55 (/usr/lib64/libc-2.28.so)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h38m40.265503976s)
            (data
             (Event_sample (location 0x7fca9945c595) (count 50) (name Cache_misses)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "cache-misses event with sampling" =
-      check
-        "3871580/3871580 431043.387175119:         50 cache-misses/period=50/u: \n\
-         \t7fca999481a0 _dl_unmap+0x0 (/usr/lib64/ld-2.28.so)\n\
-         \t7fca999454cc _dl_close_worker+0x83c (/usr/lib64/ld-2.28.so)\n\
-         \t7fca99945dbd _dl_close+0x2d (/usr/lib64/ld-2.28.so)\n\
-         \t7fca994cc1a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
-         \t7fca994cc25e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
-         \t7fca99728964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
-         \t7fca99728313 dlclose+0x23 (/usr/lib64/libdl-2.28.so)\n\
-         \t4009b7 main+0x160 (/usr/local/home/demo)\n";
-      [%expect
-        {|
+  let%expect_test "cache-misses event with sampling" =
+    check
+      "3871580/3871580 431043.387175119:         50 cache-misses/period=50/u: \n\
+       \t7fca999481a0 _dl_unmap+0x0 (/usr/lib64/ld-2.28.so)\n\
+       \t7fca999454cc _dl_close_worker+0x83c (/usr/lib64/ld-2.28.so)\n\
+       \t7fca99945dbd _dl_close+0x2d (/usr/lib64/ld-2.28.so)\n\
+       \t7fca994cc1a2 _dl_catch_exception+0x82 (/usr/lib64/libc-2.28.so)\n\
+       \t7fca994cc25e _dl_catch_error+0x2e (/usr/lib64/libc-2.28.so)\n\
+       \t7fca99728964 _dlerror_run+0x64 (/usr/lib64/libdl-2.28.so)\n\
+       \t7fca99728313 dlclose+0x23 (/usr/lib64/libdl-2.28.so)\n\
+       \t4009b7 main+0x160 (/usr/local/home/demo)\n";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h44m3.387175119s)
            (data
             (Event_sample (location 0x7fca999481a0) (count 50) (name Cache_misses)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "branch-misses event with ipt" =
-      check
-        "3871580/3871580 431228.526799230:         50                  \
-         branch-misses/period=50/u:                                      0     \
-         7fca99943c60 _dl_open+0x0 (/usr/lib64/ld-2.28.so)";
-      [%expect
-        {|
+  let%expect_test "branch-misses event with ipt" =
+    check
+      "3871580/3871580 431228.526799230:         50                  \
+       branch-misses/period=50/u:                                      0     \
+       7fca99943c60 _dl_open+0x0 (/usr/lib64/ld-2.28.so)";
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (3871580)) (tid (3871580)))) (time 4d23h47m8.52679923s)
            (data
             (Event_sample (location 0x7fca99943c60) (count 50) (name Branch_misses)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "perf reports a garbage symbol offset" =
-      check
-        {| 25375/25375 4509191.343298468:                            1   branches:uH:   call                     7f6fce0b71f4 [unknown] (foo.so) =>     7ffd193838e0 memcpy@plt+0xffffffffff22f000 (foo.so)|};
-      [%expect
-        {|
+  let%expect_test "perf reports a garbage symbol offset" =
+    check
+      {| 25375/25375 4509191.343298468:                            1   branches:uH:   call                     7f6fce0b71f4 [unknown] (foo.so) =>     7ffd193838e0 memcpy@plt+0xffffffffff22f000 (foo.so)|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data (Trace (kind Call) (src 0x7f6fce0b71f4) (dst 0x7ffd193838e0)))))) |}]
-    ;;
+  ;;
 
-    let%expect_test "tr end  async" =
-      check
-        {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr end  async                     7f6fce0b71f4 [unknown] (foo.so) =>     0 [unknown] ([unknown])|};
-      [%expect
-        {|
+  let%expect_test "tr end  async" =
+    check
+      {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr end  async                     7f6fce0b71f4 [unknown] (foo.so) =>     0 [unknown] ([unknown])|};
+    [%expect
+      {|
         ((Ok
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data
             (Trace (trace_state_change End) (kind Async) (src 0x7f6fce0b71f4)
              (dst 0x0)))))) |}]
-    ;;
-  end)
-;;
+  ;;
+end
 
 module For_testing = struct
   let to_event = to_event

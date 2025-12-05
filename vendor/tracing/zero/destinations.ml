@@ -222,7 +222,7 @@ end = struct
     }
 
   type internal =
-    { mutable buffers : (read_write, Iobuf.seek) Iobuf.t list
+    { mutable buffers : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t list
     ; mutable written_in_cur_buf : int
     }
 

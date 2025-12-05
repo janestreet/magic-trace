@@ -36,9 +36,9 @@ let create () =
 ;;
 
 let close_perf_side_fds t =
-  Option.iter t.ctl_rx ~f:(Core_unix.close ~restart:true);
+  Option.iter t.ctl_rx ~f:Core_unix.close;
   t.ctl_rx <- None;
-  Option.iter t.ack_tx ~f:(Core_unix.close ~restart:true);
+  Option.iter t.ack_tx ~f:Core_unix.close;
   t.ack_tx <- None
 ;;
 

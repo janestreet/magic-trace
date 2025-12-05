@@ -37,13 +37,12 @@ let parse_line line =
             (line : string)])
 ;;
 
-let%test_module _ =
-  (module struct
-    open Core
+module%test _ = struct
+  open Core
 
-    let%expect_test "example perf map" =
-      let sample =
-        {|3a6caa49c2e f3 LazyCompile:~afterInspector node:internal/errors:753
+  let%expect_test "example perf map" =
+    let sample =
+      {|3a6caa49c2e f3 LazyCompile:~afterInspector node:internal/errors:753
 3a6caa49e86 1e LazyCompile:~lazyInternalUtilInspect node:internal/errors:185
 3a6caa4a5fe 5 Eval:~ node:internal/tty:1
 3a6caa4aa5e 166 Function:~ node:internal/tty:1
@@ -63,13 +62,13 @@ let%test_module _ =
 00007F5D97BCAD58 48 stub<1024> AllocateTemporaryEntryPoints<PRECODE_FIXUP>
 00007F5D97BCAE90 1b4 instance void [System.Private.CoreLib] System.Collections.Generic.Dictionary`2[System.__Canon,System.Double]::.ctor(int32,class System.Collections.Generic.IEqualityComparer`1<!0>)[QuickJitted]
 |}
-      in
-      String.split sample ~on:'\n'
-      |> List.map ~f:(fun line -> line, parse_line line)
-      |> [%sexp_of: (string * (Int64.Hex.t * Perf_map_location.t) option) list]
-      |> print_s;
-      [%expect
-        {|
+    in
+    String.split sample ~on:'\n'
+    |> List.map ~f:(fun line -> line, parse_line line)
+    |> [%sexp_of: (string * (Int64.Hex.t * Perf_map_location.t) option) list]
+    |> print_s;
+    [%expect
+      {|
         (("3a6caa49c2e f3 LazyCompile:~afterInspector node:internal/errors:753"
           ((0x3a6caa49c2e
             ((start_addr 0x3a6caa49c2e) (size 0xf3)
@@ -153,9 +152,8 @@ let%test_module _ =
              (function_
               "instance void [System.Private.CoreLib] System.Collections.Generic.Dictionary`2[System.__Canon,System.Double]::.ctor(int32,class System.Collections.Generic.IEqualityComparer`1<!0>)[QuickJitted]")))))
          ("" ())) |}]
-    ;;
-  end)
-;;
+  ;;
+end
 
 let default_filename_re = Re.Perl.re {|^perf-([0-9]+)\.map$|} |> Re.compile
 let default_filename ~pid = [%string "/tmp/perf-%{pid#Pid}.map"]
@@ -175,14 +173,14 @@ let%expect_test "pid_of_filename success" =
 ;;
 
 let%expect_test "pid_of_filename failure 1" =
-  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+  Expect_test_helpers_core.require_does_raise (fun () ->
     print_s [%message "" ~pid:(pid_of_filename "/tmp/per-512.map" : Pid.t)]);
   [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
   |> Deferred.return
 ;;
 
 let%expect_test "pid_of_filename failure 2" =
-  Expect_test_helpers_core.require_does_raise [%here] (fun () ->
+  Expect_test_helpers_core.require_does_raise (fun () ->
     print_s [%message "" ~pid:(pid_of_filename "/tmp/perf-512" : Pid.t)]);
   [%expect {| "Perf map filename did not match default format [perf-%{pid}.map]" |}]
   |> Deferred.return
