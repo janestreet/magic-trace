@@ -116,7 +116,7 @@ let write_trace_from_events
     else events
   in
   let trace =
-    let%map.Option writer = writer in
+    let%map.Option writer in
     let base_time =
       Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
     in
@@ -592,7 +592,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace run -full-execution ./program\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_perf_commands
        and argv =
          let%map_open.Command command = anon (maybe ("COMMAND" %: string))
          and more_command =
@@ -667,7 +667,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
       in
       let pid =
-        let%bind.Option sel_line = sel_line in
+        let%bind.Option sel_line in
         let sel_line = String.lstrip sel_line in
         let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
         Pid.of_string first_part
@@ -694,7 +694,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace attach -trigger ?\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_perf_commands
        and pids =
          flag
            "-pid"
@@ -766,7 +766,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (optional (Arg_type.comma_separated Filename_unix.arg_type))
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
        and collection_mode = Collection_mode.param
-       and debug_print_perf_commands = debug_print_perf_commands in
+       and debug_print_perf_commands in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)

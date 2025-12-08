@@ -181,10 +181,10 @@ let write_and_maybe_serve
   t
   ~filename
   ~(f :
-     events_writer:events_writer option
-     -> writer:Tracing_zero.Writer.t option
-     -> unit
-     -> 'a Deferred.Or_error.t)
+      events_writer:events_writer option
+      -> writer:Tracing_zero.Writer.t option
+      -> unit
+      -> 'a Deferred.Or_error.t)
   =
   let open Deferred.Or_error.Let_syntax in
   maybe_stash_old_trace ~filename;

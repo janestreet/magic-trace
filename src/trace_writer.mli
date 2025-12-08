@@ -65,7 +65,6 @@ val write_event
   -> Event.With_write_info.t
   -> unit
 
-(** Updates internal data structures when trace ends. If [to_time] is passed, will
-    shift to new start time which is useful when writing out multiple snapshots
-    from perf. *)
+(** Updates internal data structures when trace ends. If [to_time] is passed, will shift
+    to new start time which is useful when writing out multiple snapshots from perf. *)
 val end_of_trace : ?to_time:Time_ns.Span.t -> t -> unit

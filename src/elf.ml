@@ -181,8 +181,8 @@ let find_selection t name : Selection.t option =
         Some desired_filename, maybe_int_of_string desired_line, None
       | _ -> None, None, None
     in
-    let%bind.Option desired_filename = desired_filename in
-    let%bind.Option desired_line = desired_line in
+    let%bind.Option desired_filename in
+    let%bind.Option desired_line in
     let cols = ref [] in
     traverse_debug_line
       ~f:(fun header state ->
@@ -405,7 +405,7 @@ module Symbol_resolver = struct
         , (value symb |> Int64.to_int_exn) - normal_offset + t.loaded_offset
         , size_in_bytes symb |> Int64.to_int_exn ))
     in
-    let%bind name = name in
+    let%bind name in
     return { name; start_addr; end_addr = start_addr + size }
   ;;
 end
