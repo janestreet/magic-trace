@@ -1,5 +1,5 @@
-(** Backends, which do the trace recording, present this unified interface in
-    order to be exposed as commands which can generate traces. *)
+(** Backends, which do the trace recording, present this unified interface in order to be
+    exposed as commands which can generate traces. *)
 
 open! Core
 open! Async
@@ -48,8 +48,8 @@ module type S = sig
              function. Default [true]. *)
     -> debug_print_perf_commands:bool
     -> recording_data:Recording.Data.t option
-         (** This parameter is passed to allow [decode_events] to depend
-             on information or configuration from [attach_and_record]. *)
+         (** This parameter is passed to allow [decode_events] to depend on information or
+             configuration from [attach_and_record]. *)
     -> record_dir:string
     -> collection_mode:Collection_mode.t
     -> Decode_opts.t
