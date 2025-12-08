@@ -76,8 +76,9 @@ let%expect_test "examples" =
   check "8000B";
   [%expect
     {|
-    Warning: Rounding 7.8125K up to the next power of two number of pages, 8K.
-    ((size 8K) (pages 2)) |}];
+    Warning: Rounding 7.81K up to the next power of two number of pages, 8K.
+    ((size 8K) (pages 2))
+    |}];
   check "-3K";
   [%expect
     {|
@@ -103,6 +104,7 @@ let%expect_test "examples" =
   check "300T";
   [%expect
     {|
-    Warning: Rounding large bytes, 307200G, down to the maximum of 262144G.
-    ((size 262144G) (pages 68719476736)) |}]
+    Warning: Rounding large bytes, 300T, down to the maximum of 256T.
+    ((size 262144G) (pages 68719476736))
+    |}]
 ;;
