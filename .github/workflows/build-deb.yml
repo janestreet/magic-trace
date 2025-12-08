@@ -4,7 +4,7 @@ on: push
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu_x64_8_cores
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

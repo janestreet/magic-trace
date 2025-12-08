@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu_x64_8_cores
         ocaml-version:
           - 4.14.0
 
