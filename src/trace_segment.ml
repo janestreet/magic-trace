@@ -207,7 +207,10 @@ let%test_module _ =
       return ();
       return ();
       print_callstacks callstacks;
-      [%expect {||}]
+      [%expect {|
+        main                main                main                main                main                main
+        fn1                 fn1                 fn1                 fn1                 fn1
+                            fn2                                     fn3 |}]
     ;;
 
     (*= 
@@ -236,7 +239,11 @@ let%test_module _ =
       return ();
       return ~dst:"start" ();
       print_callstacks callstacks;
-      [%expect {||}]
+      [%expect {|
+        start               start               start               start               start               start               start
+        main                main                main                main                main                main
+        fn1                 fn1                 fn1                 fn1                 fn1
+                            fn2                                     fn3 |}]
     ;;
   end)
 ;;
