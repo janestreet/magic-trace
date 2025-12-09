@@ -1,10 +1,5 @@
 open! Core
-
-module Location = struct
-  include Event.Location
-
-  let sexp_of_t { symbol; _ } = Sexp.Atom (Symbol.display_name symbol)
-end
+module Location = Event.Location
 
 (* Renaming this purely to avoid confusion between "callstack" and "data-structure I am
    using to maintain multiple elements" *)
@@ -102,6 +97,7 @@ let add_event' stacks_at_times (event : Event.Ok.Data.t) time =
     handle_call stacks_at_times time ~src ~dst
   | Trace { kind = Some Return; dst; src = _; trace_state_change = _ } ->
     handle_ret stacks_at_times time ~dst
+  (* This is just a proof-of-concept at the moment *)
   | Trace _
   | Event.Ok.Data.Power _
   | Event.Ok.Data.Stacktrace_sample _
@@ -185,15 +181,15 @@ let%test_module _ =
       |> print_endline
     ;;
 
-    (*= 
-       Assume no tail-call-optimization is performed: 
+    (*=
+       Assume no tail-call-optimization is performed:
 
-       let fn2 () = () 
+       let fn2 () = ()
        let fn3 () = ()
 
-       let fn1 () = 
-         fn2 () 
-         fn3 () 
+       let fn1 () =
+         fn2 ()
+         fn3 ()
        ;;
 
        let main () = fn1 ()
@@ -207,22 +203,23 @@ let%test_module _ =
       return ();
       return ();
       print_callstacks callstacks;
-      [%expect {|
+      [%expect
+        {|
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3 |}]
     ;;
 
-    (*= 
+    (*=
        Assume no tail-call-optimization is performed, and we started tracing during the execution of [main],
        so we never saw the call to [start]:
 
-       let fn2 () = () 
+       let fn2 () = ()
        let fn3 () = ()
 
-       let fn1 () = 
-         fn2 () 
-         fn3 () 
+       let fn1 () =
+         fn2 ()
+         fn3 ()
        ;;
 
        let main () = fn1 ()
@@ -239,7 +236,8 @@ let%test_module _ =
       return ();
       return ~dst:"start" ();
       print_callstacks callstacks;
-      [%expect {|
+      [%expect
+        {|
         start               start               start               start               start               start               start
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
