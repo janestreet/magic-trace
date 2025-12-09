@@ -182,6 +182,9 @@ val write_flow_step : t -> Flow.t -> thread:Thread.t -> time:Time_ns.Span.t -> u
 *)
 val finish_flow : t -> Flow.t -> unit
 
+(* TODO Delete this, it's a temporary hack *)
+val base_time : t -> Time_ns.t
+
 module Expert : sig
   (** Wraps a [Tracing_zero.Writer.t] to keep track of IDs and interned strings
 
