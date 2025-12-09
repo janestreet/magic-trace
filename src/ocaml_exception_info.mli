@@ -93,6 +93,6 @@ val is_entertrap : t -> addr:int64 -> bool
 val iter_pushtraps_and_poptraps_in_range
   :  from:int64
   -> to_:int64
-  -> f:(int64 * Kind.t -> unit)
+  -> f:local_ (int64 * Kind.t -> unit)
   -> t
   -> unit

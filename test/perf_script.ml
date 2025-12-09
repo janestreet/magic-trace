@@ -100,5 +100,5 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
           Trace_writer.write_event ?events_writer trace_writer event
         | None -> ());
       printf "INPUT TRACE STREAM ENDED, any lines printed below this were deferred\n";
-      Trace_writer.end_of_trace trace_writer)
+      Trace_writer.finalize trace_writer)
 ;;
