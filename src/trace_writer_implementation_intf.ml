@@ -34,14 +34,6 @@ module type S = sig
     val diff : t -> t -> Time_ns.Span.t
   end
 
-  module Callstack : sig
-    type t =
-      { stack : Event.Location.t Stack.t
-      ; mutable create_time : Mapped_time.t
-      }
-    [@@deriving sexp, bin_io]
-  end
-
   module Event_and_callstack : sig
     type t =
       { event : Event.t
@@ -69,4 +61,6 @@ module type S = sig
   (** Updates internal data structures when trace ends. If [to_time] is passed, will shift
       to new start time which is useful when writing out multiple snapshots from perf. *)
   val end_of_trace : ?to_time:Time_ns.Span.t -> t -> unit
+
+  val finalize : t -> unit
 end

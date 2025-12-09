@@ -65,6 +65,7 @@ depends: [
   "fieldslib" {= "v0.18~preview.130.91+190"}
   "fix" {= "20250919"}
   "flexible_sexp" {= "v0.18~preview.130.91+190"}
+  "float_array" {= "v0.18~preview.130.91+190"}
   "fmt" {= "0.11.0"}
   "fpath" {= "0.7.3"}
   "int_repr" {= "v0.18~preview.130.91+190"}
@@ -180,6 +181,7 @@ depends: [
   "ppx_base" {= "v0.18~preview.130.91+190"}
   "ppx_bench" {= "v0.18~preview.130.91+190"}
   "ppx_bin_prot" {= "v0.18~preview.130.91+190"}
+  "ppx_box" {= "v0.18~preview.130.91+190"}
   "ppx_builtin" {= "v0.18~preview.130.91+190"}
   "ppx_cold" {= "v0.18~preview.130.91+190"}
   "ppx_compare" {= "v0.18~preview.130.91+190"}
@@ -192,6 +194,7 @@ depends: [
   "ppx_expect" {= "v0.18~preview.130.91+190"}
   "ppx_fields_conv" {= "v0.18~preview.130.91+190"}
   "ppx_fixed_literal" {= "v0.18~preview.130.91+190"}
+  "ppx_for_loop" {= "v0.18~preview.130.91+190"}
   "ppx_fuelproof" {= "v0.18~preview.130.91+190"}
   "ppx_globalize" {= "v0.18~preview.130.91+190"}
   "ppx_hash" {= "v0.18~preview.130.91+190"}
@@ -247,6 +250,7 @@ depends: [
   "time_now" {= "v0.18~preview.130.91+190"}
   "topkg" {= "1.1.1+ox"}
   "typerep" {= "v0.18~preview.130.91+190"}
+  "unboxed" {= "v0.18~preview.130.91+190"}
   "unique" {= "v0.18~preview.130.91+190"}
   "univ_map" {= "v0.18~preview.130.91+190"}
   "uopt" {= "v0.18~preview.130.91+190"}
@@ -256,6 +260,7 @@ depends: [
   "uuseg" {= "17.0.0"}
   "uutf" {= "1.0.4+ox"}
   "variantslib" {= "v0.18~preview.130.91+190"}
+  "vec" {= "v0.18~preview.130.91+190"}
   "zstandard" {= "v0.18~preview.130.91+190"}
 ]
 build: ["dune" "build" "-p" name "-j" jobs]

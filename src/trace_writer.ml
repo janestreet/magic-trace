@@ -52,7 +52,9 @@ module Pending_event = struct
   [@@deriving sexp]
 
   let create_call location ~from_untraced =
-    let { Event.Location.instruction_pointer; symbol; symbol_offset } = location in
+    let { Event.Location.instruction_pointer; symbol; symbol_offset; dso = _ } =
+      location
+    in
     { symbol
     ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
     }
@@ -184,7 +186,7 @@ let write_duration_begin
   =
   let module T = (val t.trace) in
   if t.in_filtered_region
-  then T.write_duration_begin ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  then T.write_duration_begin () ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let write_duration_end
@@ -198,7 +200,7 @@ let write_duration_end
   =
   let module T = (val t.trace) in
   if t.in_filtered_region
-  then T.write_duration_end ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
+  then T.write_duration_end () ~args ~thread ~name ~time:(time :> Time_ns.Span.t)
 ;;
 
 let write_duration_complete
@@ -1132,14 +1134,14 @@ and write_event' (T t) ?events_writer event =
               | Tx_abort )
           , Some Start )
         | Some Async, None
-        | Some (Hardware_interrupt | Jump | Interrupt | Tx_abort), Some End ->
+        | Some (Hardware_interrupt | Jump | Tx_abort), Some End ->
           raise_s
             [%message
               "BUG: magic-trace devs thought this event was impossible, but you just \
                proved them wrong. Please report this to \
                https://github.com/janestreet/magic-trace/issues/"
                 (event : Event.t)]
-        | (None | Some Async), Some End ->
+        | (None | Some Async | Some Interrupt), Some End ->
           call t thread_info ~time ~location:Event.Location.untraced
         | Some Syscall, Some End ->
           (* We should only be getting these under /u *)
@@ -1231,3 +1233,5 @@ and write_event' (T t) ?events_writer event =
         | None, _ -> ());
        if !debug then print_s (sexp_of_inner t))
 ;;
+
+let finalize t = end_of_trace t

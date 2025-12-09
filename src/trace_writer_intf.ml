@@ -7,14 +7,18 @@ module type S_trace = sig
   val allocate_thread : pid:int -> name:string -> thread
 
   val write_duration_begin
-    :  args:Tracing.Trace.Arg.t list
+    :  ?category:string
+    -> unit
+    -> args:Tracing.Trace.Arg.t list
     -> thread:thread
     -> name:string
     -> time:Time_ns.Span.t
     -> unit
 
   val write_duration_end
-    :  args:Tracing.Trace.Arg.t list
+    :  ?category:string
+    -> unit
+    -> args:Tracing.Trace.Arg.t list
     -> thread:thread
     -> name:string
     -> time:Time_ns.Span.t

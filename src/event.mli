@@ -28,8 +28,9 @@ module Location : sig
     { instruction_pointer : int64
     ; symbol : Symbol.t
     ; symbol_offset : int
+    ; dso : Interned_string.t or_null
     }
-  [@@deriving sexp, fields, bin_io]
+  [@@deriving sexp, fields ~getters, bin_io]
 
   val unknown : t
   val untraced : t

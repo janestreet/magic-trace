@@ -19,6 +19,7 @@ module For_testing : sig
     -> hits:(string * Breakpoint.Hit.t) list
     -> events:Event.With_write_info.t Pipe.Reader.t list
     -> close_result:'a Deferred.t
+    -> collection_mode:Collection_mode.t
     -> unit
     -> 'a Deferred.t
 end

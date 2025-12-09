@@ -79,8 +79,8 @@ module Null_writer : Trace_writer_intf.S_trace = struct
 
   let allocate_pid ~name:_ = 0
   let allocate_thread ~pid:_ ~name:_ = ()
-  let write_duration_begin ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
-  let write_duration_end ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_begin ?category:_ () ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_end ?category:_ () ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ : unit = ()
   let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
@@ -96,6 +96,7 @@ let write_trace_from_events
   ~hits
   ~events
   ~close_result
+  ~(collection_mode : Collection_mode.t)
   ()
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
@@ -121,6 +122,15 @@ let write_trace_from_events
       Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
     in
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
+  in
+  let (module Trace_writer : Trace_writer_implementation_intf.S) =
+    match collection_mode with
+    (* TODO Add support for [Stacktrace_sampling] to [New_trace_writer]. *)
+    | Stacktrace_sampling _ -> (module Trace_writer)
+    | Intel_processor_trace _ ->
+      if Env_vars.use_new_trace_writer
+      then (module New_trace_writer)
+      else (module Trace_writer)
   in
   let writer =
     match trace with
@@ -180,7 +190,7 @@ let write_trace_from_events
   (match events_writer with
    | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
    | _ -> ());
-  Trace_writer.end_of_trace writer;
+  Trace_writer.finalize writer;
   Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;
@@ -220,7 +230,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     ~trace_scope
     ~debug_print_perf_commands
     ~record_dir
-    ~collection_mode
+    ~(collection_mode : Collection_mode.t)
     { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
@@ -234,6 +244,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | Sys_error _ -> None
     in
     let decode_events ?filter_same_symbol_jumps () =
+      let filter_same_symbol_jumps =
+        match collection_mode, Env_vars.use_new_trace_writer with
+        | Intel_processor_trace _, true -> Some false
+        | _, _ -> filter_same_symbol_jumps
+      in
       Backend.decode_events
         ?perf_maps
         ?filter_same_symbol_jumps
@@ -257,12 +272,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
             Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
           with
           | None ->
-            eprintf
-              "Warning: Debug info is unavailable, so filenames and line numbers will \
-               not be available in the trace.\n\
-               See \
-               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
-               for more info.\n";
+            (* The new trace-writer uses LLVM to process debug-info. While it's true right now
+               that we still use the Owee-provided symbol table for resolving the [-trigger ...]
+               symbol, I think printing out this warning under the new trace-writer is more
+               confusing than helpful. *)
+            if not Env_vars.use_new_trace_writer
+            then
+              eprintf
+                "Warning: Debug info is unavailable, so filenames and line numbers will \
+                 not be available in the trace.\n\
+                 See \
+                 https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+                 for more info.\n";
             None
           | Some _ as x -> x
         in
@@ -285,6 +306,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ~hits
             ~events
             ~close_result
+            ~collection_mode
             ()
         in
         return ())
@@ -733,6 +755,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
              in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind range_symbols =
+               (* TODO Use LLVM to load the symbol table, because Owee can't handle executables that use DWARF5. *)
                evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
              in
              let%bind () =
