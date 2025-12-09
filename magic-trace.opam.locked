@@ -66,6 +66,7 @@ depends: [
   "fieldslib" {= "v0.18~preview.130.83+317"}
   "fix" {= "20250919" & with-test}
   "flexible_sexp" {= "v0.18~preview.130.83+317"}
+  "float_array" {= "v0.18~preview.130.83+317"}
   "fmt" {= "0.10.0"}
   "fpath" {= "0.7.3" & with-test}
   "int_repr" {= "v0.18~preview.130.83+317"}
@@ -119,6 +120,7 @@ depends: [
   "ppx_expect" {= "v0.18~preview.130.83+317"}
   "ppx_fields_conv" {= "v0.18~preview.130.83+317"}
   "ppx_fixed_literal" {= "v0.18~preview.130.83+317"}
+  "ppx_for_loop" {= "v0.18~preview.130.83+317"}
   "ppx_fuelproof" {= "v0.18~preview.130.83+317"}
   "ppx_globalize" {= "v0.18~preview.130.83+317"}
   "ppx_hash" {= "v0.18~preview.130.83+317"}
@@ -174,6 +176,7 @@ depends: [
   "time_now" {= "v0.18~preview.130.83+317"}
   "topkg" {= "1.0.8+ox"}
   "typerep" {= "v0.18~preview.130.83+317"}
+  "unboxed" {= "v0.18~preview.130.83+317"}
   "unique" {= "v0.18~preview.130.83+317"}
   "univ_map" {= "v0.18~preview.130.83+317"}
   "uopt" {= "v0.18~preview.130.83+317"}
@@ -183,6 +186,7 @@ depends: [
   "uuseg" {= "16.0.0" & with-test}
   "uutf" {= "1.0.3+ox"}
   "variantslib" {= "v0.18~preview.130.83+317"}
+  "vec" {= "v0.18~preview.130.83+317"}
   "zstandard" {= "v0.18~preview.130.83+317"}
 ]
 build: ["dune" "build" "-p" name "-j" jobs]

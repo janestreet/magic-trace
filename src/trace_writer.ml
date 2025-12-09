@@ -1231,3 +1231,5 @@ and write_event' (T t) ?events_writer event =
         | None, _ -> ());
        if !debug then print_s (sexp_of_inner t))
 ;;
+
+let finalize t = end_of_trace t

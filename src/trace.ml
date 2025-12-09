@@ -180,7 +180,7 @@ let write_trace_from_events
   (match events_writer with
    | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
    | _ -> ());
-  Trace_writer.end_of_trace writer;
+  Trace_writer.finalize writer;
   Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;
