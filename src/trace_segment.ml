@@ -109,6 +109,8 @@ let handle_ret (t : t) time ~(dst : Location.t) =
   Vec.push t { time; deepest }
 ;;
 
+let create () = Vec.create ()
+
 let add_event t (event : Event.Ok.Data.t) time =
   match event with
   | Trace { kind = Some Call; src; dst; trace_state_change = _ } ->
@@ -190,12 +192,14 @@ let%test_module _ =
       |> List.map ~f:(fun callstack ->
         Frame.For_testing.to_string_list [] callstack.deepest)
       |> concat_horizontal
-      |> print_endline
+      |> print_endline;
+      (* So that the closing |}] of the [%expect ...] block is on its own line. *)
+      print_endline "-"
     ;;
 
-    (*=
-       Assume no tail-call-optimization is performed:
+    (* In all of the following examples, assume no tail-call-optimization is performed. *)
 
+    (*=
        let fn2 () = ()
        let fn3 () = ()
 
@@ -210,21 +214,24 @@ let%test_module _ =
       let callstacks, call, return = setup_test () in
       call "fn1";
       call "fn2";
+      (* Return from [fn2] *)
       return ();
       call "fn3";
+      (* Return from [fn3] *)
       return ();
+      (* Return from [fn1] *)
       return ();
       print_callstacks callstacks;
       [%expect
         {|
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
-                            fn2                                     fn3 |}]
+                            fn2                                     fn3
+        - |}]
     ;;
 
     (*=
-       Assume no tail-call-optimization is performed, and we started tracing during the execution of [main],
-       so we never saw the call to [start]:
+       Assume we started tracing during the execution of [main] so we never saw the call to [start]
 
        let fn2 () = ()
        let fn3 () = ()
@@ -242,10 +249,21 @@ let%test_module _ =
       let callstacks, call, return = setup_test () in
       call "fn1";
       call "fn2";
+      (* Return from [fn2] *)
       return ();
       call "fn3";
+      (* Return from [fn3] *)
       return ();
+      (* Return from [fn1] *)
       return ();
+      print_callstacks callstacks;
+      [%expect
+        {|
+        main                main                main                main                main                main
+        fn1                 fn1                 fn1                 fn1                 fn1
+                            fn2                                     fn3
+        - |}];
+      (* Return from [main] to [start] *)
       return ~dst:"start" ();
       print_callstacks callstacks;
       [%expect
@@ -253,7 +271,8 @@ let%test_module _ =
         start               start               start               start               start               start               start
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
-                            fn2                                     fn3 |}]
+                            fn2                                     fn3
+        - |}]
     ;;
   end)
 ;;
