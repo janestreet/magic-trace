@@ -179,7 +179,19 @@ let%test_module _ =
         in
         add_event callstacks event (Timestamp.create !time)
       in
-      callstacks, call, return
+      let jump ~src ~dst =
+        incr_time ();
+        let event =
+          Event.Ok.Data.Trace
+            { kind = Some Jump
+            ; src = location src
+            ; dst = location dst
+            ; trace_state_change = None
+            }
+        in
+        add_event callstacks event (Timestamp.create !time)
+      in
+      callstacks, call, return, jump
     ;;
 
     let concat_horizontal (lists : string list list) : string =
@@ -205,7 +217,8 @@ let%test_module _ =
       print_endline "-"
     ;;
 
-    (* In all of the following examples, assume no tail-call-optimization is performed. *)
+    (* In all of the following examples, unless otherwise specified assume no
+       tail-call-optimization is performed. *)
 
     (*=
        let fn2 () = ()
@@ -219,7 +232,7 @@ let%test_module _ =
        let main () = fn1 ()
     *)
     let%expect_test "Sanity-check [add_event]" =
-      let callstacks, call, return = setup_test () in
+      let callstacks, call, return, _jump = setup_test () in
       call ~src:"main" ~dst:"fn1";
       call ~src:"fn1" ~dst:"fn2";
       return ~src:"fn2" ~dst:"fn1";
@@ -254,7 +267,7 @@ let%test_module _ =
        let init () = start ()
     *)
     let%expect_test "A return to a function we never saw the call for" =
-      let callstacks, call, return = setup_test () in
+      let callstacks, call, return, _jump = setup_test () in
       call ~src:"main" ~dst:"fn1";
       call ~src:"fn1" ~dst:"fn2";
       return ~src:"fn2" ~dst:"fn1";
@@ -303,7 +316,7 @@ let%test_module _ =
        let main () = try fn1 () with _ -> ()
        *)
     let%expect_test "Return multiple levels up the stack" =
-      let callstacks, call, return = setup_test () in
+      let callstacks, call, return, _jump = setup_test () in
       call ~src:"main" ~dst:"fn1";
       call ~src:"fn1" ~dst:"fn2";
       return ~src:"fn2" ~dst:"fn1";
@@ -317,6 +330,47 @@ let%test_module _ =
       fn1                 fn1                 fn1                 fn1
                           fn2                                     fn3
       - |}]
+    ;;
+
+    (*=
+       let fn1 () =
+         if something then do_something else do_something_else
+       ;;
+
+       let main () = fn1 ()
+       *)
+    let%expect_test "Simple jumps within a function" =
+      let callstacks, call, return, jump = setup_test () in
+      call ~src:"main" ~dst:"fn1";
+      jump ~src:"fn1" ~dst:"fn1";
+      return ~src:"fn1" ~dst:"main";
+      print_callstacks callstacks;
+      [%expect
+        {|
+        main                main                main
+        fn1                 fn1
+        - |}]
+    ;;
+
+    (*=
+
+       let fn2 () = ()
+       let fn1 () = fn2() [@tail]
+
+       let main () = fn1 ()
+       *)
+    let%expect_test "Tail-call" =
+      let callstacks, call, return, jump = setup_test () in
+      call ~src:"main" ~dst:"fn1";
+      (* Tail-call [fn2] from [fn1] *)
+      jump ~src:"fn1" ~dst:"fn2";
+      return ~src:"fn2" ~dst:"main";
+      print_callstacks callstacks;
+      [%expect
+        {|
+        main                main                main
+        fn1                 fn2
+        - |}]
     ;;
   end)
 ;;
