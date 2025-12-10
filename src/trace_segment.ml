@@ -95,7 +95,7 @@ let handle_ret (t : t) time ~(dst : Location.t) =
          there is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing
          during the execution of [fn2]. When we return from [fn2] to [fn1], we need to
          amend the callstacks we have recorded so far to reflect that [fn1] is the
-         shallowest-most frame for all of them. *)
+         parent frame for all of them. *)
       let frame = Frame.Some { location = dst; parent = None } in
       Vec.iter t ~f:(fun callstack ->
         match Callstack.shallowest callstack with
@@ -157,16 +157,16 @@ let%test_module _ =
       let return ?dst () =
         incr_time ();
         let src = Vec.pop_exn internal_stack in
+        let dst =
+          match dst with
+          | None -> Vec.last_exn internal_stack
+          | Some dst ->
+            let dst = location dst in
+            Vec.push internal_stack dst;
+            dst
+        in
         let event =
-          Event.Ok.Data.Trace
-            { kind = Some Return
-            ; src
-            ; dst =
-                (match dst with
-                 | Some dst -> location dst
-                 | None -> Vec.last_exn internal_stack)
-            ; trace_state_change = None
-            }
+          Event.Ok.Data.Trace { kind = Some Return; src; dst; trace_state_change = None }
         in
         add_event callstacks event !time
       in
@@ -231,7 +231,7 @@ let%test_module _ =
     ;;
 
     (*=
-       Assume we started tracing during the execution of [main] so we never saw the call to [start]
+       Assume we started tracing during the execution of [main] so we never saw the calls to [start] or [init]
 
        let fn2 () = ()
        let fn3 () = ()
@@ -244,6 +244,7 @@ let%test_module _ =
        let main () = fn1 ()
 
        let start () = main ()
+       let init () = start ()
     *)
     let%expect_test "A return to a function we never saw the call for" =
       let callstacks, call, return = setup_test () in
@@ -268,6 +269,17 @@ let%test_module _ =
       print_callstacks callstacks;
       [%expect
         {|
+        start               start               start               start               start               start               start
+        main                main                main                main                main                main
+        fn1                 fn1                 fn1                 fn1                 fn1
+                            fn2                                     fn3
+        - |}];
+      (* Return from [start] to [init] *)
+      return ~dst:"init" ();
+      print_callstacks callstacks;
+      [%expect
+        {|
+        init                init                init                init                init                init                init                init
         start               start               start               start               start               start               start
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
