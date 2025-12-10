@@ -55,6 +55,7 @@ module Callstack = struct
     ; mutable leaf : Frame.t (** [leaf] may only be mutated from [None] to [Some _]. *)
     }
 
+  (* CR-soon ksvetlitski: Cache [root] as a field in [t]. *)
   let rec root = function
     | Frame.None -> Frame.None
     | Some { parent = None; _ } as frame -> frame
@@ -99,8 +100,7 @@ let handle_ret (t : t) time ~(dst : Location.t) =
       Vec.iter t ~f:(fun callstack ->
         match Callstack.root callstack with
         | None -> callstack.leaf <- frame
-        | Some top_frame as top_frame' when not (phys_equal top_frame' frame) ->
-          top_frame.parent <- frame
+        | Some root as root' when not (phys_equal root' frame) -> root.parent <- frame
         | Some _ -> ());
       frame
     | Some matching_frame -> Some { matching_frame with location = dst }
