@@ -3,7 +3,23 @@ module Location = Event.Location
 
 (* Renaming this purely to avoid confusion between "callstack" and "data-structure I am
    using to maintain multiple elements" *)
-module Vec = Stack
+module Vec : sig
+  type 'a t
+
+  val create : unit -> 'a t
+  val to_list : 'a t -> 'a list
+  val of_list : 'a list -> 'a t
+  val iter : 'a t -> f:('a -> unit) -> unit
+  val last : 'a t -> 'a option
+  val last_exn : 'a t -> 'a
+  val pop_exn : 'a t -> 'a
+  val push : 'a t -> 'a -> unit
+end = struct
+  include Stack
+
+  let last = top
+  let last_exn = top_exn
+end
 
 module Frame = struct
   type t =
@@ -12,33 +28,29 @@ module Frame = struct
         { location : Location.t
         ; mutable parent : t (** [parent] may only be mutated from [None] to [Some _]. *)
         }
-  [@@deriving sexp_of]
 
-  let rec to_symbol_list acc t =
+  let rec to_string_list acc t =
     match t with
     | None -> acc
     | Some { location = { symbol; _ }; parent } ->
-      to_symbol_list (Symbol.display_name symbol :: acc) parent
+      to_string_list (Symbol.display_name symbol :: acc) parent
   ;;
 end
 
 module Callstack = struct
   type t =
     { time : Time_ns.Span.t
-    ; mutable deepest_frame : Frame.t
-    (** [deepest_frame] may only be mutated from [None] to [Some _]. This is the same
-        invariant as on [Frame.parent], but since we can't express "pointer to a record
-        field" in OCaml, we can't easily unify these concepts. *)
+    ; mutable deepest : Frame.t
+    (** [deepest] may only be mutated from [None] to [Some _]. *)
     }
-  [@@deriving sexp_of]
 
-  let rec top = function
+  let rec shallowest = function
     | Frame.None -> Frame.None
     | Some { parent = None; _ } as frame -> frame
-    | Some { parent; _ } -> top parent
+    | Some { parent; _ } -> shallowest parent
   ;;
 
-  let top t = top t.deepest_frame
+  let shallowest t = shallowest t.deepest
 end
 
 let rec find_matching_frame (target : Symbol.t) (frame : Frame.t) : Frame.t =
@@ -51,44 +63,44 @@ let rec find_matching_frame (target : Symbol.t) (frame : Frame.t) : Frame.t =
 
 let handle_call (stacks_at_times : Callstack.t Vec.t) time ~(src : Location.t) ~dst =
   let matching_frame : Frame.t =
-    match Vec.top stacks_at_times with
+    match Vec.last stacks_at_times with
     | None -> None
-    | Some { time = _; deepest_frame } -> find_matching_frame src.symbol deepest_frame
+    | Some { time = _; deepest } -> find_matching_frame src.symbol deepest
   in
-  let deepest_frame =
+  let deepest =
     match matching_frame with
     | None ->
       Frame.Some { location = dst; parent = Some { location = src; parent = None } }
     | matching_frame -> Frame.Some { location = dst; parent = matching_frame }
   in
-  Vec.push stacks_at_times { time; deepest_frame }
+  Vec.push stacks_at_times { time; deepest }
 ;;
 
 let handle_ret (stacks_at_times : Callstack.t Vec.t) time ~(dst : Location.t) =
   let matching_frame : Frame.t =
-    match Vec.top stacks_at_times with
+    match Vec.last stacks_at_times with
     | None -> None
-    | Some { time = _; deepest_frame } -> find_matching_frame dst.symbol deepest_frame
+    | Some { time = _; deepest } -> find_matching_frame dst.symbol deepest
   in
-  let deepest_frame =
+  let deepest =
     match matching_frame with
     | None ->
       (* We have returned into something we never saw the call for. This can happen if
          there is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing
          during the execution of [fn2]. When we return from [fn2] to [fn1], we need to
          amend the callstacks we have recorded so far to reflect that [fn1] is the
-         top-most frame for all of them. *)
+         shallowest-most frame for all of them. *)
       let frame = Frame.Some { location = dst; parent = None } in
       Vec.iter stacks_at_times ~f:(fun callstack ->
-        match Callstack.top callstack with
-        | None -> callstack.deepest_frame <- frame
+        match Callstack.shallowest callstack with
+        | None -> callstack.deepest <- frame
         | Some top_frame as top_frame' when not (phys_equal top_frame' frame) ->
           top_frame.parent <- frame
         | Some _ -> ());
       frame
     | Some matching_frame -> Some { matching_frame with location = dst }
   in
-  Vec.push stacks_at_times { time; deepest_frame }
+  Vec.push stacks_at_times { time; deepest }
 ;;
 
 let add_event' stacks_at_times (event : Event.Ok.Data.t) time =
@@ -133,17 +145,17 @@ let%test_module _ =
         let event =
           Event.Ok.Data.Trace
             { kind = Some Call
-            ; src = Stack.top_exn internal_stack
+            ; src = Vec.last_exn internal_stack
             ; dst = new_location
             ; trace_state_change = None
             }
         in
-        Stack.push internal_stack new_location;
+        Vec.push internal_stack new_location;
         add_event' callstacks event !time
       in
       let return ?dst () =
         incr_time ();
-        let src = Stack.pop_exn internal_stack in
+        let src = Vec.pop_exn internal_stack in
         let event =
           Event.Ok.Data.Trace
             { kind = Some Return
@@ -151,7 +163,7 @@ let%test_module _ =
             ; dst =
                 (match dst with
                  | Some dst -> location dst
-                 | None -> Stack.top_exn internal_stack)
+                 | None -> Vec.last_exn internal_stack)
             ; trace_state_change = None
             }
         in
@@ -175,8 +187,8 @@ let%test_module _ =
 
     let print_callstacks (callstacks : Callstack.t Vec.t) =
       Vec.to_list callstacks
-      |> List.map ~f:(fun callstack -> Frame.to_symbol_list [] callstack.deepest_frame)
       |> List.rev
+      |> List.map ~f:(fun callstack -> Frame.to_string_list [] callstack.deepest)
       |> join_strings
       |> print_endline
     ;;
