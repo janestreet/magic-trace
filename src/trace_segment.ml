@@ -94,8 +94,8 @@ let handle_ret (t : t) time ~(dst : Location.t) =
       (* We have returned into something we never saw the call for. This can happen if
          there is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing
          during the execution of [fn2]. When we return from [fn2] to [fn1], we need to
-         amend the callstacks we have recorded so far to reflect that [fn1] is the
-         parent frame for all of them. *)
+         amend the callstacks we have recorded so far to reflect that [fn1] is the parent
+         frame for all of them. *)
       let frame = Frame.Some { location = dst; parent = None } in
       Vec.iter t ~f:(fun callstack ->
         match Callstack.shallowest callstack with
@@ -285,6 +285,35 @@ let%test_module _ =
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3
         - |}]
+    ;;
+
+    (*=
+       let fn2 () = ()
+       let fn3 () = raise Failure
+
+       let fn1 () =
+         fn2 ()
+         fn3 ()
+       ;;
+
+       let main () = try fn1 () with _ -> ()
+       *)
+    let%expect_test "Return multiple levels up the stack" =
+      let callstacks, call, return = setup_test () in
+      call "fn1";
+      call "fn2";
+      (* Return from [fn2] *)
+      return ();
+      call "fn3";
+      (* Raise from [fn3] into the [try] in [main] *)
+      return ~dst:"main" ();
+      print_callstacks callstacks;
+      [%expect
+        {|
+      main                main                main                main                main
+      fn1                 fn1                 fn1                 fn1
+                          fn2                                     fn3
+      - |}]
     ;;
   end)
 ;;
