@@ -52,17 +52,16 @@ end
 module Callstack = struct
   type t =
     { time : Time_ns.Span.t
-    ; mutable deepest : Frame.t
-    (** [deepest] may only be mutated from [None] to [Some _]. *)
+    ; mutable leaf : Frame.t (** [leaf] may only be mutated from [None] to [Some _]. *)
     }
 
-  let rec shallowest = function
+  let rec root = function
     | Frame.None -> Frame.None
     | Some { parent = None; _ } as frame -> frame
-    | Some { parent; _ } -> shallowest parent
+    | Some { parent; _ } -> root parent
   ;;
 
-  let shallowest t = shallowest t.deepest
+  let root t = root t.leaf
 end
 
 type t = Callstack.t Vec.t
@@ -71,24 +70,24 @@ let handle_call (t : t) time ~(src : Location.t) ~dst =
   let matching_frame : Frame.t =
     match Vec.last t with
     | None -> None
-    | Some { time = _; deepest } -> Frame.find src.symbol deepest
+    | Some { time = _; leaf } -> Frame.find src.symbol leaf
   in
-  let deepest =
+  let leaf =
     match matching_frame with
     | None ->
       Frame.Some { location = dst; parent = Some { location = src; parent = None } }
     | matching_frame -> Frame.Some { location = dst; parent = matching_frame }
   in
-  Vec.push t { time; deepest }
+  Vec.push t { time; leaf }
 ;;
 
 let handle_ret (t : t) time ~(dst : Location.t) =
   let matching_frame : Frame.t =
     match Vec.last t with
     | None -> None
-    | Some { time = _; deepest } -> Frame.find dst.symbol deepest
+    | Some { time = _; leaf } -> Frame.find dst.symbol leaf
   in
-  let deepest =
+  let leaf =
     match matching_frame with
     | None ->
       (* We have returned into something we never saw the call for. This can happen if
@@ -98,15 +97,15 @@ let handle_ret (t : t) time ~(dst : Location.t) =
          frame for all of them. *)
       let frame = Frame.Some { location = dst; parent = None } in
       Vec.iter t ~f:(fun callstack ->
-        match Callstack.shallowest callstack with
-        | None -> callstack.deepest <- frame
+        match Callstack.root callstack with
+        | None -> callstack.leaf <- frame
         | Some top_frame as top_frame' when not (phys_equal top_frame' frame) ->
           top_frame.parent <- frame
         | Some _ -> ());
       frame
     | Some matching_frame -> Some { matching_frame with location = dst }
   in
-  Vec.push t { time; deepest }
+  Vec.push t { time; leaf }
 ;;
 
 let create () = Vec.create ()
@@ -189,8 +188,7 @@ let%test_module _ =
     let print_callstacks (callstacks : t) =
       Vec.to_list callstacks
       |> List.rev
-      |> List.map ~f:(fun callstack ->
-        Frame.For_testing.to_string_list [] callstack.deepest)
+      |> List.map ~f:(fun callstack -> Frame.For_testing.to_string_list [] callstack.leaf)
       |> concat_horizontal
       |> print_endline;
       (* So that the closing |}] of the [%expect ...] block is on its own line. *)
