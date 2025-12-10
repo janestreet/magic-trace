@@ -1,8 +1,9 @@
 open! Core
 module Location = Event.Location
 
-(* Renaming this purely to avoid confusion between "callstack" and "data-structure I am
-   using to maintain multiple elements" *)
+(* I'm calling this [Vec] because using [Stack] throughout this code would make it
+   somewhat confusing when we semantically have a "callstack" vs. "data-structure I am
+   using to maintain multiple elements". *)
 module Vec : sig
   type 'a t
 
@@ -29,12 +30,23 @@ module Frame = struct
         ; mutable parent : t (** [parent] may only be mutated from [None] to [Some _]. *)
         }
 
-  let rec to_string_list acc t =
-    match t with
-    | None -> acc
-    | Some { location = { symbol; _ }; parent } ->
-      to_string_list (Symbol.display_name symbol :: acc) parent
+  let rec find (target : Symbol.t) (frame : t) : t =
+    match frame with
+    | None -> None
+    | Some { location = { symbol; _ }; parent = _ } when Symbol.equal symbol target ->
+      frame
+    | Some { parent = None; location = _ } -> None
+    | Some { parent; location = _ } -> find target parent
   ;;
+
+  module For_testing = struct
+    let rec to_string_list acc t =
+      match t with
+      | None -> acc
+      | Some { location = { symbol; _ }; parent } ->
+        to_string_list (Symbol.display_name symbol :: acc) parent
+    ;;
+  end
 end
 
 module Callstack = struct
@@ -53,19 +65,13 @@ module Callstack = struct
   let shallowest t = shallowest t.deepest
 end
 
-let rec find_matching_frame (target : Symbol.t) (frame : Frame.t) : Frame.t =
-  match frame with
-  | None -> None
-  | Some { location = { symbol; _ }; parent = _ } when Symbol.equal symbol target -> frame
-  | Some { parent = None; location = _ } -> None
-  | Some { parent; location = _ } -> find_matching_frame target parent
-;;
+type t = Callstack.t Vec.t
 
-let handle_call (stacks_at_times : Callstack.t Vec.t) time ~(src : Location.t) ~dst =
+let handle_call (t : t) time ~(src : Location.t) ~dst =
   let matching_frame : Frame.t =
-    match Vec.last stacks_at_times with
+    match Vec.last t with
     | None -> None
-    | Some { time = _; deepest } -> find_matching_frame src.symbol deepest
+    | Some { time = _; deepest } -> Frame.find src.symbol deepest
   in
   let deepest =
     match matching_frame with
@@ -73,14 +79,14 @@ let handle_call (stacks_at_times : Callstack.t Vec.t) time ~(src : Location.t) ~
       Frame.Some { location = dst; parent = Some { location = src; parent = None } }
     | matching_frame -> Frame.Some { location = dst; parent = matching_frame }
   in
-  Vec.push stacks_at_times { time; deepest }
+  Vec.push t { time; deepest }
 ;;
 
-let handle_ret (stacks_at_times : Callstack.t Vec.t) time ~(dst : Location.t) =
+let handle_ret (t : t) time ~(dst : Location.t) =
   let matching_frame : Frame.t =
-    match Vec.last stacks_at_times with
+    match Vec.last t with
     | None -> None
-    | Some { time = _; deepest } -> find_matching_frame dst.symbol deepest
+    | Some { time = _; deepest } -> Frame.find dst.symbol deepest
   in
   let deepest =
     match matching_frame with
@@ -91,7 +97,7 @@ let handle_ret (stacks_at_times : Callstack.t Vec.t) time ~(dst : Location.t) =
          amend the callstacks we have recorded so far to reflect that [fn1] is the
          shallowest-most frame for all of them. *)
       let frame = Frame.Some { location = dst; parent = None } in
-      Vec.iter stacks_at_times ~f:(fun callstack ->
+      Vec.iter t ~f:(fun callstack ->
         match Callstack.shallowest callstack with
         | None -> callstack.deepest <- frame
         | Some top_frame as top_frame' when not (phys_equal top_frame' frame) ->
@@ -100,27 +106,20 @@ let handle_ret (stacks_at_times : Callstack.t Vec.t) time ~(dst : Location.t) =
       frame
     | Some matching_frame -> Some { matching_frame with location = dst }
   in
-  Vec.push stacks_at_times { time; deepest }
+  Vec.push t { time; deepest }
 ;;
 
-let add_event' stacks_at_times (event : Event.Ok.Data.t) time =
+let add_event t (event : Event.Ok.Data.t) time =
   match event with
   | Trace { kind = Some Call; src; dst; trace_state_change = _ } ->
-    handle_call stacks_at_times time ~src ~dst
+    handle_call t time ~src ~dst
   | Trace { kind = Some Return; dst; src = _; trace_state_change = _ } ->
-    handle_ret stacks_at_times time ~dst
+    handle_ret t time ~dst
   (* This is just a proof-of-concept at the moment *)
   | Trace _
   | Event.Ok.Data.Power _
   | Event.Ok.Data.Stacktrace_sample _
   | Event.Ok.Data.Event_sample _ -> failwith "Unimplemented"
-;;
-
-type t = Callstack.t Vec.t Hashtbl.M(Event.Thread).t
-
-let _add_event (t : t) (event : Event.Ok.t) =
-  let stacks_at_times = Hashtbl.find_or_add t event.thread ~default:Vec.create in
-  add_event' stacks_at_times event.data event.time
 ;;
 
 let%test_module _ =
@@ -151,7 +150,7 @@ let%test_module _ =
             }
         in
         Vec.push internal_stack new_location;
-        add_event' callstacks event !time
+        add_event callstacks event !time
       in
       let return ?dst () =
         incr_time ();
@@ -167,12 +166,12 @@ let%test_module _ =
             ; trace_state_change = None
             }
         in
-        add_event' callstacks event !time
+        add_event callstacks event !time
       in
       callstacks, call, return
     ;;
 
-    let join_strings (lists : string list list) : string =
+    let concat_horizontal (lists : string list list) : string =
       let max_len =
         List.fold lists ~init:0 ~f:(fun acc lst -> Int.max acc (List.length lst))
       in
@@ -185,11 +184,12 @@ let%test_module _ =
       |> String.concat ~sep:"\n"
     ;;
 
-    let print_callstacks (callstacks : Callstack.t Vec.t) =
+    let print_callstacks (callstacks : t) =
       Vec.to_list callstacks
       |> List.rev
-      |> List.map ~f:(fun callstack -> Frame.to_string_list [] callstack.deepest)
-      |> join_strings
+      |> List.map ~f:(fun callstack ->
+        Frame.For_testing.to_string_list [] callstack.deepest)
+      |> concat_horizontal
       |> print_endline
     ;;
 
@@ -206,7 +206,7 @@ let%test_module _ =
 
        let main () = fn1 ()
     *)
-    let%expect_test "Sanity-check [add_event']" =
+    let%expect_test "Sanity-check [add_event]" =
       let callstacks, call, return = setup_test () in
       call "fn1";
       call "fn2";
