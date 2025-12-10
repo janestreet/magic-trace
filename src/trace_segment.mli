@@ -5,4 +5,4 @@ open! Core
 type t
 
 val create : unit -> t
-val add_event : t -> Event.Ok.Data.t -> Time_ns.Span.t -> unit
+val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit

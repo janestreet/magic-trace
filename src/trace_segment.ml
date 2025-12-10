@@ -51,7 +51,7 @@ end
 
 module Callstack = struct
   type t =
-    { time : Time_ns.Span.t
+    { time : Timestamp.t
     ; mutable leaf : Frame.t (** [leaf] may only be mutated from [None] to [Some _]. *)
     }
 
@@ -151,7 +151,7 @@ let%test_module _ =
             }
         in
         Vec.push internal_stack new_location;
-        add_event callstacks event !time
+        add_event callstacks event (Timestamp.create !time)
       in
       let return ?dst () =
         incr_time ();
@@ -167,7 +167,7 @@ let%test_module _ =
         let event =
           Event.Ok.Data.Trace { kind = Some Return; src; dst; trace_state_change = None }
         in
-        add_event callstacks event !time
+        add_event callstacks event (Timestamp.create !time)
       in
       callstacks, call, return
     ;;
