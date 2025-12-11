@@ -140,87 +140,86 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   | Event.Ok.Data.Event_sample _ -> failwith "Unimplemented"
 ;;
 
-let%test_module _ =
-  (module struct
-    let setup_test () =
-      let callstacks = Vec.create () in
-      let ip = ref (-1) in
-      let time = ref Time_ns.Span.zero in
-      let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in
-      let location (name : string) : Location.t =
-        incr ip;
-        Location.
-          { instruction_pointer = Int64.of_int !ip
-          ; symbol_offset = 0
-          ; symbol = From_perf name
+module%test _ = struct
+  let setup_test () =
+    let callstacks = Vec.create () in
+    let ip = ref (-1) in
+    let time = ref Time_ns.Span.zero in
+    let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in
+    let location (name : string) : Location.t =
+      incr ip;
+      Location.
+        { instruction_pointer = Int64.of_int !ip
+        ; symbol_offset = 0
+        ; symbol = From_perf name
+        }
+    in
+    let call ~src ~dst =
+      incr_time ();
+      let event =
+        Event.Ok.Data.Trace
+          { kind = Some Call
+          ; src = location src
+          ; dst = location dst
+          ; trace_state_change = None
           }
       in
-      let call ~src ~dst =
-        incr_time ();
-        let event =
-          Event.Ok.Data.Trace
-            { kind = Some Call
-            ; src = location src
-            ; dst = location dst
-            ; trace_state_change = None
-            }
-        in
-        add_event callstacks event (Timestamp.create !time)
+      add_event callstacks event (Timestamp.create !time)
+    in
+    let return ~src ~dst =
+      incr_time ();
+      let event =
+        Event.Ok.Data.Trace
+          { kind = Some Return
+          ; src = location src
+          ; dst = location dst
+          ; trace_state_change = None
+          }
       in
-      let return ~src ~dst =
-        incr_time ();
-        let event =
-          Event.Ok.Data.Trace
-            { kind = Some Return
-            ; src = location src
-            ; dst = location dst
-            ; trace_state_change = None
-            }
-        in
-        add_event callstacks event (Timestamp.create !time)
+      add_event callstacks event (Timestamp.create !time)
+    in
+    let jump ~src ~dst =
+      incr_time ();
+      let event =
+        Event.Ok.Data.Trace
+          { kind = Some Jump
+          ; src = location src
+          ; dst = location dst
+          ; trace_state_change = None
+          }
       in
-      let jump ~src ~dst =
-        incr_time ();
-        let event =
-          Event.Ok.Data.Trace
-            { kind = Some Jump
-            ; src = location src
-            ; dst = location dst
-            ; trace_state_change = None
-            }
-        in
-        add_event callstacks event (Timestamp.create !time)
-      in
-      callstacks, call, return, jump
-    ;;
+      add_event callstacks event (Timestamp.create !time)
+    in
+    callstacks, call, return, jump
+  ;;
 
-    let concat_horizontal (lists : string list list) : string =
-      let max_len =
-        List.fold lists ~init:0 ~f:(fun acc lst -> Int.max acc (List.length lst))
-      in
-      let width = 20 in
-      List.init max_len ~f:(fun row_idx ->
-        List.map lists ~f:(fun lst ->
-          let s = List.nth lst row_idx |> Option.value ~default:"" in
-          sprintf "%-*s" width s)
-        |> String.concat)
-      |> String.concat ~sep:"\n"
-    ;;
+  let concat_horizontal (lists : string list list) : string =
+    let max_len =
+      List.fold lists ~init:0 ~f:(fun acc lst -> Int.max acc (List.length lst))
+    in
+    let width = 20 in
+    List.init max_len ~f:(fun row_idx ->
+      List.map lists ~f:(fun lst ->
+        let s = List.nth lst row_idx |> Option.value ~default:"" in
+        sprintf "%-*s" width s)
+      |> String.concat)
+    |> String.concat ~sep:"\n"
+  ;;
 
-    let print_callstacks (callstacks : t) =
-      Vec.to_list callstacks
-      |> List.rev
-      |> List.map ~f:(fun callstack -> Frame.For_testing.to_string_list [] callstack.leaf)
-      |> concat_horizontal
-      |> print_endline;
-      (* So that the closing |}] of the [%expect ...] block is on its own line. *)
-      print_endline "-"
-    ;;
+  let print_callstacks (callstacks : t) =
+    Vec.to_list callstacks
+    |> List.rev
+    |> List.map ~f:(fun callstack -> Frame.For_testing.to_string_list [] callstack.leaf)
+    |> concat_horizontal
+    |> print_endline;
+    (* So that the closing |}] of the [%expect ...] block is on its own line. *)
+    print_endline "-"
+  ;;
 
-    (* In all of the following examples, unless otherwise specified assume no
-       tail-call-optimization is performed. *)
+  (* In all of the following examples, unless otherwise specified assume no
+     tail-call-optimization is performed. *)
 
-    (*=
+  (*=
        let fn2 () = ()
        let fn3 () = ()
 
@@ -231,26 +230,26 @@ let%test_module _ =
 
        let main () = fn1 ()
     *)
-    let%expect_test "Sanity-check [add_event]" =
-      let callstacks, call, return, _jump = setup_test () in
-      call ~src:"main" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn2";
-      return ~src:"fn2" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn3";
-      (* Return from [fn3] *)
-      return ~src:"fn3" ~dst:"fn1";
-      (* Return from [fn1] *)
-      return ~src:"fn1" ~dst:"main";
-      print_callstacks callstacks;
-      [%expect
-        {|
+  let%expect_test "Sanity-check [add_event]" =
+    let callstacks, call, return, _jump = setup_test () in
+    call ~src:"main" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn2";
+    return ~src:"fn2" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn3";
+    (* Return from [fn3] *)
+    return ~src:"fn3" ~dst:"fn1";
+    (* Return from [fn1] *)
+    return ~src:"fn1" ~dst:"main";
+    print_callstacks callstacks;
+    [%expect
+      {|
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3
         - |}]
-    ;;
+  ;;
 
-    (*=
+  (*=
        Assume we started tracing during the execution of [main] so we never saw the calls to [start] or [init]
 
        let fn2 () = ()
@@ -266,45 +265,45 @@ let%test_module _ =
        let start () = main ()
        let init () = start ()
     *)
-    let%expect_test "A return to a function we never saw the call for" =
-      let callstacks, call, return, _jump = setup_test () in
-      call ~src:"main" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn2";
-      return ~src:"fn2" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn3";
-      return ~src:"fn3" ~dst:"fn1";
-      return ~src:"fn1" ~dst:"main";
-      print_callstacks callstacks;
-      [%expect
-        {|
+  let%expect_test "A return to a function we never saw the call for" =
+    let callstacks, call, return, _jump = setup_test () in
+    call ~src:"main" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn2";
+    return ~src:"fn2" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn3";
+    return ~src:"fn3" ~dst:"fn1";
+    return ~src:"fn1" ~dst:"main";
+    print_callstacks callstacks;
+    [%expect
+      {|
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3
         - |}];
-      (* Return for a call we didn't see *)
-      return ~src:"main" ~dst:"start";
-      print_callstacks callstacks;
-      [%expect
-        {|
+    (* Return for a call we didn't see *)
+    return ~src:"main" ~dst:"start";
+    print_callstacks callstacks;
+    [%expect
+      {|
         start               start               start               start               start               start               start
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3
         - |}];
-      (* Another return for a call we didn't see *)
-      return ~src:"start" ~dst:"init";
-      print_callstacks callstacks;
-      [%expect
-        {|
+    (* Another return for a call we didn't see *)
+    return ~src:"start" ~dst:"init";
+    print_callstacks callstacks;
+    [%expect
+      {|
         init                init                init                init                init                init                init                init
         start               start               start               start               start               start               start
         main                main                main                main                main                main
         fn1                 fn1                 fn1                 fn1                 fn1
                             fn2                                     fn3
         - |}]
-    ;;
+  ;;
 
-    (*=
+  (*=
        let fn2 () = ()
        let fn3 () = raise Failure
 
@@ -315,62 +314,61 @@ let%test_module _ =
 
        let main () = try fn1 () with _ -> ()
        *)
-    let%expect_test "Return multiple levels up the stack" =
-      let callstacks, call, return, _jump = setup_test () in
-      call ~src:"main" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn2";
-      return ~src:"fn2" ~dst:"fn1";
-      call ~src:"fn1" ~dst:"fn3";
-      (* Raise from [fn3] into the [try] in [main] *)
-      return ~src:"fn3" ~dst:"main";
-      print_callstacks callstacks;
-      [%expect
-        {|
+  let%expect_test "Return multiple levels up the stack" =
+    let callstacks, call, return, _jump = setup_test () in
+    call ~src:"main" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn2";
+    return ~src:"fn2" ~dst:"fn1";
+    call ~src:"fn1" ~dst:"fn3";
+    (* Raise from [fn3] into the [try] in [main] *)
+    return ~src:"fn3" ~dst:"main";
+    print_callstacks callstacks;
+    [%expect
+      {|
       main                main                main                main                main
       fn1                 fn1                 fn1                 fn1
                           fn2                                     fn3
       - |}]
-    ;;
+  ;;
 
-    (*=
+  (*=
        let fn1 () =
          if something then do_something else do_something_else
        ;;
 
        let main () = fn1 ()
        *)
-    let%expect_test "Simple jumps within a function" =
-      let callstacks, call, return, jump = setup_test () in
-      call ~src:"main" ~dst:"fn1";
-      jump ~src:"fn1" ~dst:"fn1";
-      return ~src:"fn1" ~dst:"main";
-      print_callstacks callstacks;
-      [%expect
-        {|
+  let%expect_test "Simple jumps within a function" =
+    let callstacks, call, return, jump = setup_test () in
+    call ~src:"main" ~dst:"fn1";
+    jump ~src:"fn1" ~dst:"fn1";
+    return ~src:"fn1" ~dst:"main";
+    print_callstacks callstacks;
+    [%expect
+      {|
         main                main                main
         fn1                 fn1
         - |}]
-    ;;
+  ;;
 
-    (*=
+  (*=
 
        let fn2 () = ()
        let fn1 () = fn2() [@tail]
 
        let main () = fn1 ()
        *)
-    let%expect_test "Tail-call" =
-      let callstacks, call, return, jump = setup_test () in
-      call ~src:"main" ~dst:"fn1";
-      (* Tail-call [fn2] from [fn1] *)
-      jump ~src:"fn1" ~dst:"fn2";
-      return ~src:"fn2" ~dst:"main";
-      print_callstacks callstacks;
-      [%expect
-        {|
+  let%expect_test "Tail-call" =
+    let callstacks, call, return, jump = setup_test () in
+    call ~src:"main" ~dst:"fn1";
+    (* Tail-call [fn2] from [fn1] *)
+    jump ~src:"fn1" ~dst:"fn2";
+    return ~src:"fn2" ~dst:"main";
+    print_callstacks callstacks;
+    [%expect
+      {|
         main                main                main
         fn1                 fn2
         - |}]
-    ;;
-  end)
-;;
+  ;;
+end
