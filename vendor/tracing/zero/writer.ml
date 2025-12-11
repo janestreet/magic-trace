@@ -153,9 +153,12 @@ end
 let max_interned_string_length = 32000 - 1
 
 let set_string_slot t ~string_id s =
+  let s =
+    if String.length s > max_interned_string_length
+    then String.sub s 0 max_interned_string_length
+    else s
+  in
   let str_len = String.length s in
-  if str_len > max_interned_string_length
-  then failwithf "string too long for FTF trace: %i is over the limit of 32kb" str_len ();
   (* String record *)
   let rtype = 2 in
   let rsize = 1 + round_words_for str_len in
