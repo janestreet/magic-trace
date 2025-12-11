@@ -1,0 +1,107 @@
+commit 3254c4bb0793ab87c674ddd9f404cb21dd20e311
+Author: Fake Name <fake@gmail.com>
+Date:   Thu Dec 11 01:21:19 2025 +0000
+
+    Make `Core_unix` compatible with `musl`
+
+diff --git a/bigstring_unix/src/bigstring_unix_stubs.c b/bigstring_unix/src/bigstring_unix_stubs.c
+index 785ff10..009c2cb 100644
+--- a/bigstring_unix/src/bigstring_unix_stubs.c
++++ b/bigstring_unix/src/bigstring_unix_stubs.c
+@@ -28,7 +28,7 @@
+ #define bswap_16 OSSwapInt16
+ #define bswap_32 OSSwapInt32
+ #define bswap_64 OSSwapInt64
+-#elif __GLIBC__
++#elif defined(__linux__)
+ #include <byteswap.h>
+ #include <malloc.h>
+ #else
+diff --git a/core_unix/src/core_unix_stubs.c b/core_unix/src/core_unix_stubs.c
+index 216b5be..847d707 100644
+--- a/core_unix/src/core_unix_stubs.c
++++ b/core_unix/src/core_unix_stubs.c
+@@ -378,7 +378,7 @@ CAMLprim value core_unix_fdatasync(value v_fd) {
+   return Val_unit;
+ }
+ #else
+-#warning "_POSIX_SYNCHRONIZED_IO undefined or <= 0; aliasing unix_fdatasync to unix_fsync"
++//#warning "_POSIX_SYNCHRONIZED_IO undefined or <= 0; aliasing unix_fdatasync to unix_fsync"
+ CAMLprim value core_unix_fdatasync(value v_fd) { return core_unix_fsync(v_fd); }
+ #endif
+ 
+@@ -789,7 +789,7 @@ CAMLprim value core_unix_clock_thread_cputime_id_stub(value __unused v_unit) {
+ #undef CLOCK
+ 
+ #else
+-#warning "posix timers not present; clock functions undefined"
++//#warning "posix timers not present; clock functions undefined"
+ #endif
+ 
+ /* Resource limits */
+@@ -1506,7 +1506,7 @@ CAMLprim value core_unix_sched_setscheduler(value v_pid, value v_policy,
+   return Val_unit;
+ }
+ #else
+-#warning "_POSIX_PRIORITY_SCHEDULING not present; sched_setscheduler undefined"
++//#warning "_POSIX_PRIORITY_SCHEDULING not present; sched_setscheduler undefined"
+ CAMLprim value core_unix_sched_setscheduler(value __unused v_pid, value __unused v_policy,
+                                             value __unused v_priority) {
+   caml_invalid_argument("sched_setscheduler unimplemented");
+@@ -1599,7 +1599,7 @@ CAMLprim value core_unix_strptime_l(value v_locale, value v_allow_trailing_input
+                                     value v_fmt, value v_s) {
+ 
+   locale_t locale = (locale_t)Nativeint_val(v_locale);
+-  return core_unix_strptime_gen(locale, v_allow_trailing_input, v_fmt, v_s, strptime_l);
++  return core_unix_strptime_gen(locale, v_allow_trailing_input, v_fmt, v_s, strptime_callback);
+ }
+ 
+ CAMLprim value core_unix_remove(value v_path) {
+diff --git a/filename_unix/src/filename_unix_stubs.c b/filename_unix/src/filename_unix_stubs.c
+index e4826a1..c14cafa 100644
+--- a/filename_unix/src/filename_unix_stubs.c
++++ b/filename_unix/src/filename_unix_stubs.c
+@@ -28,7 +28,7 @@ CAMLprim value core_unix_realpath(value v_path) {
+ }
+ #else
+ CAMLprim value core_unix_realpath(value v_path) {
+-  char *path = String_val(v_path);
++  const char *path = String_val(v_path);
+   /* [realpath] is inherently broken without GNU-extension, and this
+      seems like a reasonable thing to do if we do not build against
+      GLIBC. */
+diff --git a/linux_ext/src/linux_ext_stubs.c b/linux_ext/src/linux_ext_stubs.c
+index 3a948b7..6d9e7f0 100644
+--- a/linux_ext/src/linux_ext_stubs.c
++++ b/linux_ext/src/linux_ext_stubs.c
+@@ -230,7 +230,7 @@ CAMLprim value core_linux_sendmsg_nonblocking_no_sigpipe_stub(value v_fd, value
+   int count = Int_val(v_count);
+   ssize_t ret;
+   struct iovec *iovecs = caml_stat_alloc(sizeof(struct iovec) * count);
+-  struct msghdr msghdr = {NULL, 0, NULL, 0, NULL, 0, 0};
++  struct msghdr msghdr = {NULL, 0, NULL, 0, 0, 0, 0};
+   msghdr.msg_iov = iovecs;
+   msghdr.msg_iovlen = count;
+   for (--count; count >= 0; --count) {
+diff --git a/time_float_unix/time_unix/dune b/time_float_unix/time_unix/dune
+deleted file mode 100644
+index 729e749..0000000
+--- a/time_float_unix/time_unix/dune
++++ /dev/null
+@@ -1,6 +0,0 @@
+-(library
+- (name time_unix)
+- (public_name core_unix.time_unix)
+- (libraries time_float_unix)
+- (preprocess
+-  (pps ppx_jane)))
+diff --git a/time_float_unix/time_unix/time_unix.ml b/time_float_unix/time_unix/time_unix.ml
+deleted file mode 100644
+index c1bdb7d..0000000
+--- a/time_float_unix/time_unix/time_unix.ml
++++ /dev/null
+@@ -1,4 +0,0 @@
+-[@@@deprecated "[since 2022-04] Use [Time_float_unix] instead"]
+-(* In the immortal words of MC Hammer: "Stop ... (using) unix time!" *)
+-
+-include Time_float_unix
