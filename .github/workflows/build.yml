@@ -11,7 +11,7 @@ jobs:
         os:
           - ubuntu_x64_8_cores
         ocaml-version:
-          - 4.14.0
+          - '5.2.0+ox'
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -21,7 +21,7 @@ jobs:
       - uses: actions/cache@v4
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-musl-v6
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-1
 
       - name: Install musl-compatible kernel headers
         run: |
@@ -29,11 +29,12 @@ jobs:
           curl -L https://github.com/sabotage-linux/kernel-headers/archive/refs/tags/v4.19.88-1.tar.gz | \
             tar -xz -C musl-kernel --strip-components=1
           echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
+          echo "CC=musl-gcc" >> "$GITHUB_ENV"
 
       - name: "Install apt packages"
         run: |
           sudo apt-get update
-          sudo apt-get install bubblewrap musl-tools libucl1
+          sudo apt-get install -y bubblewrap musl musl-tools libucl1 rsync
 
       - name: Install upx
         run: |
@@ -50,7 +51,7 @@ jobs:
           CC=musl-gcc ./configure --libdir=/usr/lib/x86_64-linux-musl --includedir=/usr/include/x86_64-linux-musl
           make -j$(nproc)
           sudo make install
-      
+
       - name: Build zstd with musl
         run: |
           mkdir musl-zstd
@@ -62,7 +63,7 @@ jobs:
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
-          sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.1.2/opam-2.1.2-x86_64-linux
+          sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.5.0/opam-2.5.0-x86_64-linux
           sudo chmod a+x /usr/local/bin/opam
 
           export OPAMYES=1
@@ -71,13 +72,28 @@ jobs:
           echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
 
           opam init --bare -yav https://github.com/ocaml/opam-repository.git
-          opam switch set ${{ matrix.ocaml-version }}-flambda-musl 2>/dev/null || \
-            opam switch create ${{ matrix.ocaml-version }}-flambda-musl \
-              --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda,ocaml-option-musl
+          opam switch set ${{ matrix.ocaml-version }} 2>/dev/null || \
+            opam switch create ${{ matrix.ocaml-version }} --repos ox=git+https://github.com/oxcaml/opam-repository.git,default
+
+      - name: Vendor Basement
+        run: |
+          mkdir ../basement
+          curl -L 'https://github.com/janestreet/basement/archive/c657898128a97dcdfbe4b25d79fd0de2e1e5218f.tar.gz' | \
+            tar -C ../basement -xz --strip-components=1
+          git -C ../basement apply $PWD/vendor/basement-semaphore-bug-fix.patch
+          opam pin basement ../basement
+
+      - name: Vendor Core_unix
+        run: |
+          mkdir ../core_unix
+          curl -L 'https://github.com/janestreet/core_unix/archive/63390a3f75376156e77ed49d6cc07ca48a90dd53.tar.gz' | \
+            tar -C ../core_unix -xz --strip-components=1
+          git -C ../core_unix apply $PWD/vendor/core-unix-musl-compatibility.patch
+          opam pin core_unix ../core_unix
 
       - run: opam install ./magic-trace.opam --deps-only
 
-      - run: opam install ocamlformat.0.26.2
+      - run: opam install ocamlformat
       - run: opam exec -- dune build @fmt
 
       - run: opam exec -- make PROFILE=static
