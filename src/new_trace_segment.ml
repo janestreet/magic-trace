@@ -192,7 +192,7 @@ module%test _ = struct
       in
       add_event t event (Timestamp.create !time)
     in
-    t, call, return, jump
+    #(~t, ~call, ~return, ~jump)
   ;;
 
   let frames_to_list t =
@@ -242,7 +242,7 @@ module%test _ = struct
        let main () = fn1 ()
     *)
   let%expect_test "Sanity-check [add_event]" =
-    let t, call, return, _jump = setup_test () in
+    let #(~t, ~call, ~return, ~jump:_) = setup_test () in
     call ~src:"main" ~dst:"fn1";
     call ~src:"fn1" ~dst:"fn2";
     return ~src:"fn2" ~dst:"fn1";
@@ -277,7 +277,7 @@ module%test _ = struct
        let init () = start ()
     *)
   let%expect_test "A return to a function we never saw the call for" =
-    let t, call, return, _jump = setup_test () in
+    let #(~t, ~call, ~return, ~jump:_) = setup_test () in
     call ~src:"main" ~dst:"fn1";
     call ~src:"fn1" ~dst:"fn2";
     return ~src:"fn2" ~dst:"fn1";
@@ -326,7 +326,7 @@ module%test _ = struct
        let main () = try fn1 () with _ -> ()
        *)
   let%expect_test "Return multiple levels up the stack" =
-    let t, call, return, _jump = setup_test () in
+    let #(~t, ~call, ~return, ~jump:_) = setup_test () in
     call ~src:"main" ~dst:"fn1";
     call ~src:"fn1" ~dst:"fn2";
     return ~src:"fn2" ~dst:"fn1";
@@ -350,7 +350,7 @@ module%test _ = struct
        let main () = fn1 ()
        *)
   let%expect_test "Simple jumps within a function" =
-    let t, call, return, jump = setup_test () in
+    let #(~t, ~call, ~return, ~jump) = setup_test () in
     call ~src:"main" ~dst:"fn1";
     jump ~src:"fn1" ~dst:"fn1";
     return ~src:"fn1" ~dst:"main";
@@ -370,7 +370,7 @@ module%test _ = struct
        let main () = fn1 ()
        *)
   let%expect_test "Tail-call" =
-    let t, call, return, jump = setup_test () in
+    let #(~t, ~call, ~return, ~jump) = setup_test () in
     call ~src:"main" ~dst:"fn1";
     (* Tail-call [fn2] from [fn1] *)
     jump ~src:"fn1" ~dst:"fn2";
