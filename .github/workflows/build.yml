@@ -26,8 +26,10 @@ jobs:
       - name: Install musl-compatible kernel headers
         run: |
           mkdir musl-kernel
-          curl -L https://github.com/sabotage-linux/kernel-headers/archive/refs/tags/v4.19.88-1.tar.gz | \
-            tar -xz -C musl-kernel --strip-components=1
+          filename='v4.19.88-1.tar.gz'
+          wget "https://github.com/sabotage-linux/kernel-headers/archive/refs/tags/$filename"
+          shasum --check <(echo "44a07e9f18033cff7840dbb112fff2862c0fb8fc  $filename")
+          tar -xzf "$filename" -C musl-kernel --strip-components=1
           echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
           echo "CC=musl-gcc" >> "$GITHUB_ENV"
 
@@ -40,13 +42,18 @@ jobs:
         run: |
           # The version that comes with focal is broken for musl binaries, so we have to download
           # from another location.
-          wget http://ftp.debian.org/debian/pool/main/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
+          filename='upx-ucl_3.96-2_amd64.deb'
+          wget "http://ftp.debian.org/debian/pool/main/u/upx-ucl/$filename"
+          shasum --check <(echo "0b3c901a6ae8db264a0e58aad9bbed4ef3e925b9  $filename")
           sudo dpkg -i upx-ucl_3.96-2_amd64.deb
 
       - name: Build zlib with musl
         run: |
           mkdir musl-zlib
-          curl -L https://zlib.net/zlib-1.3.1.tar.gz | tar -xz -C musl-zlib --strip-components=1
+          filename='zlib-1.3.1.tar.gz'
+          wget "https://zlib.net/$filename"
+          shasum --check <(echo "f535367b1a11e2f9ac3bec723fb007fbc0d189e5  $filename")
+          tar -xzf "$filename" -C musl-zlib --strip-components=1
           cd musl-zlib
           CC=musl-gcc ./configure --libdir=/usr/lib/x86_64-linux-musl --includedir=/usr/include/x86_64-linux-musl
           make -j$(nproc)
@@ -55,15 +62,20 @@ jobs:
       - name: Build zstd with musl
         run: |
           mkdir musl-zstd
-          curl -L https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz | \
-            tar -xz -C musl-zstd --strip-components=1
+          filename='zstd-1.5.5.tar.gz'
+          wget "https://github.com/facebook/zstd/releases/download/v1.5.5/$filename"
+          shasum --check <(echo "4479ecc74300d23391d99fbebf2fddd47aed9b28  $filename")
+          tar -xzf "$filename" -C musl-zstd --strip-components=1
           cd musl-zstd
           CC=musl-gcc make -j$(nproc)
           sudo make INCLUDEDIR=/usr/include/x86_64-linux-musl LIBDIR=/usr/lib/x86_64-linux-musl install
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
-          sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.5.0/opam-2.5.0-x86_64-linux
+          filename='opam-2.5.0-x86_64-linux'
+          wget "https://github.com/ocaml/opam/releases/download/2.5.0/$filename"
+          shasum --check <(echo "67fb680a785f0bc7ceb57155f21786c0680ef5fe  $filename")
+          sudo mv "$filename" /usr/local/bin/opam
           sudo chmod a+x /usr/local/bin/opam
 
           export OPAMYES=1
@@ -91,7 +103,7 @@ jobs:
           git -C ../core_unix apply $PWD/vendor/core-unix-musl-compatibility.patch
           opam pin core_unix ../core_unix
 
-      - run: opam install ./magic-trace.opam --deps-only
+      - run: opam install ./magic-trace.opam --deps-only --locked
 
       - run: opam install ocamlformat
       - run: opam exec -- dune build @fmt
