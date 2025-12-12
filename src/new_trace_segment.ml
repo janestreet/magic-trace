@@ -9,7 +9,6 @@ module Frame : sig
     ; mutable parent : t Or_null.t
     }
 
-  val root : t -> t
   val find : t -> Symbol.t -> t Or_null.t
   val create : Location.t -> parent:t Or_null.t -> t
   val create_sentinel : unit -> t
@@ -23,11 +22,6 @@ end = struct
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
     }
-
-  let rec root = function
-    | { parent = Null; _ } as t -> t
-    | { parent = This parent; _ } -> root parent
-  ;;
 
   let rec find t target =
     match t with
@@ -84,6 +78,12 @@ let create () =
 
 let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
 
+let replace_root t location =
+  let #(~frame, ~new_sentinel) = Frame.replace_sentinel t.root location in
+  t.root <- new_sentinel;
+  frame
+;;
+
 let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
   match Frame.find (current_frame t) src.symbol with
   | This _ as src_frame ->
@@ -93,8 +93,7 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
   | Null ->
     (* I would only expect this to happen if this call is the very first event in this
        trace-segment. *)
-    let #(~frame:src_frame, ~new_sentinel) = Frame.replace_sentinel t.root src in
-    t.root <- new_sentinel;
+    let src_frame = replace_root t src in
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = Frame.create dst ~parent:(This src_frame) }
@@ -108,13 +107,28 @@ let handle_return (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locat
     (* We have returned into something we never saw the call for. This can happen if there
        is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing during the
        execution of [fn2]. *)
-    let #(~frame:dst_frame, ~new_sentinel) = Frame.replace_sentinel t.root dst in
-    t.root <- new_sentinel;
+    let dst_frame = replace_root t dst in
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame }
 ;;
 
 let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
-  failwith "Not yet implemented"
+  let current_frame = current_frame t in
+  match Frame.find current_frame src.symbol with
+  | This src_frame ->
+    (* This is either a branch within a function or a (possibly recursive) tail-call *)
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = Frame.create dst ~parent:src_frame.parent }
+  | Null when not (Symbol.equal src.symbol dst.symbol) ->
+    let dst_frame =
+      match Frame.find current_frame dst.symbol with
+      | This { parent; _ } -> Frame.create dst ~parent
+      | Null -> replace_root t dst
+    in
+    Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame}
+  | Null ->
+    let dst_frame = replace_root t dst in
+    Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame}
 ;;
 
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
@@ -123,6 +137,8 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
     handle_return t time ~src ~dst
+  | Trace { kind = Some Jump; src; dst; trace_state_change = _ } ->
+    handle_jump t time ~src ~dst
   | _ -> assert false
 ;;
 
