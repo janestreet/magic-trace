@@ -4,3 +4,4 @@ open! Core
 type t
 
 val create : Time_ns.Span.t -> t
+val zero : t
