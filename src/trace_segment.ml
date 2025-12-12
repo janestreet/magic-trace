@@ -2,6 +2,7 @@ open! Core
 module Location = Event.Location
 
 module Frame : sig
+  (* The fields can only be mutated on a sentinel instance, via [replace_sentinel]. *)
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
@@ -13,7 +14,7 @@ module Frame : sig
   val replace_sentinel : t -> Location.t -> #(frame:t * new_sentinel:t)
 
   module For_testing : sig
-    val to_string_list : string list -> t -> string list
+    val to_string_list : t -> string list
   end
 end = struct
   type t =
@@ -51,6 +52,8 @@ end = struct
       | This parent ->
         to_string_list (Symbol.display_name t.location.symbol :: acc) parent
     ;;
+
+    let to_string_list t = to_string_list [] t
   end
 end
 
@@ -62,7 +65,7 @@ module Callstack = struct
 end
 
 type t =
-  { mutable root : Frame.t
+  { mutable root : Frame.t (** Invariant: [root] is always a sentinel. *)
   ; callstacks : Callstack.t Nonempty_vec.t
   }
 
@@ -218,7 +221,7 @@ module%test _ = struct
     (* Skip the initial sentinel callstack *)
     |> List.tl
     |> Option.value ~default:[]
-    |> List.map ~f:(fun frame -> Frame.For_testing.to_string_list [] frame)
+    |> List.map ~f:(fun frame -> Frame.For_testing.to_string_list frame)
     |> concat_horizontal
     |> print_endline;
     (* So that the closing |}] of the [%expect ...] block is on its own line. *)
