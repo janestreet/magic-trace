@@ -1,5 +1,3 @@
-[@@@disable_unused_warnings]
-
 open! Core
 module Location = Event.Location
 
@@ -99,7 +97,7 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
       #{ time; leaf = Frame.create dst ~parent:(This src_frame) }
 ;;
 
-let handle_return (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
+let handle_return (t : t) (time : Timestamp.t) ~src:_ ~(dst : Location.t) =
   match Frame.find (current_frame t) dst.symbol with
   | This { parent; _ } ->
     Nonempty_vec.push_back t.callstacks #{ time; leaf = Frame.create dst ~parent }
