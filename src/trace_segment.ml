@@ -1,4 +1,5 @@
 open! Core
+open Unboxed
 module Location = Event.Location
 
 module Frame : sig
@@ -6,6 +7,7 @@ module Frame : sig
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
+    ; mutable depth : i64
     }
 
   val find : t -> Symbol.t -> t Or_null.t
@@ -20,6 +22,7 @@ end = struct
   type t =
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
+    ; mutable depth : i64
     }
 
   let rec find t target =
@@ -29,19 +32,27 @@ end = struct
     | { parent = This parent; _ } -> find parent target
   ;;
 
-  let[@inline always] create location ~parent = { location; parent }
+  let[@inline always] create location ~parent =
+    (* CR ksvetlitski: [parent] should never be [Null], because only sentinels have a
+       [Null] parent. This signals to me that this abstraction is slightly wrong, I need
+       to hide more of it from the interface. *)
+    { location; parent; depth = I64.( + ) (Or_null.value_exn parent).depth #1L }
+  ;;
 
   let sentinel_location : Location.t =
     { instruction_pointer = 0L; symbol_offset = 0; symbol = Unknown }
   ;;
 
-  let[@inline always] create_sentinel () = { location = sentinel_location; parent = Null }
+  let[@inline always] create_sentinel () =
+    { location = sentinel_location; parent = Null; depth = -#1L }
+  ;;
 
   let replace_sentinel sentinel location =
     assert (phys_equal sentinel.location sentinel_location);
     let new_sentinel = create_sentinel () in
     sentinel.location <- location;
     sentinel.parent <- This new_sentinel;
+    sentinel.depth <- #0L;
     #(~frame:sentinel, ~new_sentinel)
   ;;
 
@@ -141,6 +152,48 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   | Trace { kind = Some Jump; src; dst; trace_state_change = _ } ->
     handle_jump t time ~src ~dst
   | _ -> assert false
+;;
+
+let emit_frame_enter (_time : Timestamp.t) (_location : Location.t) =
+  (* Intentionally left unimplemented for now, just pretend this does what it says. *)
+  ()
+;;
+
+let emit_frame_exit (_time : Timestamp.t) (_location : Location.t) =
+  (* Intentionally left unimplemented for now, just pretend this does what it says. *)
+  ()
+;;
+
+(* Temporarily ignore unused function warnings *)
+let _ = emit_frame_enter
+let _ = emit_frame_exit
+
+let write_trace (t : t) =
+  (* Temporarily ignore unused variable warning, delete this line when you start writing code! *)
+  ignore (t : t);
+  (*=
+     Here's pseudocode of what this function should do:
+     ```
+     for i in range(1, len(t.callstacks)):
+       prev_callstack = t.callstacks[i - 1]
+       curr_callstack = t.callstacks[i]
+       if prev_callstack.depth > curr_callstack.depth:
+         iterate through prev_callstack leaf-to-root until you reach
+         curr_callstack.leaf, emitting frame_enter events as
+         you go.
+       elif prev_callstack.depth < curr_callstack.depth:
+         iterate through curr_callstack leaf-to-root until you reach
+         prev_callstack.leaf, emitting frame_exit events **in
+         the inverse order of iteration** (i.e. this will *not* be tail-recursive)
+       elif prev_callstack.leaf.location.symbol != curr_callstack.leaf.location.symbol:
+         emit a frame_exit event for prev_callstack.leaf, then emit a
+         frame_enter event for curr_callstack.leaf
+     ```
+
+     The nice thing about the first element of being a sentinel is that all of this works
+     without needing a special-case for the initial callstack.
+   *)
+  ()
 ;;
 
 module%test _ = struct

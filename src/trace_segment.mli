@@ -6,3 +6,4 @@ type t
 
 val create : unit -> t
 val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit
+val write_trace : t -> unit
