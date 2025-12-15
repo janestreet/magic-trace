@@ -179,11 +179,11 @@ let write_trace (t : t) =
        curr_callstack = t.callstacks[i]
        if prev_callstack.depth > curr_callstack.depth:
          iterate through prev_callstack leaf-to-root until you reach
-         curr_callstack.leaf, emitting frame_enter events as
+         curr_callstack.leaf, emitting frame_exit events as
          you go.
        elif prev_callstack.depth < curr_callstack.depth:
          iterate through curr_callstack leaf-to-root until you reach
-         prev_callstack.leaf, emitting frame_exit events **in
+         prev_callstack.leaf, emitting frame_enter events **in
          the inverse order of iteration** (i.e. this will *not* be tail-recursive)
        elif prev_callstack.leaf.location.symbol != curr_callstack.leaf.location.symbol:
          emit a frame_exit event for prev_callstack.leaf, then emit a
