@@ -7,7 +7,6 @@ module Frame : sig
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
-    ; mutable depth : i64
     }
 
   val find : t -> Symbol.t -> t Or_null.t
@@ -22,7 +21,6 @@ end = struct
   type t =
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
-    ; mutable depth : i64
     }
 
   let rec find t target =
@@ -32,27 +30,19 @@ end = struct
     | { parent = This parent; _ } -> find parent target
   ;;
 
-  let[@inline always] create location ~parent =
-    (* CR ksvetlitski: [parent] should never be [Null], because only sentinels have a
-       [Null] parent. This signals to me that this abstraction is slightly wrong, I need
-       to hide more of it from the interface. *)
-    { location; parent; depth = I64.( + ) (Or_null.value_exn parent).depth #1L }
-  ;;
+  let[@inline always] create location ~parent = { location; parent }
 
   let sentinel_location : Location.t =
     { instruction_pointer = 0L; symbol_offset = 0; symbol = Unknown }
   ;;
 
-  let[@inline always] create_sentinel () =
-    { location = sentinel_location; parent = Null; depth = -#1L }
-  ;;
+  let[@inline always] create_sentinel () = { location = sentinel_location; parent = Null }
 
   let replace_sentinel sentinel location =
     assert (phys_equal sentinel.location sentinel_location);
     let new_sentinel = create_sentinel () in
     sentinel.location <- location;
     sentinel.parent <- This new_sentinel;
-    sentinel.depth <- #0L;
     #(~frame:sentinel, ~new_sentinel)
   ;;
 
@@ -169,7 +159,8 @@ let _ = emit_frame_enter
 let _ = emit_frame_exit
 
 let write_trace (t : t) =
-  (* Temporarily ignore unused variable warning, delete this line when you start writing code! *)
+  (* Temporarily ignore unused variable warning, delete this line when you start writing
+     code! *)
   ignore (t : t);
   (*=
      Here's pseudocode of what this function should do:
