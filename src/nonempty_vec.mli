@@ -1,7 +1,7 @@
 open! Core
 
 [%%template:
-[@@@kind k = (value & value)]
+[@@@kind k = (value & value & value)]
 
 (** A [Vec.t] guaranteed to contain at least one element. *)
 type ('a : k) t

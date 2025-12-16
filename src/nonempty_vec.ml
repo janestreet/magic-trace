@@ -1,6 +1,6 @@
 open! Core
 [%%template
-[@@@kind k = (value & value)]
+[@@@kind k = (value & value & value)]
 
 type ('a : k) t = 'a Vec.t [@kind k]
 
