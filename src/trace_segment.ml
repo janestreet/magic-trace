@@ -2,7 +2,6 @@ open! Core
 module Location = Event.Location
 
 module Frame : sig
-  (* The fields can only be mutated on a sentinel instance, via [replace_sentinel]. *)
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t Or_null.t
@@ -12,8 +11,24 @@ module Frame : sig
   val iter_until_rev : t -> Symbol.t -> f:local_ (t -> unit) -> unit
   val find : t -> Symbol.t -> t Or_null.t
   val create : Location.t -> parent:t Or_null.t -> t
-  val create_sentinel : unit -> t
-  val replace_sentinel : t -> Location.t -> #(frame:t * new_sentinel:t)
+
+  module Sentinel : sig
+    type frame := t
+    (** The root of a callstack. A sentinel does not correspond to a real program location,
+        and its parent is always [Null]; it is the *only* frame allowed to have a [Null]
+        parent.
+
+        Using a sentinel allows us to avoid a variety of special-cases, and lets us update
+        the root of all callstacks in a trace in O(1) time. *)
+    type t = private frame
+
+    val create : unit -> t
+
+    (* TODO do this by accepting a mutable interior pointer to a [t] so that we can hide
+       the implementation details instead of requiring the user of this module to mutate
+       their sentinel to [new_sentinel]. *)
+    val append : t -> Location.t -> #(frame:frame * new_sentinel:t)
+  end
 
   module For_testing : sig
     val to_string_list : t -> string list
@@ -51,19 +66,22 @@ end = struct
 
   let[@inline always] create location ~parent = { location; parent }
 
-  let sentinel_location : Location.t =
-    { instruction_pointer = 0L; symbol_offset = 0; symbol = Unknown }
-  ;;
+  module Sentinel = struct
+    type nonrec t = t
 
-  let[@inline always] create_sentinel () = { location = sentinel_location; parent = Null }
+    let sentinel_location : Location.t =
+      { instruction_pointer = 0L; symbol_offset = 0; symbol = Unknown }
+    ;;
 
-  let replace_sentinel sentinel location =
-    assert (phys_equal sentinel.location sentinel_location);
-    let new_sentinel = create_sentinel () in
-    sentinel.location <- location;
-    sentinel.parent <- This new_sentinel;
-    #(~frame:sentinel, ~new_sentinel)
-  ;;
+    let[@inline always] create () = { location = sentinel_location; parent = Null }
+
+    let append sentinel location =
+      let new_sentinel = create () in
+      sentinel.location <- location;
+      sentinel.parent <- This new_sentinel;
+      #(~frame:sentinel, ~new_sentinel)
+    ;;
+  end
 
   module For_testing = struct
     let rec to_string_list acc t =
@@ -93,23 +111,24 @@ module Callstack = struct
 end
 
 type t =
-  { mutable root : Frame.t (** Invariant: [root] is always a sentinel. *)
+  { mutable root : Frame.Sentinel.t
   ; callstacks : Callstack.t Nonempty_vec.t
   }
 
 let create () =
-  let root = Frame.create_sentinel () in
+  let root = Frame.Sentinel.create () in
   { root
   ; callstacks =
       Nonempty_vec.create
-        (#{ time = Timestamp.zero; leaf = root; control_flow = Return } : Callstack.t)
+        (#{ time = Timestamp.zero; leaf = (root :> Frame.t); control_flow = Return }
+         : Callstack.t)
   }
 ;;
 
 let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
 
 let replace_root t location =
-  let #(~frame, ~new_sentinel) = Frame.replace_sentinel t.root location in
+  let #(~frame, ~new_sentinel) = Frame.Sentinel.append t.root location in
   t.root <- new_sentinel;
   frame
 ;;
@@ -181,7 +200,7 @@ let emit_frame_enter
   (location : Location.t)
   =
   Tracing.Trace.write_duration_begin
-    trace
+    trace (* TODO: populate arguments *)
     ~args:[]
     ~thread
     ~name:(Symbol.display_name location.symbol)
