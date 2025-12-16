@@ -8,6 +8,8 @@ module Frame : sig
     ; mutable parent : t Or_null.t
     }
 
+  val iter_until : t -> Symbol.t -> f:local_ (t -> unit) -> unit
+  val iter_until_rev : t -> Symbol.t -> f:local_ (t -> unit) -> unit
   val find : t -> Symbol.t -> t Or_null.t
   val create : Location.t -> parent:t Or_null.t -> t
   val create_sentinel : unit -> t
@@ -24,9 +26,27 @@ end = struct
 
   let rec find t target =
     match t with
-    | { location = { symbol; _ }; _ } when Symbol.equal symbol target -> This t
     | { parent = Null; _ } -> Null
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol target -> This t
     | { parent = This parent; _ } -> find parent target
+  ;;
+
+  let[@inline always] rec iter_until t stop_symbol ~f =
+    match t with
+    | { parent = Null; _ } -> ()
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
+    | { parent = This parent; _ } ->
+      (f [@inlined hint]) t;
+      iter_until parent stop_symbol ~f
+  ;;
+
+  let[@inline always] rec iter_until_rev t stop_symbol ~f =
+    match t with
+    | { parent = Null; _ } -> ()
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
+    | { parent = This parent; _ } ->
+      iter_until_rev parent stop_symbol ~f;
+      (f [@inlined hint]) t
   ;;
 
   let[@inline always] create location ~parent = { location; parent }
@@ -164,38 +184,31 @@ let emit_frame_exit (_time : Timestamp.t) (_location : Location.t) =
   ()
 ;;
 
-(* Temporarily ignore unused function warnings *)
-let _ = emit_frame_enter
-let _ = emit_frame_exit
-
-let write_trace (t : t) =
-  (* Temporarily ignore unused variable warning, delete this line when you start writing
-     code! *)
-  ignore (t : t);
-  (*=
-     Here's pseudocode of what this function should do:
-     ```
-     for i in range(1, len(t.callstacks)):
-       prev_callstack = t.callstacks[i - 1]
-       curr_callstack = t.callstacks[i]
-       if prev_callstack.depth > curr_callstack.depth:
-         iterate through prev_callstack leaf-to-root until you reach
-         curr_callstack.leaf, emitting frame_exit events as
-         you go.
-       elif prev_callstack.depth < curr_callstack.depth:
-         iterate through curr_callstack leaf-to-root until you reach
-         prev_callstack.leaf, emitting frame_enter events **in
-         the inverse order of iteration** (i.e. this will *not* be tail-recursive)
-       elif prev_callstack.leaf.location.symbol != curr_callstack.leaf.location.symbol:
-         emit a frame_exit event for prev_callstack.leaf, then emit a
-         frame_enter event for curr_callstack.leaf
-     ```
-
-     The nice thing about the first element of being a sentinel is that all of this works
-     without needing a special-case for the initial callstack.
-   *)
-  ()
+let emit_trace_events (#(prev, curr) : #(Callstack.t * Callstack.t)) =
+  let time = curr.#time in
+  match curr.#control_flow with
+  | Jump ->
+    (* I'm not sure we even need to be recording a new callstack in the first place when
+       the symbol doesn't change, but I need to double-check. *)
+    if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
+    then (
+      emit_frame_exit time prev.#leaf.location;
+      emit_frame_enter time curr.#leaf.location)
+  | Call ->
+    Frame.iter_until_rev
+      curr.#leaf
+      prev.#leaf.location.symbol
+      ~f:(stack_ fun [@inline always] frame -> emit_frame_enter time frame.location)
+    [@nontail]
+  | Return ->
+    Frame.iter_until
+      prev.#leaf
+      curr.#leaf.location.symbol
+      ~f:(stack_ fun [@inline always] frame -> emit_frame_exit time frame.location)
+    [@nontail]
 ;;
+
+let write_trace (t : t) = Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events
 
 module%test _ = struct
   let setup_test () =
