@@ -887,10 +887,9 @@ let assert_trace_scope t event trace_scopes =
 ;;
 
 let write_trace_segment (t : _ inner) =
-  let base_time = Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) t.base_time in
   let trace =
     Tracing.Trace.create_for_file
-      ~base_time:(Some base_time)
+      ~base_time:((Some ((Obj.magic t.base_time))))
       ~filename:"trace_segment.fxt.gz"
   in
   let pid = Tracing.Trace.allocate_pid trace ~name:"magic-trace" in
