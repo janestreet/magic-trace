@@ -889,7 +889,7 @@ let assert_trace_scope t event trace_scopes =
 let write_trace_segment (t : _ inner) =
   let trace =
     Tracing.Trace.create_for_file
-      ~base_time:((Some ((Obj.magic t.base_time))))
+      ~base_time:(Some (Obj.magic t.base_time))
       ~filename:"trace_segment.fxt.gz"
   in
   let pid = Tracing.Trace.allocate_pid trace ~name:"magic-trace" in

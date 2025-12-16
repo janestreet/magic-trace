@@ -3,8 +3,7 @@
   (flags
    (:standard -cclib -static)))
  (dev
-   (flags
-    (:standard -cclib -fuse-ld=lld)))
-)
+  (flags
+   (:standard -cclib -fuse-ld=lld))))
 
 (vendored_dirs vendor)
