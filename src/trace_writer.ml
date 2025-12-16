@@ -146,6 +146,7 @@ type 'thread inner =
   ; mutable in_filtered_region : bool
   ; suppressed_errors : Hash_set.M(Source_code_position).t
   ; mutable transaction_events : Event.With_write_info.t Deque.t
+  ; trace_segment : Trace_segment.t
   }
 
 type t = T : 'thread inner -> t
@@ -323,6 +324,7 @@ let create_expert
       ; in_filtered_region = true
       ; suppressed_errors = Hash_set.create (module Source_code_position)
       ; transaction_events = Deque.create ()
+      ; trace_segment = Trace_segment.create ()
       }
   in
   write_hits t hits;
@@ -884,6 +886,19 @@ let assert_trace_scope t event trace_scopes =
           (event : Event.t)]
 ;;
 
+let write_trace_segment (t : _ inner) =
+  let base_time = Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) t.base_time in
+  let trace =
+    Tracing.Trace.create_for_file
+      ~base_time:(Some base_time)
+      ~filename:"trace_segment.fxt.gz"
+  in
+  let pid = Tracing.Trace.allocate_pid trace ~name:"magic-trace" in
+  let thread = Tracing.Trace.allocate_thread trace ~pid ~name:"main" in
+  Trace_segment.write_trace t.trace_segment trace thread;
+  Tracing.Trace.close trace
+;;
+
 let end_of_trace ?to_time (T t) =
   (* CR-someday cgaebel: I wish this iteration had a defined order; it'd make magic-trace
      a little bit more deterministic. *)
@@ -895,7 +910,8 @@ let end_of_trace ?to_time (T t) =
       thread_info.pending_time <- mapped_time;
       thread_info.last_event_time <- mapped_time;
       thread_info.callstack.create_time <- mapped_time
-    | None -> ())
+    | None -> ());
+  write_trace_segment t
 ;;
 
 let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
@@ -1044,6 +1060,12 @@ and write_event' (T t) ?events_writer event =
     in
     end_of_thread t thread_info ~time ~is_kernel_address
   | Ok event_value ->
+    let () =
+      match event_value with
+      | { Event.Ok.thread = _; time; data = Trace _ as data; in_transaction = _ } ->
+        Trace_segment.add_event t.trace_segment data (Timestamp.create time)
+      | _ -> ()
+    in
     if should_write
     then
       Option.iter events_writer ~f:(fun events_writer ->

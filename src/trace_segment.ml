@@ -102,7 +102,7 @@ let create () =
   { root
   ; callstacks =
       Nonempty_vec.create
-        (#{ time = Timestamp.zero; leaf = root; control_flow = Jump } : Callstack.t)
+        (#{ time = Timestamp.zero; leaf = root; control_flow = Return } : Callstack.t)
   }
 ;;
 
@@ -171,44 +171,79 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
     handle_return t time ~src ~dst
   | Trace { kind = Some Jump; src; dst; trace_state_change = _ } ->
     handle_jump t time ~src ~dst
-  | _ -> assert false
+  | _ -> (* TODO *) ()
 ;;
 
-let emit_frame_enter (_time : Timestamp.t) (_location : Location.t) =
-  (* Intentionally left unimplemented for now, just pretend this does what it says. *)
-  ()
+let emit_frame_enter
+  (trace : Tracing.Trace.t)
+  thread
+  (time : Timestamp.t)
+  (location : Location.t)
+  =
+  Tracing.Trace.write_duration_begin
+    trace
+    ~args:[]
+    ~thread
+    ~name:(Symbol.display_name location.symbol)
+    ~time:(time :> Time_ns.Span.t)
+    ~category:""
 ;;
 
-let emit_frame_exit (_time : Timestamp.t) (_location : Location.t) =
-  (* Intentionally left unimplemented for now, just pretend this does what it says. *)
-  ()
+let emit_frame_exit
+  (trace : Tracing.Trace.t)
+  thread
+  (time : Timestamp.t)
+  (location : Location.t)
+  =
+  Tracing.Trace.write_duration_end
+    trace
+    ~args:[]
+    ~thread
+    ~name:(Symbol.display_name location.symbol)
+    ~time:(time :> Time_ns.Span.t)
+    ~category:""
 ;;
 
-let emit_trace_events (#(prev, curr) : #(Callstack.t * Callstack.t)) =
-  let time = curr.#time in
-  match curr.#control_flow with
-  | Jump ->
-    (* I'm not sure we even need to be recording a new callstack in the first place when
-       the symbol doesn't change, but I need to double-check. *)
-    if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
-    then (
-      emit_frame_exit time prev.#leaf.location;
-      emit_frame_enter time curr.#leaf.location)
-  | Call ->
-    Frame.iter_until_rev
-      curr.#leaf
-      prev.#leaf.location.symbol
-      ~f:(stack_ fun [@inline always] frame -> emit_frame_enter time frame.location)
-    [@nontail]
-  | Return ->
-    Frame.iter_until
-      prev.#leaf
-      curr.#leaf.location.symbol
-      ~f:(stack_ fun [@inline always] frame -> emit_frame_exit time frame.location)
-    [@nontail]
+let make_emit_trace_events trace thread = exclave_
+  Staged.stage (stack_ fun (#(prev, curr) : #(Callstack.t * Callstack.t)) ->
+    let[@inline always] emit_frame_enter time location =
+      emit_frame_enter trace thread time location
+    in
+    let[@inline always] emit_frame_exit time location =
+      emit_frame_exit trace thread time location
+    in
+    let time = curr.#time in
+    match curr.#control_flow with
+    | Jump ->
+      (* I'm not sure we even need to be recording a new callstack in the first place when
+         the symbol doesn't change, but I need to double-check. *)
+      if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
+      then (
+        emit_frame_exit time prev.#leaf.location;
+        emit_frame_enter time curr.#leaf.location)
+    | Call ->
+      Frame.iter_until_rev
+        curr.#leaf
+        prev.#leaf.location.symbol
+        ~f:(stack_ fun [@inline always] frame -> emit_frame_enter time frame.location)
+      [@nontail]
+    | Return ->
+      Frame.iter_until
+        prev.#leaf
+        curr.#leaf.location.symbol
+        ~f:(stack_ fun [@inline always] frame -> emit_frame_exit time frame.location)
+      [@nontail])
 ;;
 
-let write_trace (t : t) = Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events
+let write_trace (t : t) (trace : Tracing.Trace.t) thread =
+  let emit_trace_events = Staged.unstage (make_emit_trace_events trace thread) in
+  Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events;
+  (* Morally this is equivalent to if there was a sentinel at the end of [t.callstacks]
+     with [control_flow = Return], but to avoid the possibility of needlessly reallocating
+     the vector, we do this directly. *)
+  emit_trace_events
+    #(Nonempty_vec.last t.callstacks, Nonempty_vec.first t.callstacks) [@nontail]
+;;
 
 module%test _ = struct
   let setup_test () =
