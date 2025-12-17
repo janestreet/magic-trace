@@ -120,6 +120,8 @@ module Thread_info = struct
     ; mutable last_event_time : Mapped_time.t
     ; track_group_id : int
     ; extra_event_tracks : ('thread[@sexp.opaque]) Hashtbl.M(Collection_mode.Event.Name).t
+    ; name : string
+    ; trace_segment : (Trace_segment.t[@sexp.opaque])
     }
   [@@deriving sexp_of]
 
@@ -146,7 +148,6 @@ type 'thread inner =
   ; mutable in_filtered_region : bool
   ; suppressed_errors : Hash_set.M(Source_code_position).t
   ; mutable transaction_events : Event.With_write_info.t Deque.t
-  ; trace_segment : Trace_segment.t
   }
 
 type t = T : 'thread inner -> t
@@ -324,7 +325,6 @@ let create_expert
       ; in_filtered_region = true
       ; suppressed_errors = Hash_set.create (module Source_code_position)
       ; transaction_events = Deque.create ()
-      ; trace_segment = Trace_segment.create ()
       }
   in
   write_hits t hits;
@@ -557,6 +557,8 @@ let create_thread t event =
   ; last_event_time = effective_time
   ; track_group_id
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
+  ; name
+  ; trace_segment = Trace_segment.create ()
   }
 ;;
 
@@ -886,16 +888,22 @@ let assert_trace_scope t event trace_scopes =
           (event : Event.t)]
 ;;
 
-let write_trace_segment (t : _ inner) =
-  let trace =
-    Tracing.Trace.create_for_file
-      ~base_time:(Some (Obj.magic t.base_time))
-      ~filename:"trace_segment.fxt.gz"
-  in
-  let pid = Tracing.Trace.allocate_pid trace ~name:"magic-trace" in
-  let thread = Tracing.Trace.allocate_thread trace ~pid ~name:"main" in
-  Trace_segment.write_trace t.trace_segment trace thread;
-  Tracing.Trace.close trace
+let write_trace_segments (type thread) (t : thread inner) =
+  if not (Hashtbl.length t.thread_info = 1)
+  then (
+    if Sys.getenv "MAGIC_TRACE_NO_DLFILTER" |> Option.is_some
+    then Debug.eprint "[write_trace_segments] only handles one thread right now")
+  else (
+    let trace =
+      Tracing.Trace.create_for_file
+        ~base_time:(Some (Obj.magic t.base_time))
+        ~filename:"trace_segment.fxt.gz"
+    in
+    Hashtbl.iter t.thread_info ~f:(fun thread_info ->
+      let pid = Tracing.Trace.allocate_pid trace ~name:thread_info.name in
+      let thread = Tracing.Trace.allocate_thread trace ~name:"main" ~pid in
+      Trace_segment.write_trace thread_info.trace_segment trace thread);
+    Tracing.Trace.close trace)
 ;;
 
 let end_of_trace ?to_time (T t) =
@@ -910,7 +918,7 @@ let end_of_trace ?to_time (T t) =
       thread_info.last_event_time <- mapped_time;
       thread_info.callstack.create_time <- mapped_time
     | None -> ());
-  write_trace_segment t
+  write_trace_segments t
 ;;
 
 let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
@@ -1062,7 +1070,7 @@ and write_event' (T t) ?events_writer event =
     let () =
       match event_value with
       | { Event.Ok.thread = _; time; data = Trace _ as data; in_transaction = _ } ->
-        Trace_segment.add_event t.trace_segment data (Timestamp.create time)
+        Trace_segment.add_event thread_info.trace_segment data (Timestamp.create time)
       | _ -> ()
     in
     if should_write
