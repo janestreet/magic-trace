@@ -1,4 +1,5 @@
 open! Core
+module Nonempty_vec = Nonempty_vec.Value
 
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
@@ -121,7 +122,7 @@ module Thread_info = struct
     ; track_group_id : int
     ; extra_event_tracks : ('thread[@sexp.opaque]) Hashtbl.M(Collection_mode.Event.Name).t
     ; name : string
-    ; trace_segment : (Trace_segment.t[@sexp.opaque])
+    ; trace_segments : (Trace_segment.t Nonempty_vec.t[@sexp.opaque])
     }
   [@@deriving sexp_of]
 
@@ -132,6 +133,13 @@ module Thread_info = struct
 
   let set_callstack_from_addr t ~addr ~time =
     set_callstack t ~is_kernel_address:(is_kernel_address addr) ~time
+  ;;
+
+  let add_event_to_trace_segment t event_data time =
+    Trace_segment.add_event
+      (Nonempty_vec.first t.trace_segments)
+      event_data
+      (Timestamp.create time)
   ;;
 end
 
@@ -558,7 +566,7 @@ let create_thread t event =
   ; track_group_id
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
   ; name
-  ; trace_segment = Trace_segment.create ()
+  ; trace_segments = Trace_segment.create () |> Nonempty_vec.create
   }
 ;;
 
@@ -902,7 +910,10 @@ let write_trace_segments (type thread) (t : thread inner) =
     Hashtbl.iter t.thread_info ~f:(fun thread_info ->
       let pid = Tracing.Trace.allocate_pid trace ~name:thread_info.name in
       let thread = Tracing.Trace.allocate_thread trace ~name:"main" ~pid in
-      Trace_segment.write_trace thread_info.trace_segment trace thread);
+      Trace_segment.write_trace
+        (Nonempty_vec.first thread_info.trace_segments)
+        trace
+        thread);
     Tracing.Trace.close trace)
 ;;
 
@@ -917,7 +928,12 @@ let end_of_trace ?to_time (T t) =
       thread_info.pending_time <- mapped_time;
       thread_info.last_event_time <- mapped_time;
       thread_info.callstack.create_time <- mapped_time
-    | None -> ());
+    | None -> ())
+;;
+
+let finalize t =
+  end_of_trace t;
+  let (T t) = t in
   write_trace_segments t
 ;;
 
@@ -1067,12 +1083,6 @@ and write_event' (T t) ?events_writer event =
     in
     end_of_thread t thread_info ~time ~is_kernel_address
   | Ok event_value ->
-    let () =
-      match event_value with
-      | { Event.Ok.thread = _; time; data = Trace _ as data; in_transaction = _ } ->
-        Trace_segment.add_event thread_info.trace_segment data (Timestamp.create time)
-      | _ -> ()
-    in
     if should_write
     then
       Option.iter events_writer ~f:(fun events_writer ->
@@ -1140,6 +1150,10 @@ and write_event' (T t) ?events_writer event =
        ; data = Trace { kind; trace_state_change; src; dst }
        ; in_transaction = _
        } ->
+       Thread_info.add_event_to_trace_segment
+         thread_info
+         event_value.data
+         (time :> Time_ns.Span.t);
        Ocaml_hacks.track_executed_pushtraps_and_poptraps_in_range
          t
          thread_info

@@ -1,5 +1,6 @@
 open! Core
 module Location = Event.Location
+module Nonempty_vec = Nonempty_vec.Valuex3
 
 module Frame : sig
   type t = private
@@ -191,13 +192,37 @@ let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
 ;;
 
-let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
+let handle_trace_end t time ~src = handle_jump t time ~src ~dst:src
+
+let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   match event with
-  | Trace { kind = Some Call; src; dst; trace_state_change = _ } ->
+  | Trace { kind; src; dst; trace_state_change } ->
+    eprint_s
+      ~mach:()
+      [%message
+        (kind : Event.Kind.t option)
+          ~time:(Time_ns.Span.to_int_ns (time :> Time_ns.Span.t) % 10000 : int)
+          ~src:(Symbol.display_name src.symbol)
+          ~dst:(Symbol.display_name dst.symbol)
+          (trace_state_change : Trace_state_change.t option)]
+  | _ -> ()
+;;
+
+let debug = false
+
+let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
+  if debug then print event time
+;;
+
+let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
+  print event time;
+  match event with
+  | Trace { trace_state_change = Some End; src; _ } -> handle_trace_end t time ~src
+  | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
     handle_return t time ~src ~dst
-  | Trace { kind = Some Jump; src; dst; trace_state_change = _ } ->
+  | Trace { kind = Some (Jump | Async); src; dst; trace_state_change = _ } ->
     handle_jump t time ~src ~dst
   | _ -> (* TODO *) ()
 ;;
@@ -264,13 +289,30 @@ let make_emit_trace_events trace thread = exclave_
 ;;
 
 let write_trace (t : t) (trace : Tracing.Trace.t) thread =
+  let () =
+    (* Modify [t.callstacks] so that the first invocation of [emit_trace_events] calls
+       [emit_frame_enter] for the entire callstack. This is necessary because otherwise
+       we'd be missing parent-frames in the trace that we discovered by returning into them
+       (see the [Null] case in [handle_return]). *)
+    Nonempty_vec.set
+      t.callstacks
+      0
+      #{ (Nonempty_vec.get t.callstacks 0) with leaf = (t.root :> Frame.t) };
+    Nonempty_vec.set
+      t.callstacks
+      1
+      #{ (Nonempty_vec.get t.callstacks 1) with control_flow = Call }
+  in
   let emit_trace_events = Staged.unstage (make_emit_trace_events trace thread) in
   Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events;
   (* Morally this is equivalent to if there was a sentinel at the end of [t.callstacks]
      with [control_flow = Return], but to avoid the possibility of needlessly reallocating
      the vector, we do this directly. *)
+  let last_callstack = Nonempty_vec.last t.callstacks in
   emit_trace_events
-    #(Nonempty_vec.last t.callstacks, Nonempty_vec.first t.callstacks) [@nontail]
+    #( last_callstack
+     , #{ time = last_callstack.#time; leaf = (t.root :> Frame.t); control_flow = Return }
+     ) [@nontail]
 ;;
 
 module%test _ = struct
