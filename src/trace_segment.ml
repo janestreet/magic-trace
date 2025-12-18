@@ -195,7 +195,7 @@ let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
 ;;
 
-let handle_trace_end t time ~src = handle_jump t time ~src ~dst:src
+let handle_trace_end t time ~src ~dst = handle_call t time ~src ~dst
 
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   match event with
@@ -220,7 +220,8 @@ let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   print event time;
   match event with
-  | Trace { trace_state_change = Some End; src; _ } -> handle_trace_end t time ~src
+  | Trace { trace_state_change = Some End; src; dst; _ } ->
+    handle_trace_end t time ~src ~dst
   | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
@@ -291,46 +292,65 @@ let make_emit_trace_events trace thread = exclave_
       [@nontail])
 ;;
 
-let write_trace (t : t) (trace : Tracing.Trace.t) thread =
-  let () =
-    (* Modify [t.callstacks] so that the first invocation of [emit_trace_events] calls
+let write_trace
+  (t : t)
+  (trace : Tracing.Trace.t)
+  thread
+  ~enter_initial_callstack
+  ~exit_final_callstack
+  =
+  if Nonempty_vec.length t.callstacks > 1
+  then (
+    if enter_initial_callstack
+    then (
+      (* Modify [t.callstacks] so that the first invocation of [emit_trace_events] calls
        [emit_frame_enter] for the entire callstack. This is necessary because otherwise
        we'd be missing parent-frames in the trace that we discovered by returning into them
        (see the [Null] case in [handle_return]). *)
-    Nonempty_vec.set
-      t.callstacks
-      0
-      #{ (Nonempty_vec.get t.callstacks 0) with leaf = (t.root :> Frame.t) };
-    Nonempty_vec.set
-      t.callstacks
-      1
-      #{ (Nonempty_vec.get t.callstacks 1) with control_flow = Call }
-  in
-  let emit_trace_events = Staged.unstage (make_emit_trace_events trace thread) in
-  Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events;
-  (* Morally this is equivalent to if there was a sentinel at the end of [t.callstacks]
-     with [control_flow = Return], but to avoid the possibility of needlessly reallocating
-     the vector, we do this directly. *)
-  let last_callstack = Nonempty_vec.last t.callstacks in
-  emit_trace_events
-    #( last_callstack
-     , #{ time = last_callstack.#time; leaf = (t.root :> Frame.t); control_flow = Return }
-     ) [@nontail]
+      Nonempty_vec.set
+        t.callstacks
+        0
+        #{ (Nonempty_vec.get t.callstacks 0) with leaf = (t.root :> Frame.t) };
+      Nonempty_vec.set
+        t.callstacks
+        1
+        #{ (Nonempty_vec.get t.callstacks 1) with control_flow = Call });
+    let emit_trace_events = Staged.unstage (make_emit_trace_events trace thread) in
+    Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events;
+    if exit_final_callstack
+    then (
+      (* Morally this is equivalent to if there was a sentinel at the end of [t.callstacks]
+       with [control_flow = Return], but to avoid the possibility of needlessly
+       reallocating the vector, we do this directly. *)
+      let last_callstack = Nonempty_vec.last t.callstacks in
+      emit_trace_events
+        #( last_callstack
+         , #{ time = last_callstack.#time
+            ; leaf = (t.root :> Frame.t)
+            ; control_flow = Return
+            } ) [@nontail]))
 ;;
 
-let stitch ~(before : t) ~(after : t) =
+module Stitch_result = struct
+  type t =
+    | Stitched
+    | Indepdenent
+  [@@deriving sexp_of, compare]
+end
+
+let stitch ~(before : t) ~(after : t) : Stitch_result.t =
   let end_of_before = (Nonempty_vec.last before.callstacks).#leaf in
   let start_of_after = Frame.root (Nonempty_vec.first after.callstacks).#leaf in
   match Frame.find end_of_before start_of_after.location.symbol with
   | Null ->
     (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
-    ()
+    Indepdenent
   | This { parent = Null; _ } ->
     (* It's imposisble for [Frame.find] to return a sentinel. *)
     assert false
   | This { parent = This { parent = Null; _ }; _ } ->
     (* The root of [before] and the root of [after] are already the same, do nothing. *)
-    ()
+    Stitched
   | This
       { parent =
           This ({ parent = This before_version_grandparent; _ } as before_version_parent)
@@ -342,7 +362,8 @@ let stitch ~(before : t) ~(after : t) =
         before_version_parent.location
         ~parent:before_version_grandparent
     in
-    after.root <- before.root
+    after.root <- before.root;
+    Stitched
 ;;
 
 module%test _ = struct
@@ -407,7 +428,7 @@ module%test _ = struct
       d
       f
       |}];
-    stitch ~before ~after;
+    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect
@@ -431,7 +452,7 @@ module%test _ = struct
       x
       e
       |}];
-    stitch ~before ~after;
+    [%test_result: Stitch_result.t] ~expect:Indepdenent (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect {|
@@ -456,7 +477,7 @@ module%test _ = struct
       f
       g
       |}];
-    stitch ~before ~after;
+    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect
@@ -482,7 +503,7 @@ module%test _ = struct
       f
       g
       |}];
-    stitch ~before ~after;
+    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect
@@ -505,7 +526,7 @@ module%test _ = struct
       --- [after] ---
       e
       |}];
-    stitch ~before ~after;
+    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect
