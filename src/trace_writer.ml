@@ -154,6 +154,7 @@ type 'thread inner =
   ; ocaml_exception_info : Ocaml_exception_info.t option
   ; thread_info : 'thread Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
+  ; earliest_time : Time_ns.Span.t
   ; trace_scope : Trace_scope.t
   ; trace : (module Trace with type thread = 'thread)
   ; annotate_inferred_start_times : bool
@@ -331,6 +332,7 @@ let create_expert
       ; ocaml_exception_info
       ; thread_info = Hashtbl.create (module Event.Thread)
       ; base_time
+      ; earliest_time
       ; trace_scope
       ; trace
       ; annotate_inferred_start_times
@@ -960,9 +962,13 @@ let write_trace_segments (type thread) (t : thread inner) =
     if Sys.getenv "MAGIC_TRACE_NO_DLFILTER" |> Option.is_some
     then Debug.eprint "[write_trace_segments] only handles one thread right now")
   else (
+    (* Temporary hack to make the times right. *)
+    let base_time =
+      Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) t.earliest_time
+    in
     let combined_trace =
       Tracing.Trace.create_for_file
-        ~base_time:(Some (Obj.magic t.base_time))
+        ~base_time:(Some base_time)
         ~filename:"combined_trace.fxt.gz"
     in
     Hashtbl.iter t.thread_info ~f:(fun thread_info ->
