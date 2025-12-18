@@ -7,3 +7,4 @@ type t
 val create : unit -> t
 val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit
 val write_trace : t -> Tracing.Trace.t -> Tracing.Trace.Thread.t -> unit
+val stitch : before:t -> after:t -> unit

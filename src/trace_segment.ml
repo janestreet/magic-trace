@@ -9,6 +9,7 @@ module Frame : sig
     }
 
   val create : Location.t -> parent:t Or_null.t -> t
+  val root : t -> t
   val find : t -> Symbol.t -> t Or_null.t
 
   (** Iterate through [t] until reaching a frame whose symbol matches the provided
@@ -30,11 +31,7 @@ module Frame : sig
     type t = private frame
 
     val create : unit -> t
-
-    (* TODO do this by accepting a mutable interior pointer to a [t] so that we can hide
-       the implementation details instead of requiring the user of this module to mutate
-       their sentinel to [new_sentinel]. *)
-    val append : t -> Location.t -> #(frame:frame * new_sentinel:t)
+    val consume : t -> Location.t -> parent:frame -> frame
   end
 
   module For_testing : sig
@@ -47,6 +44,12 @@ end = struct
     }
 
   let[@inline always] create location ~parent = { location; parent }
+
+  let rec root t =
+    match t with
+    | { parent = Null; _ } | { parent = This { parent = Null; _ }; _ } -> t
+    | { parent = This parent; _ } -> root parent
+  ;;
 
   let rec find t target =
     match t with
@@ -82,11 +85,10 @@ end = struct
 
     let[@inline always] create () = { location = sentinel_location; parent = Null }
 
-    let append sentinel location =
-      let new_sentinel = create () in
-      sentinel.location <- location;
-      sentinel.parent <- This new_sentinel;
-      #(~frame:sentinel, ~new_sentinel)
+    let consume t location ~parent =
+      t.location <- location;
+      t.parent <- This parent;
+      t
     ;;
   end
 
@@ -135,9 +137,10 @@ let create () =
 let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
 
 let replace_root t location =
-  let #(~frame, ~new_sentinel) = Frame.Sentinel.append t.root location in
+  let new_sentinel = Frame.Sentinel.create () in
+  let root = Frame.Sentinel.consume t.root location ~parent:(new_sentinel :> Frame.t) in
   t.root <- new_sentinel;
-  frame
+  root
 ;;
 
 let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
@@ -315,7 +318,207 @@ let write_trace (t : t) (trace : Tracing.Trace.t) thread =
      ) [@nontail]
 ;;
 
+let stitch ~(before : t) ~(after : t) =
+  let end_of_before = (Nonempty_vec.last before.callstacks).#leaf in
+  let start_of_after = Frame.root (Nonempty_vec.first after.callstacks).#leaf in
+  match Frame.find end_of_before start_of_after.location.symbol with
+  | Null ->
+    (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
+    ()
+  | This { parent = Null; _ } ->
+    (* It's imposisble for [Frame.find] to return a sentinel. *)
+    assert false
+  | This { parent = This { parent = Null; _ }; _ } ->
+    (* The root of [before] and the root of [after] are already the same, do nothing. *)
+    ()
+  | This
+      { parent =
+          This ({ parent = This before_version_grandparent; _ } as before_version_parent)
+      ; _
+      } ->
+    let _ =
+      Frame.Sentinel.consume
+        after.root
+        before_version_parent.location
+        ~parent:before_version_grandparent
+    in
+    after.root <- before.root
+;;
+
 module%test _ = struct
+  (* Takes a string like "a-b-c-d-e" which describes a callstack in root-to-leaf
+     order, each letter being a function name. *)
+  let parse_frames string =
+    let root = Frame.Sentinel.create () in
+    let leaf =
+      String.split string ~on:'-'
+      |> List.fold
+           ~init:(root :> Frame.t)
+           ~f:(fun root leaf_name ->
+             Frame.create
+               Location.
+                 { symbol_offset = 0
+                 ; instruction_pointer = 0L
+                 ; symbol = From_perf leaf_name
+                 }
+               ~parent:(This root))
+    in
+    #(~root, ~leaf)
+  ;;
+
+  (* Throughout this test-suite, things are rendered vertically in the same way they'd appear in the Perfetto viewer. *)
+
+  let print_frame_callstack leaf =
+    Frame.For_testing.to_string_list leaf |> String.concat_lines |> print_endline
+  ;;
+
+  let%expect_test "[parse_frames] utility" =
+    let #(~root:_, ~leaf) = parse_frames "a-b-c-d-e" in
+    print_frame_callstack leaf;
+    [%expect {|
+      a
+      b
+      c
+      d
+      e
+      |}]
+  ;;
+
+  let create_singelton (frames : string) : t =
+    let #(~root, ~leaf) = parse_frames frames in
+    { root
+    ; callstacks =
+        Nonempty_vec.create
+          Callstack.(#{ time = Timestamp.zero; control_flow = Call; leaf })
+    }
+  ;;
+
+  let print_singleton_callstack t =
+    print_frame_callstack (Nonempty_vec.first t.callstacks).#leaf
+  ;;
+
+  let%expect_test "[stitch] with common ancestor" =
+    let before : t = create_singelton "a-b-c-d-e" in
+    let after : t = create_singelton "d-f" in
+    print_endline "--- [after] ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] ---
+      d
+      f
+      |}];
+    stitch ~before ~after;
+    print_endline "--- [after] stitched ---";
+    print_singleton_callstack after;
+    [%expect
+      {|
+      --- [after] stitched ---
+      a
+      b
+      c
+      d
+      f
+      |}]
+  ;;
+
+  let%expect_test "[stitch] with no common ancestor" =
+    let before : t = create_singelton "a-b-c-d-e" in
+    let after : t = create_singelton "x-e" in
+    print_endline "--- [after] ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] ---
+      x
+      e
+      |}];
+    stitch ~before ~after;
+    print_endline "--- [after] stitched ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] stitched ---
+      x
+      e
+      |}]
+  ;;
+
+  let%expect_test "[stitch] where common ancestor is already the root of both [before] \
+                   and [after]"
+    =
+    let before : t = create_singelton "a-b-c-d-e" in
+    let after : t = create_singelton "a-b-c-f-g" in
+    print_endline "--- [after] ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] ---
+      a
+      b
+      c
+      f
+      g
+      |}];
+    stitch ~before ~after;
+    print_endline "--- [after] stitched ---";
+    print_singleton_callstack after;
+    [%expect
+      {|
+      --- [after] stitched ---
+      a
+      b
+      c
+      f
+      g
+      |}]
+  ;;
+
+  let%expect_test "[stitch] where common ancestor is just below the root" =
+    let before : t = create_singelton "a-b-c-d-e" in
+    let after : t = create_singelton "b-c-f-g" in
+    print_endline "--- [after] ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] ---
+      b
+      c
+      f
+      g
+      |}];
+    stitch ~before ~after;
+    print_endline "--- [after] stitched ---";
+    print_singleton_callstack after;
+    [%expect
+      {|
+      --- [after] stitched ---
+      a
+      b
+      c
+      f
+      g
+      |}]
+  ;;
+
+  let%expect_test "[stitch] where common ancestor is leaf of [after]" =
+    let before : t = create_singelton "a-b-c-d-e" in
+    let after : t = create_singelton "e" in
+    print_endline "--- [after] ---";
+    print_singleton_callstack after;
+    [%expect {|
+      --- [after] ---
+      e
+      |}];
+    stitch ~before ~after;
+    print_endline "--- [after] stitched ---";
+    print_singleton_callstack after;
+    [%expect
+      {|
+      --- [after] stitched ---
+      a
+      b
+      c
+      d
+      e
+      |}]
+  ;;
+
   let setup_test () =
     let t = create () in
     let ip = ref (-1) in
