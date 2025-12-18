@@ -215,10 +215,6 @@ let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
 
 let debug = false
 
-let print_first_callstack t =
-  Frame.For_testing.print_callstack (Nonempty_vec.last t.callstacks).#leaf
-;;
-
 let print_all_callstacks t =
   Nonempty_vec.iter t.callstacks ~f:(fun callstack ->
     Frame.For_testing.to_string_list callstack.#leaf
@@ -231,16 +227,10 @@ let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   if debug then print event time
 ;;
 
-[@@@disable_unused_warnings]
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   print event time;
   match event with
-  | Trace { trace_state_change = Some End; src; _ } ->
-    (* handle_call t time ~src ~dst:Location.untraced *)
-    ()
-  | Trace { trace_state_change = Some Start; src = _; dst; _ } ->
-    (* handle_jump t time ~src:Location.untraced ~dst *)
-    ()
+  | Trace { trace_state_change = Some _; _ } -> ()
   | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
@@ -250,14 +240,16 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   | _ -> (* TODO *) ()
 ;;
 
-let start_time t = 
-  if Nonempty_vec.length t.callstacks = 1 then Null else
-  This (Nonempty_vec.get t.callstacks 1).#time
+let start_time t =
+  if Nonempty_vec.length t.callstacks = 1
+  then Null
+  else This (Nonempty_vec.get t.callstacks 1).#time
 ;;
 
-let end_time t = 
-  if Nonempty_vec.length t.callstacks = 1 then Null else
-  This (Nonempty_vec.last t.callstacks).#time
+let end_time t =
+  if Nonempty_vec.length t.callstacks = 1
+  then Null
+  else This (Nonempty_vec.last t.callstacks).#time
 ;;
 
 let emit_frame_enter
@@ -266,7 +258,7 @@ let emit_frame_enter
   (time : Timestamp.t)
   (location : Location.t)
   =
-  Debug.eprintf "Enter %s\n" (Symbol.display_name location.symbol);
+  if debug then Debug.eprintf "Enter %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_begin
     trace (* TODO: populate arguments *)
     ~args:[]
@@ -282,7 +274,7 @@ let emit_frame_exit
   (time : Timestamp.t)
   (location : Location.t)
   =
-  Debug.eprintf "Exit %s\n" (Symbol.display_name location.symbol);
+  if debug then Debug.eprintf "Exit %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_end
     trace
     ~args:[]
@@ -307,10 +299,10 @@ let make_emit_trace_events trace thread = exclave_
          the symbol doesn't change, but I need to double-check. *)
       if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
       then (
-      (* Debug.eprint *)
-      (*   ("Handling jump from callstack: " *)
-      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
-      (*    Debug.eprintf "Jumping from %s to %s\n" (Symbol.display_name prev.#leaf.location.symbol) (Symbol.display_name curr.#leaf.location.symbol); *)
+        (* Debug.eprint *)
+        (*   ("Handling jump from callstack: " *)
+        (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
+        (*    Debug.eprintf "Jumping from %s to %s\n" (Symbol.display_name prev.#leaf.location.symbol) (Symbol.display_name curr.#leaf.location.symbol); *)
         emit_frame_exit time prev.#leaf.location;
         emit_frame_enter time curr.#leaf.location)
     | Call ->

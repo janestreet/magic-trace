@@ -23,7 +23,6 @@ end
 
 val stitch : before:t -> after:t -> Stitch_result.t
 
-val print_first_callstack : t -> unit
 val print_all_callstacks : t -> unit
 val start_time : t -> Timestamp.t Or_null.t
 val end_time : t -> Timestamp.t Or_null.t
