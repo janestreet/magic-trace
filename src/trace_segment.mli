@@ -18,7 +18,7 @@ val write_trace
 module Stitch_result : sig
   type t = private
     | Stitched
-    | Indepdenent
+    | Independent
 end
 
 val stitch : before:t -> after:t -> Stitch_result.t

@@ -341,9 +341,9 @@ let write_trace
     if enter_initial_callstack
     then (
       (* Modify [t.callstacks] so that the first invocation of [emit_trace_events] calls
-       [emit_frame_enter] for the entire callstack. This is necessary because otherwise
-       we'd be missing parent-frames in the trace that we discovered by returning into them
-       (see the [Null] case in [handle_return]). *)
+         [emit_frame_enter] for the entire callstack. This is necessary because otherwise
+         we'd be missing parent-frames in the trace that we discovered by returning into
+         them (see the [Null] case in [handle_return]). *)
       Nonempty_vec.set
         t.callstacks
         0
@@ -356,9 +356,7 @@ let write_trace
     Nonempty_vec.iter_pairs t.callstacks ~f:emit_trace_events;
     if exit_final_callstack
     then (
-      (* Morally this is equivalent to if there was a sentinel at the end of [t.callstacks]
-       with [control_flow = Return], but to avoid the possibility of needlessly
-       reallocating the vector, we do this directly. *)
+      (* Call [emit_frame_exit] for all remaining frames at the end of the segment. *)
       let last_callstack = Nonempty_vec.last t.callstacks in
       emit_trace_events
         #( last_callstack
@@ -371,7 +369,7 @@ let write_trace
 module Stitch_result = struct
   type t =
     | Stitched
-    | Indepdenent
+    | Independent
   [@@deriving sexp_of, compare]
 end
 
@@ -381,7 +379,7 @@ let stitch ~(before : t) ~(after : t) : Stitch_result.t =
   match Frame.find end_of_before start_of_after.location.symbol with
   | Null ->
     (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
-    Indepdenent
+    Independent
   | This { parent = Null; _ } ->
     (* It's imposisble for [Frame.find] to return a sentinel. *)
     assert false
@@ -487,7 +485,7 @@ module%test _ = struct
       x
       e
       |}];
-    [%test_result: Stitch_result.t] ~expect:Indepdenent (stitch ~before ~after);
+    [%test_result: Stitch_result.t] ~expect:Independent (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
     [%expect {|

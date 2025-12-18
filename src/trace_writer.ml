@@ -907,7 +907,7 @@ let thread_write_trace_segments combined_trace thread trace_segments =
   Nonempty_vec.iter_pairs trace_segments ~f:(stack_ fun #(before, after) ->
     let () =
       match Trace_segment.stitch ~before ~after with
-      | Indepdenent ->
+      | Independent ->
         Trace_segment.write_trace
           before
           combined_trace
