@@ -957,25 +957,20 @@ let thread_write_trace_segments combined_trace thread trace_segments =
 ;;
 
 let write_trace_segments (type thread) (t : thread inner) =
-  if not (Hashtbl.length t.thread_info = 1)
-  then (
-    if Sys.getenv "MAGIC_TRACE_NO_DLFILTER" |> Option.is_some
-    then Debug.eprint "[write_trace_segments] only handles one thread right now")
-  else (
+  let combined_trace =
     (* Temporary hack to make the times right. *)
     let base_time =
       Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) t.earliest_time
     in
-    let combined_trace =
-      Tracing.Trace.create_for_file
-        ~base_time:(Some base_time)
-        ~filename:"combined_trace.fxt.gz"
-    in
-    Hashtbl.iter t.thread_info ~f:(fun thread_info ->
-      let pid = Tracing.Trace.allocate_pid combined_trace ~name:thread_info.name in
-      let thread = Tracing.Trace.allocate_thread combined_trace ~name:"main" ~pid in
-      thread_write_trace_segments combined_trace thread thread_info.trace_segments);
-    Tracing.Trace.close combined_trace)
+    Tracing.Trace.create_for_file
+      ~base_time:(Some base_time)
+      ~filename:"combined_trace.fxt.gz"
+  in
+  Hashtbl.iter t.thread_info ~f:(stack_ fun thread_info ->
+    let pid = Tracing.Trace.allocate_pid combined_trace ~name:thread_info.name in
+    let thread = Tracing.Trace.allocate_thread combined_trace ~name:"main" ~pid in
+    thread_write_trace_segments combined_trace thread thread_info.trace_segments);
+  Tracing.Trace.close combined_trace
 ;;
 
 let end_of_trace ?to_time (T t) =
