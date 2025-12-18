@@ -906,45 +906,98 @@ let write_trace_segments (type thread) (t : thread inner) =
     if Sys.getenv "MAGIC_TRACE_NO_DLFILTER" |> Option.is_some
     then Debug.eprint "[write_trace_segments] only handles one thread right now")
   else (
-    let trace =
+    let combined_trace =
       Tracing.Trace.create_for_file
         ~base_time:(Some (Obj.magic t.base_time))
-        ~filename:"trace_segment.fxt.gz"
+        ~filename:"combined_trace.fxt.gz"
     in
+    (* let segmented_trace = *)
+    (*   Tracing.Trace.create_for_file *)
+    (*     ~base_time:(Some (Obj.magic t.base_time)) *)
+    (*     ~filename:[%string "segmented_trace.fxt.gz"] *)
+    (* in *)
     Hashtbl.iter t.thread_info ~f:(fun thread_info ->
-      let pid = Tracing.Trace.allocate_pid trace ~name:thread_info.name in
-      let thread = Tracing.Trace.allocate_thread trace ~name:"main" ~pid in
+      let () =
+        ()
+        (* let i = ref 0 in *)
+        (* Nonempty_vec.iter thread_info.trace_segments ~f:(stack_ fun trace_segment -> *)
+        (*   let pid = Tracing.Trace.allocate_pid segmented_trace ~name:thread_info.name in *)
+        (*   let thread = *)
+        (*     Tracing.Trace.allocate_thread *)
+        (*       segmented_trace *)
+        (*       ~name:[%string "segment_%{!i#Int}"] *)
+        (*       ~pid *)
+        (*   in *)
+        (*   Trace_segment.write_trace *)
+        (*     trace_segment *)
+        (*     segmented_trace *)
+        (*     thread *)
+        (*     ~enter_initial_callstack:true *)
+        (*     ~exit_final_callstack:true; *)
+        (*   incr i); *)
+        (*   Tracing.Trace.close segmented_trace; *)
+      in
+      let pid = Tracing.Trace.allocate_pid combined_trace ~name:thread_info.name in
+      let thread = Tracing.Trace.allocate_thread combined_trace ~name:"main" ~pid in
       let enter_initial_callstack = ref true in
-      Debug.eprint_s [%message (Nonempty_vec.length thread_info.trace_segments : int)];
+      (* Debug.eprint_s [%message (Nonempty_vec.length thread_info.trace_segments : int)]; *)
       Nonempty_vec.iter_pairs
         thread_info.trace_segments
         ~f:(stack_ fun #(before, after) ->
-          match Trace_segment.stitch ~before ~after with
-          | Indepdenent ->
-            Trace_segment.write_trace
-              before
-              trace
-              thread
-              ~enter_initial_callstack:!enter_initial_callstack
-              ~exit_final_callstack:true;
-            enter_initial_callstack := true
-          | Stitched ->
-            Trace_segment.write_trace
-              before
-              trace
-              thread
-              ~enter_initial_callstack:!enter_initial_callstack
-              ~exit_final_callstack:false;
-            enter_initial_callstack := false);
+          let () =
+            match Trace_segment.stitch ~before ~after with
+            | Indepdenent ->
+              Trace_segment.write_trace
+                before
+                combined_trace
+                thread
+                ~enter_initial_callstack:!enter_initial_callstack
+                ~exit_final_callstack:true;
+              enter_initial_callstack := true
+            | Stitched ->
+              Trace_segment.write_trace
+                before
+                combined_trace
+                thread
+                ~enter_initial_callstack:!enter_initial_callstack
+                ~exit_final_callstack:false;
+              enter_initial_callstack := false
+          in
+          let () =
+            match Trace_segment.end_time before, Trace_segment.start_time after with
+            | Null, _ | _, Null -> ()
+            | This untraced_start, This untraced_end ->
+              Tracing.Trace.write_duration_begin
+                combined_trace (* TODO: populate arguments *)
+                ~args:[]
+                ~thread
+                ~name:(Symbol.display_name Symbol.Untraced)
+                ~time:(untraced_start :> Time_ns.Span.t)
+                ~category:"";
+              Tracing.Trace.write_duration_end
+                combined_trace (* TODO: populate arguments *)
+                ~args:[]
+                ~thread
+                ~name:(Symbol.display_name Symbol.Untraced)
+                ~time:(untraced_end :> Time_ns.Span.t)
+                ~category:""
+          in
+          ());
       if Nonempty_vec.length thread_info.trace_segments > 1
       then
         Trace_segment.write_trace
           (Nonempty_vec.last thread_info.trace_segments)
-          trace
+          combined_trace
           thread
           ~enter_initial_callstack:!enter_initial_callstack
-          ~exit_final_callstack:true);
-    Tracing.Trace.close trace)
+          ~exit_final_callstack:true
+      (* let i = ref 0 in *)
+      (* Nonempty_vec.iter thread_info.trace_segments ~f:(stack_ fun segment -> *)
+      (*   printf "--- Trace segment %d ---\n" !i; *)
+      (*   incr i; *)
+      (*   Trace_segment.print_all_callstacks segment) *)
+      (* [@nontail] *));
+    Tracing.Trace.close combined_trace)
 ;;
 
 let end_of_trace ?to_time (T t) =

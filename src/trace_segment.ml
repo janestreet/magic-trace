@@ -36,6 +36,7 @@ module Frame : sig
 
   module For_testing : sig
     val to_string_list : t -> string list
+    val print_callstack : t -> unit
   end
 end = struct
   type t =
@@ -101,6 +102,7 @@ end = struct
     ;;
 
     let to_string_list t = to_string_list [] t
+    let print_callstack leaf = to_string_list leaf |> String.concat_lines |> print_endline
   end
 end
 
@@ -195,7 +197,7 @@ let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
 ;;
 
-let handle_trace_end t time ~src ~dst = handle_call t time ~src ~dst
+(* let handle_trace_end t time ~src ~dst = handle_call t time ~src ~dst *)
 
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   match event with
@@ -213,15 +215,32 @@ let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
 
 let debug = false
 
+let print_first_callstack t =
+  Frame.For_testing.print_callstack (Nonempty_vec.last t.callstacks).#leaf
+;;
+
+let print_all_callstacks t =
+  Nonempty_vec.iter t.callstacks ~f:(fun callstack ->
+    Frame.For_testing.to_string_list callstack.#leaf
+    |> String.concat ~sep:"  "
+    |> Debug.eprint)
+  [@nontail]
+;;
+
 let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   if debug then print event time
 ;;
 
+[@@@disable_unused_warnings]
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   print event time;
   match event with
-  | Trace { trace_state_change = Some End; src; dst; _ } ->
-    handle_trace_end t time ~src ~dst
+  | Trace { trace_state_change = Some End; src; _ } ->
+    (* handle_call t time ~src ~dst:Location.untraced *)
+    ()
+  | Trace { trace_state_change = Some Start; src = _; dst; _ } ->
+    (* handle_jump t time ~src:Location.untraced ~dst *)
+    ()
   | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
@@ -231,12 +250,23 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   | _ -> (* TODO *) ()
 ;;
 
+let start_time t = 
+  if Nonempty_vec.length t.callstacks = 1 then Null else
+  This (Nonempty_vec.get t.callstacks 1).#time
+;;
+
+let end_time t = 
+  if Nonempty_vec.length t.callstacks = 1 then Null else
+  This (Nonempty_vec.last t.callstacks).#time
+;;
+
 let emit_frame_enter
   (trace : Tracing.Trace.t)
   thread
   (time : Timestamp.t)
   (location : Location.t)
   =
+  Debug.eprintf "Enter %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_begin
     trace (* TODO: populate arguments *)
     ~args:[]
@@ -252,6 +282,7 @@ let emit_frame_exit
   (time : Timestamp.t)
   (location : Location.t)
   =
+  Debug.eprintf "Exit %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_end
     trace
     ~args:[]
@@ -276,15 +307,29 @@ let make_emit_trace_events trace thread = exclave_
          the symbol doesn't change, but I need to double-check. *)
       if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
       then (
+      (* Debug.eprint *)
+      (*   ("Handling jump from callstack: " *)
+      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
+      (*    Debug.eprintf "Jumping from %s to %s\n" (Symbol.display_name prev.#leaf.location.symbol) (Symbol.display_name curr.#leaf.location.symbol); *)
         emit_frame_exit time prev.#leaf.location;
         emit_frame_enter time curr.#leaf.location)
     | Call ->
+      (* Debug.eprint *)
+      (*   ("Handling call from callstack: " *)
+      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
+      (* Debug.eprintf "Calling %s from %s\n" (Symbol.display_name curr.#leaf.location.symbol) (Symbol.display_name prev.#leaf.location.symbol); *)
       Frame.iter_until_rev
         curr.#leaf
         prev.#leaf.location.symbol
         ~f:(stack_ fun [@inline always] frame -> emit_frame_enter time frame.location)
       [@nontail]
     | Return ->
+      (* Debug.eprint *)
+      (*   ("Handling return from callstack: " *)
+      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
+      (* Debug.eprintf *)
+      (*   "Returning to symbol %s\n" *)
+      (*   (Symbol.display_name curr.#leaf.location.symbol); *)
       Frame.iter_until
         prev.#leaf
         curr.#leaf.location.symbol
@@ -389,9 +434,7 @@ module%test _ = struct
 
   (* Throughout this test-suite, things are rendered vertically in the same way they'd appear in the Perfetto viewer. *)
 
-  let print_frame_callstack leaf =
-    Frame.For_testing.to_string_list leaf |> String.concat_lines |> print_endline
-  ;;
+  let print_frame_callstack = Frame.For_testing.print_callstack
 
   let%expect_test "[parse_frames] utility" =
     let #(~root:_, ~leaf) = parse_frames "a-b-c-d-e" in
