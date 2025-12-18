@@ -4,11 +4,11 @@ module Nonempty_vec = Nonempty_vec.Valuex3
 
 module Frame : sig
   type t = private
-    { mutable parent : t
-    ; mutable location : Location.t
+    { mutable location : Event.Location.t
+    ; mutable parent : t Or_null.t
     }
 
-  val create : Location.t -> parent:t -> t
+  val create : Location.t -> parent:t Or_null.t -> t
   val find : t -> Symbol.t -> t Or_null.t
 
   (** Iterate through [t] until reaching a frame whose symbol matches the provided
@@ -21,8 +21,9 @@ module Frame : sig
   module Sentinel : sig
     type frame := t
 
-    (** The virtual root of a callstack, a sentinel does not correspond to a real program
-        location.
+    (** The root of a callstack. A sentinel does not correspond to a real program
+        location, and its parent is always [Null]; it is the *only* frame allowed to have
+        a [Null] parent.
 
         Using a sentinel allows us to avoid a variety of special-cases, and lets us update
         the root of all callstacks in a trace in O(1) time. *)
@@ -41,33 +42,35 @@ module Frame : sig
   end
 end = struct
   type t =
-    { mutable parent : t
-    ; mutable location : Event.Location.t
+    { mutable location : Event.Location.t
+    ; mutable parent : t Or_null.t
     }
 
   let[@inline always] create location ~parent = { location; parent }
-  let[@inline always] is_sentinel t = phys_equal t t.parent
 
   let rec find t target =
-    if is_sentinel t
-    then Null
-    else if Symbol.equal t.location.symbol target
-    then This t
-    else find t.parent target
+    match t with
+    | { parent = Null; _ } -> Null
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol target -> This t
+    | { parent = This parent; _ } -> find parent target
   ;;
 
-  let[@inline always] rec iter_until t target ~f =
-    if not (is_sentinel t || Symbol.equal t.location.symbol target)
-    then (
+  let[@inline always] rec iter_until t stop_symbol ~f =
+    match t with
+    | { parent = Null; _ } -> ()
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
+    | { parent = This parent; _ } ->
       (f [@inlined hint]) t;
-      iter_until t.parent target ~f)
+      iter_until parent stop_symbol ~f
   ;;
 
-  let[@inline always] rec iter_until_rev t target ~f =
-    if not (is_sentinel t || Symbol.equal t.location.symbol target)
-    then (
-      iter_until_rev t.parent target ~f;
-      (f [@inlined hint]) t)
+  let[@inline always] rec iter_until_rev t stop_symbol ~f =
+    match t with
+    | { parent = Null; _ } -> ()
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
+    | { parent = This parent; _ } ->
+      iter_until_rev parent stop_symbol ~f;
+      (f [@inlined hint]) t
   ;;
 
   module Sentinel = struct
@@ -77,24 +80,22 @@ end = struct
       { instruction_pointer = 0L; symbol_offset = 0; symbol = Unknown }
     ;;
 
-    let[@inline always] create () =
-      let rec t = { location = sentinel_location; parent = t } in
-      t
-    ;;
+    let[@inline always] create () = { location = sentinel_location; parent = Null }
 
     let append sentinel location =
       let new_sentinel = create () in
       sentinel.location <- location;
-      sentinel.parent <- new_sentinel;
+      sentinel.parent <- This new_sentinel;
       #(~frame:sentinel, ~new_sentinel)
     ;;
   end
 
   module For_testing = struct
     let rec to_string_list acc t =
-      if is_sentinel t
-      then acc
-      else to_string_list (Symbol.display_name t.location.symbol :: acc) t.parent
+      match t.parent with
+      | Null -> acc
+      | This parent ->
+        to_string_list (Symbol.display_name t.location.symbol :: acc) parent
     ;;
 
     let to_string_list t = to_string_list [] t
@@ -142,7 +143,7 @@ let replace_root t location =
 let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
   let control_flow : Control_flow.t = Call in
   match Frame.find (current_frame t) src.symbol with
-  | This src_frame ->
+  | This _ as src_frame ->
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = Frame.create dst ~parent:src_frame; control_flow }
@@ -152,7 +153,7 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
     let src_frame = replace_root t src in
     Nonempty_vec.push_back
       t.callstacks
-      #{ time; leaf = Frame.create dst ~parent:src_frame; control_flow }
+      #{ time; leaf = Frame.create dst ~parent:(This src_frame); control_flow }
 ;;
 
 let handle_return (t : t) (time : Timestamp.t) ~src:_ ~(dst : Location.t) =
