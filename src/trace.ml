@@ -84,6 +84,7 @@ module Null_writer : Trace_writer_intf.S_trace = struct
   let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ : unit = ()
   let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let base_time = Time_ns.epoch
 end
 
 let write_trace_from_events
