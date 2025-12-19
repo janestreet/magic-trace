@@ -37,8 +37,9 @@ module Frame : sig
     type t = private frame
 
     val create : unit -> t
-    (** Mutate [t]'s contents to the provided [location] and [parent]
-        and return [t] as a [frame]. *)
+
+    (** Mutate [t]'s contents to the provided [location] and [parent] and return [t] as a
+        [frame]. *)
     val become_frame : t -> Location.t -> parent:frame -> frame
   end
 
@@ -148,7 +149,9 @@ let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
 
 let replace_root t location =
   let new_sentinel = Frame.Sentinel.create () in
-  let root = Frame.Sentinel.become_frame t.root location ~parent:(new_sentinel :> Frame.t) in
+  let root =
+    Frame.Sentinel.become_frame t.root location ~parent:(new_sentinel :> Frame.t)
+  in
   t.root <- new_sentinel;
   root
 ;;
@@ -300,16 +303,12 @@ let make_emit_trace_events trace thread = exclave_
         emit_frame_exit time prev.#leaf.location;
         emit_frame_enter time curr.#leaf.location)
     | Call ->
-      Frame.iter_until_rev
-        curr.#leaf
-        prev.#leaf.location.symbol
-        ~f:(stack_ fun frame -> emit_frame_enter time frame.location)
+      Frame.iter_until_rev curr.#leaf prev.#leaf.location.symbol ~f:(stack_ fun frame ->
+        emit_frame_enter time frame.location)
       [@nontail]
     | Return ->
-      Frame.iter_until
-        prev.#leaf
-        curr.#leaf.location.symbol
-        ~f:(stack_ fun frame -> emit_frame_exit time frame.location)
+      Frame.iter_until prev.#leaf curr.#leaf.location.symbol ~f:(stack_ fun frame ->
+        emit_frame_exit time frame.location)
       [@nontail])
 ;;
 
