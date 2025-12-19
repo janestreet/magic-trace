@@ -12,7 +12,9 @@ val write_trace
   -> Tracing.Trace.t
   -> Tracing.Trace.Thread.t
   -> enter_initial_callstack:bool
+       (** Emit a frame-enter for each frame in the *first* callstack of this segment. *)
   -> exit_final_callstack:bool
+       (** Emit a frame-exit for each frame in the *last* callstack of this segment. *)
   -> unit
 
 module Stitch_result : sig
@@ -21,8 +23,10 @@ module Stitch_result : sig
     | Independent
 end
 
+(** Find the common ancestor of [after]'s first callstack in [before]'s last callstack and
+    union the two callstacks together on this common ancestor. Returns [Stitched] if such
+    a common ancestor was found, or [Independent] otherwise. *)
 val stitch : before:t -> after:t -> Stitch_result.t
 
-val print_all_callstacks : t -> unit
 val start_time : t -> Timestamp.t Or_null.t
 val end_time : t -> Timestamp.t Or_null.t

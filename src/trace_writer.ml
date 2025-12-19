@@ -930,6 +930,9 @@ let thread_write_trace_segments combined_trace thread trace_segments =
       | This untraced_start, This untraced_end
         when Timestamp.equal untraced_start untraced_end -> ()
       | This untraced_start, This untraced_end ->
+        (* TODO Record enough information that we can correctly mark
+           this as [untraced] vs. [syscall] vs. etc. to reflect
+           exactly *why* it was untraced. *)
         Tracing.Trace.write_duration_begin
           combined_trace (* TODO: populate arguments *)
           ~args:[]
@@ -956,6 +959,10 @@ let thread_write_trace_segments combined_trace thread trace_segments =
       ~exit_final_callstack:true
 ;;
 
+(* TODO Doing all of this within this file and hardcoding both the trace-writer implementation
+   (by using [Tracing.Trace] instead of unpacking the first-class-module) and the output
+   filename is a temporary hack so that we can simulatenously output traces using both the
+   old and new code for me to compare while debugging. *)
 let write_trace_segments (type thread) (t : thread inner) =
   let combined_trace =
     (* Temporary hack to make the times right. *)

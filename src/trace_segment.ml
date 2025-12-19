@@ -8,8 +8,14 @@ module Frame : sig
     ; mutable parent : t Or_null.t
     }
 
+  (* TODO The type of [parent] should really be [t], not [t Or_null.t] because
+     it shouldn't be possible to create a sentinel via this function (see the doc-comment
+     on [Sentinel.t] for more context). *)
   val create : Location.t -> parent:t Or_null.t -> t
+
+  (** Return the sentinel's child frame if there is one, or the sentinel itself otherwise. *)
   val root : t -> t
+
   val find : t -> Symbol.t -> t Or_null.t
 
   (** Iterate through [t] until reaching a frame whose symbol matches the provided
@@ -31,7 +37,9 @@ module Frame : sig
     type t = private frame
 
     val create : unit -> t
-    val consume : t -> Location.t -> parent:frame -> frame
+    (** Mutate [t]'s contents to the provided [location] and [parent]
+        and return [t] as a [frame]. *)
+    val become_frame : t -> Location.t -> parent:frame -> frame
   end
 
   module For_testing : sig
@@ -59,22 +67,22 @@ end = struct
     | { parent = This parent; _ } -> find parent target
   ;;
 
-  let[@inline always] rec iter_until t stop_symbol ~f =
+  let rec iter_until t stop_symbol ~f =
     match t with
     | { parent = Null; _ } -> ()
     | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
     | { parent = This parent; _ } ->
-      (f [@inlined hint]) t;
+      f t;
       iter_until parent stop_symbol ~f
   ;;
 
-  let[@inline always] rec iter_until_rev t stop_symbol ~f =
+  let rec iter_until_rev t stop_symbol ~f =
     match t with
     | { parent = Null; _ } -> ()
     | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
     | { parent = This parent; _ } ->
       iter_until_rev parent stop_symbol ~f;
-      (f [@inlined hint]) t
+      f t
   ;;
 
   module Sentinel = struct
@@ -86,7 +94,7 @@ end = struct
 
     let[@inline always] create () = { location = sentinel_location; parent = Null }
 
-    let consume t location ~parent =
+    let become_frame t location ~parent =
       t.location <- location;
       t.parent <- This parent;
       t
@@ -140,7 +148,7 @@ let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
 
 let replace_root t location =
   let new_sentinel = Frame.Sentinel.create () in
-  let root = Frame.Sentinel.consume t.root location ~parent:(new_sentinel :> Frame.t) in
+  let root = Frame.Sentinel.become_frame t.root location ~parent:(new_sentinel :> Frame.t) in
   t.root <- new_sentinel;
   root
 ;;
@@ -197,8 +205,6 @@ let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
 ;;
 
-(* let handle_trace_end t time ~src ~dst = handle_call t time ~src ~dst *)
-
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   match event with
   | Trace { kind; src; dst; trace_state_change } ->
@@ -214,14 +220,6 @@ let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
 ;;
 
 let debug = false
-
-let print_all_callstacks t =
-  Nonempty_vec.iter t.callstacks ~f:(fun callstack ->
-    Frame.For_testing.to_string_list callstack.#leaf
-    |> String.concat ~sep:"  "
-    |> Debug.eprint)
-  [@nontail]
-;;
 
 let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
   if debug then print event time
@@ -299,33 +297,19 @@ let make_emit_trace_events trace thread = exclave_
          the symbol doesn't change, but I need to double-check. *)
       if not (Symbol.equal prev.#leaf.location.symbol curr.#leaf.location.symbol)
       then (
-        (* Debug.eprint *)
-        (*   ("Handling jump from callstack: " *)
-        (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
-        (*    Debug.eprintf "Jumping from %s to %s\n" (Symbol.display_name prev.#leaf.location.symbol) (Symbol.display_name curr.#leaf.location.symbol); *)
         emit_frame_exit time prev.#leaf.location;
         emit_frame_enter time curr.#leaf.location)
     | Call ->
-      (* Debug.eprint *)
-      (*   ("Handling call from callstack: " *)
-      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
-      (* Debug.eprintf "Calling %s from %s\n" (Symbol.display_name curr.#leaf.location.symbol) (Symbol.display_name prev.#leaf.location.symbol); *)
       Frame.iter_until_rev
         curr.#leaf
         prev.#leaf.location.symbol
-        ~f:(stack_ fun [@inline always] frame -> emit_frame_enter time frame.location)
+        ~f:(stack_ fun frame -> emit_frame_enter time frame.location)
       [@nontail]
     | Return ->
-      (* Debug.eprint *)
-      (*   ("Handling return from callstack: " *)
-      (*    ^ (Frame.For_testing.to_string_list prev.#leaf |> String.concat ~sep:" -> ")); *)
-      (* Debug.eprintf *)
-      (*   "Returning to symbol %s\n" *)
-      (*   (Symbol.display_name curr.#leaf.location.symbol); *)
       Frame.iter_until
         prev.#leaf
         curr.#leaf.location.symbol
-        ~f:(stack_ fun [@inline always] frame -> emit_frame_exit time frame.location)
+        ~f:(stack_ fun frame -> emit_frame_exit time frame.location)
       [@nontail])
 ;;
 
@@ -373,6 +357,7 @@ module Stitch_result = struct
   [@@deriving sexp_of, compare]
 end
 
+(* TODO Add an ascii-art diagram showing what this function does because IMO it's somewhat subtle. *)
 let stitch ~(before : t) ~(after : t) : Stitch_result.t =
   let end_of_before = (Nonempty_vec.last before.callstacks).#leaf in
   let start_of_after = Frame.root (Nonempty_vec.first after.callstacks).#leaf in
@@ -381,7 +366,7 @@ let stitch ~(before : t) ~(after : t) : Stitch_result.t =
     (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
     Independent
   | This { parent = Null; _ } ->
-    (* It's imposisble for [Frame.find] to return a sentinel. *)
+    (* It's impossible for [Frame.find] to return a sentinel. *)
     assert false
   | This { parent = This { parent = Null; _ }; _ } ->
     (* The root of [before] and the root of [after] are already the same, do nothing. *)
@@ -392,7 +377,7 @@ let stitch ~(before : t) ~(after : t) : Stitch_result.t =
       ; _
       } ->
     let _ =
-      Frame.Sentinel.consume
+      Frame.Sentinel.become_frame
         after.root
         before_version_parent.location
         ~parent:before_version_grandparent
