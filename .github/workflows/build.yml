@@ -16,9 +16,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
-      - uses: actions/cache@v4
+      - uses: actions/cache@v5
         with:
           path: ~/.opam
           key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-1
@@ -119,7 +119,7 @@ jobs:
           strip magic-trace
           upx -9 magic-trace
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: magic-trace
           path: magic-trace
