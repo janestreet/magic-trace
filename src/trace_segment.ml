@@ -356,11 +356,61 @@ module Stitch_result = struct
   [@@deriving sexp_of, compare]
 end
 
-(* TODO Add an ascii-art diagram showing what this function does because IMO it's somewhat subtle. *)
+(*=
+The pointer manipulation performed by [stitch] is somewhat subtle, so here's a diagram visualizing
+the effect of calling the function. The key thing to understand is that the reason why we restrict
+the interface of [Frame] such that only sentinel instances can be mutated is that **all of the
+callstacks in a trace-segment are guaranteed to terminate with that trace-segment's sentinel**.
+Looking at the diagram should hopefully make it clear that if we **didn't** enforce this restriction
+and you followed the naïve intuition of mutating [d.parent] to point to [before]'s [c], you would be
+stranding the [z -> y] callstack, and all of the other callstacks in [after.callstacks] that don't
+contain this *particular* [d] frame.
+
+                                                                │
+                                                                │
+                        INITIAL STATE                           │                             END STATE
+────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────
+                                                                │
+               root                        root                 │                root                        root
+              ┌────┐                      ┌────┐                │               ┌────┐                      ┌────┐
+             ┌──────┬──────┐             ┌──────┬──────┐        │              ┌──────┬──────┐             ┌──────┬──────┐
+    before = │  │   │      │     after = │  │   │      │        │     before = │  │   │      │     after = │  │   │      │
+             └──┼───┴──────┘             └──┼───┴──────┘        │              └──┼───┴──────┘             └──┼───┴──────┘
+                │                           │                   │                 │   ┌───────────────────────┘
+                ▼                           ▼                   │                 ▼   ▼   ┌──────────────────────┐
+             ┌───┬───┐                   ┌───┬───┐              │              ┌───┬───┐  │                ┌───┬─┼─┐
+         ┌──►│ - │ - │                   │ - │ - │◄──────┐      │          ┌──►│ - │ - │  │                │ c │ │ │◄──────┐
+         │   └───┴───┘                   └───┴───┘       │      │          │   └───┴───┘  │                └───┴───┘       │
+         │         ▲                           ▲         │      │          │         ▲    │                      ▲         │
+   ┌───┬─┼─┐ ┌───┬─┼─┐                   ┌───┬─┼─┐ ┌───┬─┼─┐    │    ┌───┬─┼─┐ ┌───┬─┼─┐  │                ┌───┬─┼─┐ ┌───┬─┼─┐
+   │ w │ │ │ │ a │ │ │                   │ d │ │ │ │ y │ │ │    │    │ w │ │ │ │ a │ │ │  │                │ d │ │ │ │ y │ │ │
+   └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘    │    └───┴───┘ └───┴───┘  │                └───┴───┘ └───┴───┘
+         ▲         ▲                           ▲         ▲      │          ▲         ▲    │                      ▲         ▲
+   ┌───┬─┼─┐ ┌───┬─┼─┐                   ┌───┬─┼─┐ ┌───┬─┼─┐    │    ┌───┬─┼─┐ ┌───┬─┼─┐◄─┘                ┌───┬─┼─┐ ┌───┬─┼─┐
+   │ x │ │ │ │ b │ │ │  start_of_after = │ f │ │ │ │ z │ │ │    │    │ x │ │ │ │ b │ │ │  start_of_after = │ f │ │ │ │ z │ │ │
+   └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘    │    └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘
+                   ▲                                            │                    ▲
+             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
+             │ c │ │ │                                          │              │ c │ │ │
+             └───┴───┘                                          │              └───┴───┘
+                   ▲                                            │                    ▲
+             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
+             │ d │ │ │                                          │              │ d │ │ │
+             └───┴───┘                                          │              └───┴───┘
+                   ▲                                            │                    ▲
+             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
+             │ e │ │ │ = end_of_before                          │              │ e │ │ │ = end_of_before
+             └───┴───┘                                          │              └───┴───┘
+                                                                │
+                                                                │
+                                                                │
+                                                                │
+                                                                │
+*)
 let stitch ~(before : t) ~(after : t) : Stitch_result.t =
   let end_of_before = (Nonempty_vec.last before.callstacks).#leaf in
-  let start_of_after = Frame.root (Nonempty_vec.first after.callstacks).#leaf in
-  match Frame.find end_of_before start_of_after.location.symbol with
+  let start_of_after = (Nonempty_vec.first after.callstacks).#leaf in
+  match Frame.find end_of_before (Frame.root start_of_after).location.symbol with
   | Null ->
     (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
     Independent
