@@ -51,6 +51,8 @@ module Expert = struct
   let create = create
 end
 
+let base_time t = t.base_time
+
 let close t = TW.close t.writer
 
 let translate_time t time =

@@ -1,4 +1,5 @@
 open! Core
+module Nonempty_vec = Nonempty_vec.Value
 
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
@@ -120,6 +121,8 @@ module Thread_info = struct
     ; mutable last_event_time : Mapped_time.t
     ; track_group_id : int
     ; extra_event_tracks : ('thread[@sexp.opaque]) Hashtbl.M(Collection_mode.Event.Name).t
+    ; name : string
+    ; trace_segments : (Trace_segment.t Nonempty_vec.t[@sexp.opaque])
     }
   [@@deriving sexp_of]
 
@@ -130,6 +133,17 @@ module Thread_info = struct
 
   let set_callstack_from_addr t ~addr ~time =
     set_callstack t ~is_kernel_address:(is_kernel_address addr) ~time
+  ;;
+
+  let start_new_trace_segment t =
+    Trace_segment.create () |> Nonempty_vec.push_back t.trace_segments
+  ;;
+
+  let add_event_to_trace_segment t event_data time =
+    Trace_segment.add_event
+      (Nonempty_vec.last t.trace_segments)
+      event_data
+      (Timestamp.create time)
   ;;
 end
 
@@ -555,6 +569,8 @@ let create_thread t event =
   ; last_event_time = effective_time
   ; track_group_id
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
+  ; name
+  ; trace_segments = Trace_segment.create () |> Nonempty_vec.create
   }
 ;;
 
@@ -884,6 +900,82 @@ let assert_trace_scope t event trace_scopes =
           (event : Event.t)]
 ;;
 
+let thread_write_trace_segments combined_trace thread trace_segments =
+  let enter_initial_callstack = ref true in
+  Nonempty_vec.iter_pairs trace_segments ~f:(stack_ fun #(before, after) ->
+    let () =
+      match Trace_segment.stitch ~before ~after with
+      | Independent ->
+        Trace_segment.write_trace
+          before
+          combined_trace
+          thread
+          ~enter_initial_callstack:!enter_initial_callstack
+          ~exit_final_callstack:true;
+        enter_initial_callstack := true
+      | Stitched ->
+        Trace_segment.write_trace
+          before
+          combined_trace
+          thread
+          ~enter_initial_callstack:!enter_initial_callstack
+          ~exit_final_callstack:false;
+        enter_initial_callstack := false
+    in
+    let () =
+      match Trace_segment.end_time before, Trace_segment.start_time after with
+      | Null, _ | _, Null -> ()
+      | This untraced_start, This untraced_end
+        when Timestamp.equal untraced_start untraced_end -> ()
+      | This untraced_start, This untraced_end ->
+        (* TODO Record enough information that we can correctly mark
+           this as [untraced] vs. [syscall] vs. etc. to reflect
+           exactly *why* it was untraced. *)
+        Tracing.Trace.write_duration_begin
+          combined_trace (* TODO: populate arguments *)
+          ~args:[]
+          ~thread
+          ~name:(Symbol.display_name Symbol.Untraced)
+          ~time:(untraced_start :> Time_ns.Span.t)
+          ~category:"";
+        Tracing.Trace.write_duration_end
+          combined_trace (* TODO: populate arguments *)
+          ~args:[]
+          ~thread
+          ~name:(Symbol.display_name Symbol.Untraced)
+          ~time:(untraced_end :> Time_ns.Span.t)
+          ~category:""
+    in
+    ());
+  if Nonempty_vec.length trace_segments > 1
+  then
+    Trace_segment.write_trace
+      (Nonempty_vec.last trace_segments)
+      combined_trace
+      thread
+      ~enter_initial_callstack:!enter_initial_callstack
+      ~exit_final_callstack:true
+;;
+
+(* TODO Doing all of this within this file and hardcoding both the trace-writer implementation
+   (by using [Tracing.Trace] instead of unpacking the first-class-module) and the output
+   filename is a temporary hack so that we can simulatenously output traces using both the
+   old and new code for me to compare while debugging. *)
+let write_trace_segments (type thread) (t : thread inner) =
+  let combined_trace =
+    (* Temporary hack to make the times right. *)
+    let module T = (val t.trace) in
+    Tracing.Trace.create_for_file
+      ~base_time:(Some T.base_time)
+      ~filename:"combined_trace.fxt.gz"
+  in
+  Hashtbl.iter t.thread_info ~f:(stack_ fun thread_info ->
+    let pid = Tracing.Trace.allocate_pid combined_trace ~name:thread_info.name in
+    let thread = Tracing.Trace.allocate_thread combined_trace ~name:"main" ~pid in
+    thread_write_trace_segments combined_trace thread thread_info.trace_segments);
+  Tracing.Trace.close combined_trace
+;;
+
 let end_of_trace ?to_time (T t) =
   (* CR-someday cgaebel: I wish this iteration had a defined order; it'd make magic-trace
      a little bit more deterministic. *)
@@ -896,6 +988,12 @@ let end_of_trace ?to_time (T t) =
       thread_info.last_event_time <- mapped_time;
       thread_info.callstack.create_time <- mapped_time
     | None -> ())
+;;
+
+let finalize t =
+  end_of_trace t;
+  let (T t) = t in
+  write_trace_segments t
 ;;
 
 let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
@@ -1042,7 +1140,8 @@ and write_event' (T t) ?events_writer event =
       | None -> false
       | Some ip -> is_kernel_address ip
     in
-    end_of_thread t thread_info ~time ~is_kernel_address
+    end_of_thread t thread_info ~time ~is_kernel_address;
+    Thread_info.start_new_trace_segment thread_info
   | Ok event_value ->
     if should_write
     then
@@ -1111,6 +1210,15 @@ and write_event' (T t) ?events_writer event =
        ; data = Trace { kind; trace_state_change; src; dst }
        ; in_transaction = _
        } ->
+       let () =
+         Thread_info.add_event_to_trace_segment
+           thread_info
+           event_value.data
+           (time :> Time_ns.Span.t);
+         match trace_state_change with
+         | Some End -> Thread_info.start_new_trace_segment thread_info
+         | None | Some Start -> ()
+       in
        Ocaml_hacks.track_executed_pushtraps_and_poptraps_in_range
          t
          thread_info

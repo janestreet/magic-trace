@@ -84,6 +84,7 @@ module Null_writer : Trace_writer_intf.S_trace = struct
   let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ : unit = ()
   let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let base_time = Time_ns.epoch
 end
 
 let write_trace_from_events
@@ -180,7 +181,7 @@ let write_trace_from_events
   (match events_writer with
    | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
    | _ -> ());
-  Trace_writer.end_of_trace writer;
+  Trace_writer.finalize writer;
   Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;

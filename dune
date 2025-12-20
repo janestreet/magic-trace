@@ -1,6 +1,9 @@
 (env
  (static
   (flags
-   (:standard -cclib -static))))
+   (:standard -cclib -static)))
+ (dev
+  (flags
+   (:standard -cclib -fuse-ld=lld))))
 
 (vendored_dirs vendor)
