@@ -931,19 +931,13 @@ let thread_write_trace_segments combined_trace thread trace_segments =
         (* TODO Record enough information that we can correctly mark
            this as [untraced] vs. [syscall] vs. etc. to reflect
            exactly *why* it was untraced. *)
-        Tracing.Trace.write_duration_begin
+        Tracing.Trace.write_duration_complete
           combined_trace (* TODO: populate arguments *)
           ~args:[]
           ~thread
           ~name:(Symbol.display_name Symbol.Untraced)
           ~time:(untraced_start :> Time_ns.Span.t)
-          ~category:"";
-        Tracing.Trace.write_duration_end
-          combined_trace (* TODO: populate arguments *)
-          ~args:[]
-          ~thread
-          ~name:(Symbol.display_name Symbol.Untraced)
-          ~time:(untraced_end :> Time_ns.Span.t)
+          ~time_end:(untraced_end :> Time_ns.Span.t)
           ~category:""
     in
     ());
