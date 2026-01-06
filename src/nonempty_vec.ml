@@ -1,7 +1,18 @@
 open! Core
 
-module%template [@kind k = (value, (value & value & value))] T = struct
+module Range = struct
+  type t =
+    #{ start : int
+     ; stop : int
+     }
+
+  let length #{ start; stop } = stop - start
+end
+
+module%template [@kind k = (value, value & value & value)] T = struct
   type ('a : k) t = ('a Vec.t[@kind k])
+
+  module Range = Range
 
   let create x =
     let t = (Vec.create [@kind k]) () in
@@ -28,5 +39,5 @@ module%template [@kind k = (value, (value & value & value))] T = struct
   ;;
 end
 
-module Value = (T [@kind value])
-module Valuex3 = (T [@kind (value & value & value)])
+module Value = T [@kind value]
+module Valuex3 = T [@kind value & value & value]

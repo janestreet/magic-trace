@@ -1,9 +1,19 @@
 open! Core
 
-module type%template [@kind k = (value, (value & value & value))] S := sig
+module type Range := sig
+  type t =
+    #{ start : int
+     ; stop : int
+     }
 
+  val length : t -> int
+end
+
+module type%template [@kind k = (value, value & value & value)] S := sig
   (** A [Vec.t] guaranteed to contain at least one element. *)
   type ('a : k) t
+
+  module Range : Range
 
   val create : 'a -> 'a t
   val first : 'a t -> 'a
@@ -16,5 +26,5 @@ module type%template [@kind k = (value, (value & value & value))] S := sig
   val length : _ t -> int
 end
 
-module Value : (S [@kind value])
-module Valuex3 : (S [@kind (value & value & value)])
+module Value : S [@kind value]
+module Valuex3 : S [@kind value & value & value]
