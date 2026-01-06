@@ -8,9 +8,9 @@ module Frame : sig
     ; mutable parent : t Or_null.t
     }
 
-  (* TODO The type of [parent] should really be [t], not [t Or_null.t] because
-     it shouldn't be possible to create a sentinel via this function (see the doc-comment
-     on [Sentinel.t] for more context). *)
+  (* TODO The type of [parent] should really be [t], not [t Or_null.t] because it
+     shouldn't be possible to create a sentinel via this function (see the doc-comment on
+     [Sentinel.t] for more context). *)
   val create : Location.t -> parent:t Or_null.t -> t
 
   (** Return the sentinel's child frame if there is one, or the sentinel itself otherwise. *)
@@ -312,6 +312,43 @@ let make_emit_trace_events trace thread = exclave_
       [@nontail])
 ;;
 
+(* Intel PT may produce many events with the same timestamp due to resolution limitations.
+   To produce better visual traces, we "smear" time: for N consecutive events with
+   timestamp t1, followed by an event with timestamp t2, the k-th event (0-indexed) gets
+   smeared time: t1 + k * (t2 - t1) / N. Final events keep their original time. *)
+let smear_times (callstacks : Callstack.t Nonempty_vec.t) =
+  let len = Nonempty_vec.length callstacks in
+  let i = ref 0 in
+  while !i < len do
+    let t1 = (Nonempty_vec.get callstacks !i).#time in
+    (* Find the end of the run of events with the same timestamp *)
+    let run_end = ref !i in
+    while
+      !run_end + 1 < len
+      && Timestamp.equal (Nonempty_vec.get callstacks (!run_end + 1)).#time t1
+    do
+      incr run_end
+    done;
+    let run_length = !run_end - !i + 1 in
+    if !run_end + 1 < len
+    then (
+      (* Smear times across this run *)
+      let t2 = (Nonempty_vec.get callstacks (!run_end + 1)).#time in
+      let duration = Time_ns.Span.( - ) (t2 :> Time_ns.Span.t) (t1 :> Time_ns.Span.t) in
+      let duration_ns = Time_ns.Span.to_int_ns duration in
+      for k = 0 to run_length - 1 do
+        let offset_ns = duration_ns * k / run_length in
+        let smeared_time =
+          Timestamp.create Time_ns.Span.((t1 :> Time_ns.Span.t) + of_int_ns offset_ns)
+        in
+        let cs = Nonempty_vec.get callstacks (!i + k) in
+        Nonempty_vec.set callstacks (!i + k) #{ cs with time = smeared_time }
+      done
+      (* else: final run - keep original times *));
+    i := !run_end + 1
+  done
+;;
+
 let write_trace
   (t : t)
   (trace : Tracing.Trace.t)
@@ -321,6 +358,7 @@ let write_trace
   =
   if Nonempty_vec.length t.callstacks > 1
   then (
+    smear_times t.callstacks;
     if enter_initial_callstack
     then (
       (* Modify [t.callstacks] so that the first invocation of [emit_trace_events] calls
@@ -436,8 +474,8 @@ let stitch ~(before : t) ~(after : t) : Stitch_result.t =
 ;;
 
 module%test _ = struct
-  (* Takes a string like "a-b-c-d-e" which describes a callstack in root-to-leaf
-     order, each letter being a function name. *)
+  (* Takes a string like "a-b-c-d-e" which describes a callstack in root-to-leaf order,
+     each letter being a function name. *)
   let parse_frames string =
     let root = Frame.Sentinel.create () in
     let leaf =
@@ -456,14 +494,16 @@ module%test _ = struct
     #(~root, ~leaf)
   ;;
 
-  (* Throughout this test-suite, things are rendered vertically in the same way they'd appear in the Perfetto viewer. *)
+  (* Throughout this test-suite, things are rendered vertically in the same way they'd
+     appear in the Perfetto viewer. *)
 
   let print_frame_callstack = Frame.For_testing.print_callstack
 
   let%expect_test "[parse_frames] utility" =
     let #(~root:_, ~leaf) = parse_frames "a-b-c-d-e" in
     print_frame_callstack leaf;
-    [%expect {|
+    [%expect
+      {|
       a
       b
       c
@@ -490,7 +530,8 @@ module%test _ = struct
     let after : t = create_singelton "d-f" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] ---
       d
       f
@@ -514,7 +555,8 @@ module%test _ = struct
     let after : t = create_singelton "x-e" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] ---
       x
       e
@@ -522,7 +564,8 @@ module%test _ = struct
     [%test_result: Stitch_result.t] ~expect:Independent (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] stitched ---
       x
       e
@@ -536,7 +579,8 @@ module%test _ = struct
     let after : t = create_singelton "a-b-c-f-g" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] ---
       a
       b
@@ -563,7 +607,8 @@ module%test _ = struct
     let after : t = create_singelton "b-c-f-g" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] ---
       b
       c
@@ -589,7 +634,8 @@ module%test _ = struct
     let after : t = create_singelton "e" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect {|
+    [%expect
+      {|
       --- [after] ---
       e
       |}];
@@ -605,6 +651,92 @@ module%test _ = struct
       d
       e
       |}]
+  ;;
+
+  (* Tests for [smear_times] *)
+
+  let create_callstacks_with_times (times : int list) : Callstack.t Nonempty_vec.t =
+    let #(~root:_, ~leaf) = parse_frames "a" in
+    match times with
+    | [] -> failwith "times must be non-empty"
+    | first :: rest ->
+      let vec =
+        Nonempty_vec.create
+          (#{ time = Timestamp.create (Time_ns.Span.of_int_ns first)
+            ; leaf
+            ; control_flow = Call
+            }
+           : Callstack.t)
+      in
+      List.iter rest ~f:(fun t ->
+        Nonempty_vec.push_back
+          vec
+          (#{ time = Timestamp.create (Time_ns.Span.of_int_ns t)
+            ; leaf
+            ; control_flow = Call
+            }
+           : Callstack.t));
+      vec
+  ;;
+
+  let print_times (callstacks : Callstack.t Nonempty_vec.t) =
+    Nonempty_vec.iter callstacks ~f:(fun (cs : Callstack.t) ->
+      printf "%2d " (Time_ns.Span.to_int_ns (cs.#time :> Time_ns.Span.t)));
+    print_endline ""
+  ;;
+
+  let%expect_test "[smear_times] with all different timestamps (no smearing needed)" =
+    let callstacks = create_callstacks_with_times [ 0; 10; 20; 30 ] in
+    print_times callstacks;
+    [%expect {|  0 10 20 30 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {|  0 10 20 30 |}]
+  ;;
+
+  let%expect_test "[smear_times] with consecutive same timestamps" =
+    let callstacks = create_callstacks_with_times [ 0; 0; 0; 30 ] in
+    print_times callstacks;
+    [%expect {|  0  0  0 30 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {|  0 10 20 30 |}]
+  ;;
+
+  let%expect_test "[smear_times] with multiple runs of same timestamps" =
+    let callstacks = create_callstacks_with_times [ 0; 0; 20; 20; 20; 50 ] in
+    print_times callstacks;
+    [%expect {|  0  0 20 20 20 50 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {|  0 10 20 30 40 50 |}]
+  ;;
+
+  let%expect_test "[smear_times] final run keeps original time" =
+    let callstacks = create_callstacks_with_times [ 0; 0; 30; 30; 30 ] in
+    print_times callstacks;
+    [%expect {|  0  0 30 30 30 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {|  0 15 30 30 30 |}]
+  ;;
+
+  let%expect_test "[smear_times] single event" =
+    let callstacks = create_callstacks_with_times [ 100 ] in
+    print_times callstacks;
+    [%expect {| 100 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {| 100 |}]
+  ;;
+
+  let%expect_test "[smear_times] all same timestamp (final run)" =
+    let callstacks = create_callstacks_with_times [ 50; 50; 50 ] in
+    print_times callstacks;
+    [%expect {| 50 50 50 |}];
+    smear_times callstacks;
+    print_times callstacks;
+    [%expect {| 50 50 50 |}]
   ;;
 
   let setup_test () =
