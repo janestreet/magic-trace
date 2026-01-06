@@ -1,18 +1,7 @@
 open! Core
 
-module Range = struct
-  type t =
-    #{ start : int
-     ; stop : int
-     }
-
-  let length #{ start; stop } = stop - start
-end
-
 module%template [@kind k = (value, value & value & value)] T = struct
   type ('a : k) t = ('a Vec.t[@kind k])
-
-  module Range = Range
 
   let create x =
     let t = (Vec.create [@kind k]) () in
@@ -35,12 +24,6 @@ module%template [@kind k = (value, value & value & value)] T = struct
       let curr = unsafe_get t i in
       f #(prev, curr);
       prev <- curr
-    done
-  ;;
-
-  let iter_range t (#{ start; stop } : Range.t) ~f =
-    for i = start to stop - 1 do
-      f (unsafe_get t i)
     done
   ;;
 end
