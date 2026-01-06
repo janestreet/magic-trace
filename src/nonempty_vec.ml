@@ -37,6 +37,12 @@ module%template [@kind k = (value, value & value & value)] T = struct
       prev <- curr
     done
   ;;
+
+  let iter_range t (#{ start; stop } : Range.t) ~f =
+    for i = start to stop - 1 do
+      f (unsafe_get t i)
+    done
+  ;;
 end
 
 module Value = T [@kind value]

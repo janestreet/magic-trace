@@ -16,6 +16,7 @@ module type%template [@kind k = (value, value & value & value)] S := sig
   module Range : Range
 
   val create : 'a -> 'a t
+  val length : _ t -> int
   val first : 'a t -> 'a
   val get : 'a t -> int -> 'a
   val set : 'a t -> int -> 'a -> unit
@@ -23,7 +24,7 @@ module type%template [@kind k = (value, value & value & value)] S := sig
   val push_back : 'a t -> 'a -> unit
   val iter : 'a t -> f:local_ ('a -> unit) -> unit
   val iter_pairs : 'a t -> f:local_ (#('a * 'a) -> unit) -> unit
-  val length : _ t -> int
+  val iter_range : 'a t -> Range.t-> f:local_ ('a -> unit) -> unit
 end
 
 module Value : S [@kind value]
