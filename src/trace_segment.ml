@@ -236,9 +236,13 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
     handle_return t time ~src:Location.untraced ~dst
   | Trace { trace_state_change = Some End; src; dst = _; _ } ->
     handle_call t time ~src ~dst:Location.untraced
-  | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
-    handle_call t time ~src ~dst
-  | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
+  | Trace
+      { kind = Some (Call | Syscall | Hardware_interrupt)
+      ; src
+      ; dst
+      ; trace_state_change = _
+      } -> handle_call t time ~src ~dst
+  | Trace { kind = Some (Return | Sysret | Iret); src; dst; trace_state_change = _ } ->
     handle_return t time ~src ~dst
   | Trace { kind = Some (Jump | Async); src; dst; trace_state_change = _ } ->
     handle_jump t time ~src ~dst
