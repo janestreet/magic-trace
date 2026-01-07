@@ -231,7 +231,11 @@ let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   print event time;
   match event with
-  | Trace { trace_state_change = Some _; _ } -> ()
+  (* TODO Get the untraced "kind" right instead of always showing [Location.untraced] for untraced time. *)
+  | Trace { trace_state_change = Some Start; src = _; dst; _ } ->
+    handle_return t time ~src:Location.untraced ~dst
+  | Trace { trace_state_change = Some End; src; dst = _; _ } ->
+    handle_call t time ~src ~dst:Location.untraced
   | Trace { kind = Some (Call | Syscall); src; dst; trace_state_change = _ } ->
     handle_call t time ~src ~dst
   | Trace { kind = Some Return; src; dst; trace_state_change = _ } ->
@@ -502,8 +506,7 @@ module%test _ = struct
   let%expect_test "[parse_frames] utility" =
     let #(~root:_, ~leaf) = parse_frames "a-b-c-d-e" in
     print_frame_callstack leaf;
-    [%expect
-      {|
+    [%expect {|
       a
       b
       c
@@ -530,8 +533,7 @@ module%test _ = struct
     let after : t = create_singelton "d-f" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] ---
       d
       f
@@ -555,8 +557,7 @@ module%test _ = struct
     let after : t = create_singelton "x-e" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] ---
       x
       e
@@ -564,8 +565,7 @@ module%test _ = struct
     [%test_result: Stitch_result.t] ~expect:Independent (stitch ~before ~after);
     print_endline "--- [after] stitched ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] stitched ---
       x
       e
@@ -579,8 +579,7 @@ module%test _ = struct
     let after : t = create_singelton "a-b-c-f-g" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] ---
       a
       b
@@ -607,8 +606,7 @@ module%test _ = struct
     let after : t = create_singelton "b-c-f-g" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] ---
       b
       c
@@ -634,8 +632,7 @@ module%test _ = struct
     let after : t = create_singelton "e" in
     print_endline "--- [after] ---";
     print_singleton_callstack after;
-    [%expect
-      {|
+    [%expect {|
       --- [after] ---
       e
       |}];
