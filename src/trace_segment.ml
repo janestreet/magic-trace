@@ -261,12 +261,25 @@ let end_time t =
   else This (Nonempty_vec.last t.callstacks).#time
 ;;
 
+module Trace_state = struct
+  let last_time = ref Timestamp.zero
+  let stack = Vec.create ()
+
+  let reset () =
+    last_time := Timestamp.zero;
+    Vec.clear stack
+  ;;
+end
+
 let emit_frame_enter
   (trace : Tracing.Trace.t)
   thread
   (time : Timestamp.t)
   (location : Location.t)
   =
+  assert (Timestamp.( >= ) time !Trace_state.last_time);
+  Trace_state.last_time := time;
+  Vec.push_back Trace_state.stack location.symbol;
   if debug then Debug.eprintf "Enter %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_begin
     trace (* TODO: populate arguments *)
@@ -283,6 +296,9 @@ let emit_frame_exit
   (time : Timestamp.t)
   (location : Location.t)
   =
+  assert (Timestamp.( >= ) time !Trace_state.last_time);
+  Trace_state.last_time := time;
+  [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn Trace_state.stack) location.symbol;
   if debug then Debug.eprintf "Exit %s\n" (Symbol.display_name location.symbol);
   Tracing.Trace.write_duration_end
     trace
@@ -293,7 +309,9 @@ let emit_frame_exit
     ~category:""
 ;;
 
-let make_emit_trace_events trace thread = exclave_
+let make_emit_trace_events trace thread =
+  Trace_state.reset ();
+  exclave_
   Staged.stage (stack_ fun (#(prev, curr) : #(Callstack.t * Callstack.t)) ->
     let[@inline always] emit_frame_enter time location =
       emit_frame_enter trace thread time location
