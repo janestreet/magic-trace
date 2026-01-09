@@ -14,12 +14,10 @@ module Frame : sig
   val create : Location.t -> parent:t Or_null.t -> t
   val find : t -> Symbol.t -> #(t Or_null.t * distance:int)
 
-  (** Iterate through [t] until reaching a frame whose symbol matches the provided
-      argument. *)
-  val iter_until : t -> Symbol.t -> f:local_ (t -> unit) -> unit
-
   (** Like [iter_until], except that the callback [f] is called in root-to-leaf order. *)
   val iter_until_rev : t -> Symbol.t -> f:local_ (t -> unit) -> unit
+
+  val iter_n : t -> int -> f:local_ (t -> unit) -> unit
 
   module Sentinel : sig
     type frame := t
@@ -61,13 +59,12 @@ end = struct
 
   let find t target = find t target 0
 
-  let rec iter_until t stop_symbol ~f =
-    match t with
-    | { parent = Null; _ } -> ()
-    | { location = { symbol; _ }; _ } when Symbol.equal symbol stop_symbol -> ()
-    | { parent = This parent; _ } ->
+  let rec iter_n t n ~f =
+    match t, n with
+    | { parent = Null; _ }, _ | _, 0 -> ()
+    | { parent = This parent; _ }, n ->
       f t;
-      iter_until parent stop_symbol ~f
+      iter_n parent (n - 1) ~f
   ;;
 
   let rec iter_until_rev t stop_symbol ~f =
@@ -112,7 +109,7 @@ module Control_flow = struct
   type t =
     | Jump
     | Call
-    | Return
+    | Return of { distance : int }
 end
 
 module Callstack = struct
@@ -133,7 +130,10 @@ let create () =
   { root
   ; callstacks =
       Nonempty_vec.create
-        (#{ time = Timestamp.zero; leaf = (root :> Frame.t); control_flow = Return }
+        (#{ time = Timestamp.zero
+          ; leaf = (root :> Frame.t)
+          ; control_flow = Return { distance = Int.max_value }
+          }
          : Callstack.t)
   }
 ;;
@@ -166,18 +166,23 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
 ;;
 
 let handle_return (t : t) (time : Timestamp.t) ~src:_ ~(dst : Location.t) =
-  let control_flow : Control_flow.t = Return in
   match Frame.find (current_frame t) dst.symbol with
-  | #(This { parent; _ }, ~distance:_) ->
+  | #(This { parent; _ }, ~distance) ->
+    let distance =
+      (* This is neccessary to handle non-tail recursion. *)
+      Int.max 1 distance
+    in
     Nonempty_vec.push_back
       t.callstacks
-      #{ time; leaf = Frame.create dst ~parent; control_flow }
-  | #(Null, ~distance:_) ->
+      #{ time; leaf = Frame.create dst ~parent; control_flow = Return { distance } }
+  | #(Null, ~distance) ->
     (* We have returned into something we never saw the call for. This can happen if there
        is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing during the
        execution of [fn2]. *)
     let dst_frame = replace_root t dst in
-    Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = dst_frame; control_flow = Return { distance } }
 ;;
 
 let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
@@ -325,8 +330,8 @@ let make_emit_trace_events trace thread =
       Frame.iter_until_rev curr.#leaf prev.#leaf.location.symbol ~f:(stack_ fun frame ->
         emit_frame_enter time frame.location)
       [@nontail]
-    | Return ->
-      Frame.iter_until prev.#leaf curr.#leaf.location.symbol ~f:(stack_ fun frame ->
+    | Return { distance } ->
+      Frame.iter_n prev.#leaf distance ~f:(stack_ fun frame ->
         emit_frame_exit time frame.location)
       [@nontail])
 ;;
@@ -402,7 +407,7 @@ let write_trace
         #( last_callstack
          , #{ time = last_callstack.#time
             ; leaf = (t.root :> Frame.t)
-            ; control_flow = Return
+            ; control_flow = Return { distance = Int.max_value }
             } ) [@nontail]))
 ;;
 
