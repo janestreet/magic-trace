@@ -12,7 +12,7 @@ module Frame : sig
      shouldn't be possible to create a sentinel via this function (see the doc-comment on
      [Sentinel.t] for more context). *)
   val create : Location.t -> parent:t Or_null.t -> t
-  val find : t -> Symbol.t -> t Or_null.t
+  val find : t -> Symbol.t -> #(t Or_null.t * distance:int)
 
   (** Iterate through [t] until reaching a frame whose symbol matches the provided
       argument. *)
@@ -51,12 +51,15 @@ end = struct
 
   let[@inline always] create location ~parent = { location; parent }
 
-  let rec find t target =
+  let rec find t target distance =
     match t with
-    | { parent = Null; _ } -> Null
-    | { location = { symbol; _ }; _ } when Symbol.equal symbol target -> This t
-    | { parent = This parent; _ } -> find parent target
+    | { parent = Null; _ } -> #(Null, ~distance)
+    | { location = { symbol; _ }; _ } when Symbol.equal symbol target ->
+      #(This t, ~distance)
+    | { parent = This parent; _ } -> find parent target (distance + 1)
   ;;
+
+  let find t target = find t target 0
 
   let rec iter_until t stop_symbol ~f =
     match t with
@@ -149,11 +152,11 @@ let replace_root t location =
 let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
   let control_flow : Control_flow.t = Call in
   match Frame.find (current_frame t) src.symbol with
-  | This _ as src_frame ->
+  | #((This _ as src_frame), ~distance:_) ->
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = Frame.create dst ~parent:src_frame; control_flow }
-  | Null ->
+  | #(Null, ~distance:_) ->
     (* I would only expect this to happen if this call is the very first event in this
        trace-segment. *)
     let src_frame = replace_root t src in
@@ -165,11 +168,11 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
 let handle_return (t : t) (time : Timestamp.t) ~src:_ ~(dst : Location.t) =
   let control_flow : Control_flow.t = Return in
   match Frame.find (current_frame t) dst.symbol with
-  | This { parent; _ } ->
+  | #(This { parent; _ }, ~distance:_) ->
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = Frame.create dst ~parent; control_flow }
-  | Null ->
+  | #(Null, ~distance:_) ->
     (* We have returned into something we never saw the call for. This can happen if there
        is a sequence of calls like [fn1 -> fn2 -> fn3] and we started tracing during the
        execution of [fn2]. *)
@@ -181,19 +184,19 @@ let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
   let control_flow : Control_flow.t = Jump in
   let current_frame = current_frame t in
   match Frame.find current_frame src.symbol with
-  | This src_frame ->
+  | #(This src_frame, ~distance:_) ->
     (* This is either a branch within a function or a (possibly recursive) tail-call *)
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = Frame.create dst ~parent:src_frame.parent; control_flow }
-  | Null when not (Symbol.equal src.symbol dst.symbol) ->
+  | #(Null, ~distance:_) when not (Symbol.equal src.symbol dst.symbol) ->
     let dst_frame =
       match Frame.find current_frame dst.symbol with
-      | This { parent; _ } -> Frame.create dst ~parent
-      | Null -> replace_root t dst
+      | #(This { parent; _ }, ~distance:_) -> Frame.create dst ~parent
+      | #(Null, ~distance:_) -> replace_root t dst
     in
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
-  | Null ->
+  | #(Null, ~distance:_) ->
     let dst_frame = replace_root t dst in
     Nonempty_vec.push_back t.callstacks #{ time; leaf = dst_frame; control_flow }
 ;;
