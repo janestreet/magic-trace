@@ -21,7 +21,7 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt(?: jmp)?|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -235,7 +235,13 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
     let starts_trace, kind =
       match String.chop_prefix kind ~prefix:"tr strt" with
       | None -> false, kind
-      | Some rest -> true, String.lstrip ~drop:Char.is_whitespace rest
+      | Some rest ->
+        ( true
+        , String.lstrip
+            ~drop:Char.is_whitespace
+            (match String.chop_prefix rest ~prefix:" jmp" with
+             | None -> rest
+             | Some r -> r) )
     in
     let ends_trace, kind =
       match String.chop_prefix kind ~prefix:"tr end" with
@@ -430,6 +436,16 @@ module%test _ = struct
   let%expect_test "C symbol trace start" =
     check
       {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr strt                             0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
+    [%expect
+      {|
+        ((Ok
+          ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
+           (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7f6fce0b71d0)))))) |}]
+  ;;
+
+  let%expect_test "C symbol trace start jump" =
+    check
+      {| 25375/25375 4509191.343298468:                            1   branches:uH:   tr strt jmp                         0 [unknown] (foo.so) =>     7f6fce0b71d0 __clock_gettime+0x0 (foo.so)|};
     [%expect
       {|
         ((Ok
