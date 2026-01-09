@@ -41,4 +41,7 @@ module type S_trace = sig
     -> name:string
     -> time:Time_ns.Span.t
     -> unit
+
+  (* TODO Delete this, it's a temporary hack *)
+  val base_time : Time_ns.t
 end
