@@ -12,10 +12,6 @@ module Frame : sig
      shouldn't be possible to create a sentinel via this function (see the doc-comment on
      [Sentinel.t] for more context). *)
   val create : Location.t -> parent:t Or_null.t -> t
-
-  (** Return the sentinel's child frame if there is one, or the sentinel itself otherwise. *)
-  val root : t -> t
-
   val find : t -> Symbol.t -> t Or_null.t
 
   (** Iterate through [t] until reaching a frame whose symbol matches the provided
@@ -54,12 +50,6 @@ end = struct
     }
 
   let[@inline always] create location ~parent = { location; parent }
-
-  let rec root t =
-    match t with
-    | { parent = Null; _ } | { parent = This { parent = Null; _ }; _ } -> t
-    | { parent = This parent; _ } -> root parent
-  ;;
 
   let rec find t target =
     match t with
@@ -413,92 +403,6 @@ let write_trace
             } ) [@nontail]))
 ;;
 
-module Stitch_result = struct
-  type t =
-    | Stitched
-    | Independent
-  [@@deriving sexp_of, compare]
-end
-
-(*=
-The pointer manipulation performed by [stitch] is somewhat subtle, so here's a diagram visualizing
-the effect of calling the function. The key thing to understand is that the reason why we restrict
-the interface of [Frame] such that only sentinel instances can be mutated is that **all of the
-callstacks in a trace-segment are guaranteed to terminate with that trace-segment's sentinel**.
-Looking at the diagram should hopefully make it clear that if we **didn't** enforce this restriction
-and you followed the naïve intuition of mutating [d.parent] to point to [before]'s [c], you would be
-stranding the [z -> y] callstack, and all of the other callstacks in [after.callstacks] that don't
-contain this *particular* [d] frame.
-
-                                                                │
-                                                                │
-                        INITIAL STATE                           │                             END STATE
-────────────────────────────────────────────────────────────────┼──────────────────────────────────────────────────────────────────
-                                                                │
-               root                        root                 │                root                        root
-              ┌────┐                      ┌────┐                │               ┌────┐                      ┌────┐
-             ┌──────┬──────┐             ┌──────┬──────┐        │              ┌──────┬──────┐             ┌──────┬──────┐
-    before = │  │   │      │     after = │  │   │      │        │     before = │  │   │      │     after = │  │   │      │
-             └──┼───┴──────┘             └──┼───┴──────┘        │              └──┼───┴──────┘             └──┼───┴──────┘
-                │                           │                   │                 │   ┌───────────────────────┘
-                ▼                           ▼                   │                 ▼   ▼   ┌──────────────────────┐
-             ┌───┬───┐                   ┌───┬───┐              │              ┌───┬───┐  │                ┌───┬─┼─┐
-         ┌──►│ - │ - │                   │ - │ - │◄──────┐      │          ┌──►│ - │ - │  │                │ c │ │ │◄──────┐
-         │   └───┴───┘                   └───┴───┘       │      │          │   └───┴───┘  │                └───┴───┘       │
-         │         ▲                           ▲         │      │          │         ▲    │                      ▲         │
-   ┌───┬─┼─┐ ┌───┬─┼─┐                   ┌───┬─┼─┐ ┌───┬─┼─┐    │    ┌───┬─┼─┐ ┌───┬─┼─┐  │                ┌───┬─┼─┐ ┌───┬─┼─┐
-   │ w │ │ │ │ a │ │ │                   │ d │ │ │ │ y │ │ │    │    │ w │ │ │ │ a │ │ │  │                │ d │ │ │ │ y │ │ │
-   └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘    │    └───┴───┘ └───┴───┘  │                └───┴───┘ └───┴───┘
-         ▲         ▲                           ▲         ▲      │          ▲         ▲    │                      ▲         ▲
-   ┌───┬─┼─┐ ┌───┬─┼─┐                   ┌───┬─┼─┐ ┌───┬─┼─┐    │    ┌───┬─┼─┐ ┌───┬─┼─┐◄─┘                ┌───┬─┼─┐ ┌───┬─┼─┐
-   │ x │ │ │ │ b │ │ │  start_of_after = │ f │ │ │ │ z │ │ │    │    │ x │ │ │ │ b │ │ │  start_of_after = │ f │ │ │ │ z │ │ │
-   └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘    │    └───┴───┘ └───┴───┘                   └───┴───┘ └───┴───┘
-                   ▲                                            │                    ▲
-             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
-             │ c │ │ │                                          │              │ c │ │ │
-             └───┴───┘                                          │              └───┴───┘
-                   ▲                                            │                    ▲
-             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
-             │ d │ │ │                                          │              │ d │ │ │
-             └───┴───┘                                          │              └───┴───┘
-                   ▲                                            │                    ▲
-             ┌───┬─┼─┐                                          │              ┌───┬─┼─┐
-             │ e │ │ │ = end_of_before                          │              │ e │ │ │ = end_of_before
-             └───┴───┘                                          │              └───┴───┘
-                                                                │
-                                                                │
-                                                                │
-                                                                │
-                                                                │
-*)
-let stitch ~(before : t) ~(after : t) : Stitch_result.t =
-  let end_of_before = (Nonempty_vec.last before.callstacks).#leaf in
-  let start_of_after = (Nonempty_vec.first after.callstacks).#leaf in
-  match Frame.find end_of_before (Frame.root start_of_after).location.symbol with
-  | Null ->
-    (* [before] and [after] share no common ancestor, so there is nothing to be done. *)
-    Independent
-  | This { parent = Null; _ } ->
-    (* It's impossible for [Frame.find] to return a sentinel. *)
-    assert false
-  | This { parent = This { parent = Null; _ }; _ } ->
-    (* The root of [before] and the root of [after] are already the same, do nothing. *)
-    Stitched
-  | This
-      { parent =
-          This ({ parent = This before_version_grandparent; _ } as before_version_parent)
-      ; _
-      } ->
-    let _ =
-      Frame.Sentinel.become_frame
-        after.root
-        before_version_parent.location
-        ~parent:before_version_grandparent
-    in
-    after.root <- before.root;
-    Stitched
-;;
-
 module%test _ = struct
   (* Takes a string like "a-b-c-d-e" which describes a callstack in root-to-leaf order,
      each letter being a function name. *)
@@ -529,141 +433,6 @@ module%test _ = struct
     let #(~root:_, ~leaf) = parse_frames "a-b-c-d-e" in
     print_frame_callstack leaf;
     [%expect {|
-      a
-      b
-      c
-      d
-      e
-      |}]
-  ;;
-
-  let create_singelton (frames : string) : t =
-    let #(~root, ~leaf) = parse_frames frames in
-    { root
-    ; callstacks =
-        Nonempty_vec.create
-          Callstack.(#{ time = Timestamp.zero; control_flow = Call; leaf })
-    }
-  ;;
-
-  let print_singleton_callstack t =
-    print_frame_callstack (Nonempty_vec.first t.callstacks).#leaf
-  ;;
-
-  let%expect_test "[stitch] with common ancestor" =
-    let before : t = create_singelton "a-b-c-d-e" in
-    let after : t = create_singelton "d-f" in
-    print_endline "--- [after] ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] ---
-      d
-      f
-      |}];
-    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
-    print_endline "--- [after] stitched ---";
-    print_singleton_callstack after;
-    [%expect
-      {|
-      --- [after] stitched ---
-      a
-      b
-      c
-      d
-      f
-      |}]
-  ;;
-
-  let%expect_test "[stitch] with no common ancestor" =
-    let before : t = create_singelton "a-b-c-d-e" in
-    let after : t = create_singelton "x-e" in
-    print_endline "--- [after] ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] ---
-      x
-      e
-      |}];
-    [%test_result: Stitch_result.t] ~expect:Independent (stitch ~before ~after);
-    print_endline "--- [after] stitched ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] stitched ---
-      x
-      e
-      |}]
-  ;;
-
-  let%expect_test "[stitch] where common ancestor is already the root of both [before] \
-                   and [after]"
-    =
-    let before : t = create_singelton "a-b-c-d-e" in
-    let after : t = create_singelton "a-b-c-f-g" in
-    print_endline "--- [after] ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] ---
-      a
-      b
-      c
-      f
-      g
-      |}];
-    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
-    print_endline "--- [after] stitched ---";
-    print_singleton_callstack after;
-    [%expect
-      {|
-      --- [after] stitched ---
-      a
-      b
-      c
-      f
-      g
-      |}]
-  ;;
-
-  let%expect_test "[stitch] where common ancestor is just below the root" =
-    let before : t = create_singelton "a-b-c-d-e" in
-    let after : t = create_singelton "b-c-f-g" in
-    print_endline "--- [after] ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] ---
-      b
-      c
-      f
-      g
-      |}];
-    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
-    print_endline "--- [after] stitched ---";
-    print_singleton_callstack after;
-    [%expect
-      {|
-      --- [after] stitched ---
-      a
-      b
-      c
-      f
-      g
-      |}]
-  ;;
-
-  let%expect_test "[stitch] where common ancestor is leaf of [after]" =
-    let before : t = create_singelton "a-b-c-d-e" in
-    let after : t = create_singelton "e" in
-    print_endline "--- [after] ---";
-    print_singleton_callstack after;
-    [%expect {|
-      --- [after] ---
-      e
-      |}];
-    [%test_result: Stitch_result.t] ~expect:Stitched (stitch ~before ~after);
-    print_endline "--- [after] stitched ---";
-    print_singleton_callstack after;
-    [%expect
-      {|
-      --- [after] stitched ---
       a
       b
       c

@@ -17,16 +17,5 @@ val write_trace
        (** Emit a frame-exit for each frame in the *last* callstack of this segment. *)
   -> unit
 
-module Stitch_result : sig
-  type t = private
-    | Stitched
-    | Independent
-end
-
-(** Find the common ancestor of [after]'s first callstack in [before]'s last callstack and
-    union the two callstacks together on this common ancestor. Returns [Stitched] if such
-    a common ancestor was found, or [Independent] otherwise. *)
-val stitch : before:t -> after:t -> Stitch_result.t
-
 val start_time : t -> Timestamp.t Or_null.t
 val end_time : t -> Timestamp.t Or_null.t
