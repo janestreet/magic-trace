@@ -2,6 +2,16 @@ open! Core
 module Location = Event.Location
 module Nonempty_vec = Nonempty_vec.Valuex3
 
+module Vec = struct
+  include Vec
+
+  let iter_rev (t : 'a t) ~(local_ f : 'a -> unit) : unit =
+    for i = length t - 1 downto 0 do
+      f (unsafe_get t i)
+    done
+  ;;
+end
+
 module Frame : sig
   (* These fields are actually **immutable** except for [Sentinel.t] instances. *)
   type t = private
@@ -19,7 +29,6 @@ module Frame : sig
   val find : t -> Symbol.t -> #(t Or_null.t * distance:int)
 
   val iter_n : t -> int -> f:local_ (t -> unit) -> unit
-  val iter_rev : t -> f:local_ (t -> unit) -> unit
 
   module Sentinel : sig
     type frame := t
@@ -67,14 +76,6 @@ end = struct
     | { parent = This parent; _ }, n ->
       f t;
       iter_n parent (n - 1) ~f
-  ;;
-
-  let rec iter_rev t ~f =
-    match t with
-    | { parent = Null; _ } -> ()
-    | { parent = This parent; _ } ->
-      iter_rev parent ~f;
-      f t
   ;;
 
   module Sentinel = struct
@@ -130,6 +131,9 @@ type t =
   (** Strictly speaking maintaining [last_event_time] is not necessary, but we do so in
       order to make bugs obvious. *)
   ; callstacks : Callstack.t Nonempty_vec.t
+  ; parents_discovered_via_return : Location.t Vec.t
+  (** We [Vec.push_back] onto this every time we discover a new parent via return, hence
+      it is ordered such that the root-most frame is at the end of the vector. *)
   }
 
 let create () =
@@ -143,6 +147,7 @@ let create () =
           ; control_flow = Return { distance = Int.max_value }
           }
          : Callstack.t)
+  ; parents_discovered_via_return = Vec.create ()
   }
 ;;
 
@@ -173,8 +178,12 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
         #{ time; leaf = src_frame; control_flow = Return { distance } }
     | #(Null, ~distance:0) ->
       (* I would only ever expect this to occur at the very beginning of a trace. *)
-      let src_frame = replace_root t src in
-      Nonempty_vec.push_back t.callstacks #{ time; leaf = src_frame; control_flow = Call }
+      Nonempty_vec.push_back
+        t.callstacks
+        #{ time
+         ; leaf = Frame.create src ~parent:(t.root :> Frame.t)
+         ; control_flow = Call
+         }
     | #(Null, ~distance:_) ->
       (* We've somehow reached [src] without seeing the control-flow that brought us here.
 
@@ -199,6 +208,7 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
     (* We are returning into something we did not see the call for. This can happen if
        there's a series of calls like [fn1 -> fn2 -> fn3] and we started tracing during
        the execution of [fn2], then we see a return into [fn1]. *)
+    Vec.push_back t.parents_discovered_via_return dst;
     Nonempty_vec.push_back
       t.callstacks
       #{ time; leaf = replace_root t dst; control_flow = Return { distance = 0 } }
@@ -215,6 +225,7 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
      | #(Null, ~distance) ->
        (* Like the [Null] case above, we are returning into something we never saw the
           call for. *)
+       Vec.push_back t.parents_discovered_via_return dst;
        Nonempty_vec.push_back
          t.callstacks
          #{ time
@@ -238,10 +249,12 @@ let handle_jump (t : t) (time : Timestamp.t) ~(dst : Location.t) =
       t.callstacks
       #{ time; leaf = dst_frame; control_flow = Return { distance } }
   | #(Null, ~distance:0) ->
-    (* This is probably a non-recursive tail-call. *)
+    (* This is probably a non-recursive tail-call, but we don't know anything
+       about the previous frame, so we treat this is a [Call] because we only
+       want to emit a frame-enter while writing out the trace. *)
     Nonempty_vec.push_back
       t.callstacks
-      #{ time; leaf = replace_root t dst; control_flow = Jump }
+      #{ time; leaf = Frame.create dst ~parent:(t.root :> Frame.t); control_flow = Call }
   | #(Null, ~distance:_) ->
     (* This is probably a non-recursive tail-call. *)
     let parent =
@@ -469,20 +482,9 @@ let write_trace
     smear_times t.callstacks;
     if enter_initial_callstack
     then (
-      let first_callstack = Nonempty_vec.get t.callstacks 1 in
-      let () =
-        match first_callstack.#leaf.parent with
-        | Null -> ()
-        | This parent_frame ->
-          (* Emit a frame enter for everything except the leaf in the initial callstack. We
-             need to do this because otherwise we'd be missing parent frames in the trace that
-             we discovered by returning into them (see the [Null] case in [handle_return]). *)
-          Frame.iter_rev parent_frame ~f:(stack_ fun frame ->
-            Writer.emit_frame_enter writer first_callstack.#time frame.location)
-      in
-      (* Modify [t.callstacks] so that the first pair processed in
-         [Nonempty_vec.iter_pairs] below calls [emit_frame_enter] for the leaf frame. *)
-      Nonempty_vec.set t.callstacks 1 #{ first_callstack with control_flow = Call });
+      let start_time = (Nonempty_vec.get t.callstacks 1).#time in
+      Vec.iter_rev t.parents_discovered_via_return ~f:(stack_ fun location ->
+        Writer.emit_frame_enter writer start_time location));
     Nonempty_vec.iter_pairs
       t.callstacks
       ~f:(stack_ fun (#(prev, curr) : #(Callstack.t * Callstack.t)) ->
