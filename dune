@@ -1,6 +1,11 @@
 (env
  (static
+  (ocamlopt_flags
+   (:standard -O3))
   (flags
-   (:standard -cclib -static))))
+   (:standard -cclib -static)))
+ (release
+  (ocamlopt_flags
+   (:standard -O3))))
 
 (vendored_dirs vendor)
