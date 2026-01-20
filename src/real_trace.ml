@@ -12,6 +12,7 @@ let create (trace : Tracing.Trace.t) =
     let write_duration_complete = Tracing.Trace.write_duration_complete trace ~category:""
     let write_duration_instant = Tracing.Trace.write_duration_instant trace ~category:""
     let write_counter = Tracing.Trace.write_counter trace ~category:""
+    let base_time = Tracing.Trace.base_time trace
   end
   in
   (module T : S_trace with type thread = Tracing.Trace.Thread.t)

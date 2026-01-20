@@ -45,6 +45,7 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
     ;;
 
     let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+    let base_time = Time_ns.epoch
   end
   in
   Magic_trace_lib.Trace_writer.debug := debug;
