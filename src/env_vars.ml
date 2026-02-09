@@ -54,3 +54,6 @@ let no_ocaml_exception_debug_info =
 let skip_transaction_handling =
   Option.is_some (Unix.getenv "MAGIC_TRACE_SKIP_TX_HANDLING")
 ;;
+
+(* Use [New_trace_writer] instead of [Trace_writer]. *)
+let use_new_trace_writer = Option.is_some (Unix.getenv "MAGIC_TRACE_USE_NEW_TRACE_WRITER")
