@@ -12,3 +12,4 @@ val no_dlfilter : bool
 val fzf_demangle_symbols : bool
 val no_ocaml_exception_debug_info : bool
 val skip_transaction_handling : bool
+val use_new_trace_writer : bool

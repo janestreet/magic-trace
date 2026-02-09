@@ -122,6 +122,11 @@ let write_trace_from_events
     in
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
+  let (module Trace_writer : Trace_writer_implementation_intf.S) =
+    if Env_vars.use_new_trace_writer
+    then (module New_trace_writer)
+    else (module Trace_writer)
+  in
   let writer =
     match trace with
     | Some trace ->
