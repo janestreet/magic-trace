@@ -122,6 +122,11 @@ let write_trace_from_events
     in
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
   in
+  let (module Trace_writer : Trace_writer_implementation_intf.S) =
+    if Env_vars.use_new_trace_writer
+    then (module New_trace_writer)
+    else (module Trace_writer)
+  in
   let writer =
     match trace with
     | Some trace ->
@@ -180,7 +185,7 @@ let write_trace_from_events
   (match events_writer with
    | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
    | _ -> ());
-  Trace_writer.end_of_trace writer;
+  Trace_writer.finalize writer;
   Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;
@@ -766,7 +771,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (optional (Arg_type.comma_separated Filename_unix.arg_type))
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
        and collection_mode = Collection_mode.param
-       and debug_print_perf_commands in
+       and debug_print_perf_commands
+       and trace_filter = Trace_filter.param in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
@@ -777,8 +783,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | Some files ->
              Perf_map.Table.load_by_files files |> Deferred.map ~f:Option.some
          in
+         let%bind.Deferred.Or_error range_symbols =
+           evaluate_trace_filter ~trace_filter ~elf
+         in
          decode_to_trace
            ?perf_maps
+           ?range_symbols
            ~elf
            ~trace_scope
            ~debug_print_perf_commands
