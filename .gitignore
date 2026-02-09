@@ -4,3 +4,7 @@ _build
 _opam
 .vscode/*
 !.vscode/tasks.json
+*.fxt
+*.fxt.old
+*.fxt.gz
+*.fxt.gz.old
