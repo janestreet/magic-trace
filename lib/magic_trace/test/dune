@@ -1,5 +1,6 @@
 (library
  (name magic_trace_test)
+ (no_dynlink)
  (libraries core expect_test_helpers_core magic_trace)
  (preprocess
   (pps ppx_jane)))

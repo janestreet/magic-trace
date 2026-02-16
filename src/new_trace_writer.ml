@@ -1,5 +1,5 @@
 open! Core
-module Nonempty_vec = Nonempty_vec.Value
+module Nonempty_vec = Nonempty_vec.Valuex2
 
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
@@ -53,7 +53,9 @@ module Pending_event = struct
   [@@deriving sexp]
 
   let create_call location ~from_untraced =
-    let { Event.Location.instruction_pointer; symbol; symbol_offset } = location in
+    let { Event.Location.instruction_pointer; symbol; symbol_offset; dso = _ } =
+      location
+    in
     { symbol
     ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
     }
@@ -119,7 +121,8 @@ module Thread_info = struct
     ; mutable last_event_time : Mapped_time.t
     ; track_group_id : int
     ; extra_event_tracks : ('thread[@sexp.opaque]) Hashtbl.M(Collection_mode.Event.Name).t
-    ; trace_segments : (Trace_segment.t Nonempty_vec.t[@sexp.opaque])
+    ; trace_segments :
+        (#(Trace_segment.t * in_filtered_region:bool) Nonempty_vec.t[@sexp.opaque])
     }
   [@@deriving sexp_of]
 
@@ -129,10 +132,8 @@ module Thread_info = struct
   ;;
 
   let add_event_to_trace_segment t event_data time =
-    Trace_segment.add_event
-      (Nonempty_vec.last t.trace_segments)
-      event_data
-      (Timestamp.create time)
+    let #(trace_segment, ~in_filtered_region:_) = Nonempty_vec.last t.trace_segments in
+    Trace_segment.add_event trace_segment event_data (Timestamp.create time)
   ;;
 
   module New_trace_segment_kind = struct
@@ -150,12 +151,12 @@ module Thread_info = struct
           | Without_exception_info _ -> None
           | With_exception_info { ocaml_exception_info; _ } -> Some ocaml_exception_info
         in
-        Trace_segment.create ocaml_exception_info ~in_filtered_region
+        Trace_segment.create ocaml_exception_info
       | Continuing_from_current ->
-        let current = Nonempty_vec.last t.trace_segments in
-        Trace_segment.create_continuing_from current ~in_filtered_region
+        let #(current, ~in_filtered_region:_) = Nonempty_vec.last t.trace_segments in
+        Trace_segment.create_continuing_from current
     in
-    Nonempty_vec.push_back t.trace_segments new_trace_segment
+    Nonempty_vec.push_back t.trace_segments #(new_trace_segment, ~in_filtered_region)
   ;;
 end
 
@@ -573,8 +574,9 @@ let create_thread t event =
   ; track_group_id
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
   ; trace_segments =
-      Trace_segment.create t.ocaml_exception_info ~in_filtered_region:t.in_filtered_region
-      |> Nonempty_vec.create
+      Nonempty_vec.create
+        #( Trace_segment.create t.ocaml_exception_info
+         , ~in_filtered_region:t.in_filtered_region )
   }
 ;;
 
@@ -705,16 +707,18 @@ let ret t (thread_info : _ Thread_info.t) ~time : unit =
 
 let write_trace_segments (type thread) (t : thread inner) =
   Hashtbl.iter t.thread_info ~f:(fun thread_info ->
-    Nonempty_vec.iter thread_info.trace_segments ~f:(fun trace_segment ->
-      if Trace_segment.in_filtered_region trace_segment
-      then
-        Trace_segment.write_trace
-          trace_segment
-          t.trace
-          thread_info.thread
-          t.debug_info
-          ~enter_initial_callstack:true
-          ~exit_final_callstack:true))
+    Nonempty_vec.iter
+      thread_info.trace_segments
+      ~f:(fun #(trace_segment, ~in_filtered_region) ->
+        if in_filtered_region
+        then
+          Trace_segment.write_trace
+            trace_segment
+            t.trace
+            thread_info.thread
+            t.debug_info
+            ~enter_initial_callstack:true
+            ~exit_final_callstack:true))
 ;;
 
 let end_of_trace ?to_time (T t) =

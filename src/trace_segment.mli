@@ -4,13 +4,12 @@ open! Core
     thread. *)
 type t
 
-val create : Ocaml_exception_info.t option -> in_filtered_region:bool -> t
+val create : Ocaml_exception_info.t option -> t
 
 (** Create a new trace segment that continues from the state of an existing segment,
     taking the existing segment's last callstack as the new segment's first callstack. *)
-val create_continuing_from : t -> in_filtered_region:bool -> t
+val create_continuing_from : t -> t
 
-val in_filtered_region : t -> bool
 val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit
 
 val write_trace

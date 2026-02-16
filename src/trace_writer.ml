@@ -52,7 +52,9 @@ module Pending_event = struct
   [@@deriving sexp]
 
   let create_call location ~from_untraced =
-    let { Event.Location.instruction_pointer; symbol; symbol_offset } = location in
+    let { Event.Location.instruction_pointer; symbol; symbol_offset; dso = _ } =
+      location
+    in
     { symbol
     ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
     }

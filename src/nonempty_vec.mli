@@ -1,6 +1,6 @@
 open! Core
 
-module type%template [@kind k = (value, value & value & value)] S := sig
+module type%template [@kind k = (value, value & value, value & value & value)] S := sig
   (** A [Vec.t] guaranteed to contain at least one element. *)
   type ('a : k) t
 
@@ -16,4 +16,5 @@ module type%template [@kind k = (value, value & value & value)] S := sig
 end
 
 module Value : S [@kind value]
+module Valuex2 : S [@kind value & value]
 module Valuex3 : S [@kind value & value & value]
