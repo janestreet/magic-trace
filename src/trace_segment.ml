@@ -1,34 +1,107 @@
 open! Core
+open Unboxed
 module Location = Event.Location
 module Nonempty_vec = Nonempty_vec.Valuex3
 
 let debug = false
 
 module Frame : sig
-  (* These fields are actually **immutable** except for [Sentinel.t] instances. *)
+  module Kind : sig
+    type t =
+      | Physical
+      (** A physical stack frame, attributable directly to information given to us by
+          [perf] in an [Event.t]. *)
+      | Inlined (** An inlined function call, known to us solely via debug-info. *)
+  end
+
+  (* The [location], [parent], and [kind] fields are actually **immutable** except for on [Sentinel.t] instances. *)
   type t = private
     { mutable location : Event.Location.t
-    ; mutable parent : t Or_null.t
+    ; mutable parent : t or_null
+    ; mutable kind : Kind.t
+    ; (* TODO Make this an [i64] *)
+      mutable instruction_pointer : int64
     }
 
-  val create : Location.t -> parent:t -> t
+  val create : Location.t -> parent:t -> kind:Kind.t -> t
+  val set_instruction_pointer : t -> int64 -> unit
 
-  (** Find the first frame whose [location.symbol] matches the provided argument.
+  (** Find the first [Physical] frame whose [location.symbol] matches the provided
+      argument.
 
-      Returns the matching frame (if found), and that frame's distance from the initial
-      frame (e.g. a call to [find my_frame my_symbol] with a return value of
-      [#(This _, ~distance:0)] indicates that [my_frame.location.symbol] is [my_symbol]). *)
-  val find : t -> Symbol.t -> #(t Or_null.t * distance:int)
+      Returns the matching frame (if found) along with:
+      - [distance]: the number of frames between the frame provided as an argument, and
+        the returned frame (e.g. a call to [find my_frame my_symbol] with a return value
+        of [#(This _, ~distance:0, ..)] indicates that [my_frame.location.symbol] is
+        [my_symbol]).
+      - [physical_distance]: like [distance] but only counting [kind = Physical] frames.
+      - [leaf_of_inlined_stack]: the leaf of the stack of [kind = Inlined] frames attached
+        to the returned frame (which is always physical), along with its distance from the
+        frame provided as an argument. *)
+  val find
+    :  t
+    -> Symbol.t
+    -> #(t or_null
+        * distance:int
+        * physical_distance:int
+        * leaf_of_inlined_stack:#(t or_null * int))
 
   (** Iterate from leaf-to-root up to the given number of frames, or until encountering
-      the [Sentinel.t] *)
+      the [Sentinel.t]. *)
   val iter_n : t -> int -> f:local_ (t -> unit) -> unit
 
-  (** Iterate the entire callstack from root-to-leaf. Note that this is *not*
-      tail-recursive, given that frames form a singly-linked list from leaf-to-root. *)
-  val iter_rev : t -> f:local_ (t -> unit) -> unit
+  (** Like [iter_n], this iterates from **leaf-to-root**. The "rev" here signifies that
+      the callback [f] is invoked in the reverse order of iteration (i.e. root-to-leaf).
+      Note that this is *not* tail-recursive, given that frames form a singly-linked list
+      from leaf-to-root. *)
+  val iter_n_rev : t -> int -> f:local_ (t -> unit) -> unit
 
-  val find_ancestor : t -> ancestor:t -> int Or_null.t
+  (* If you're still confused between [iter_n] and [iter_n_rev], here's a small example:
+
+      {v
+            ┌────────┬────────┐
+     root:  │  fn1   │  Null  │
+            └────────┴────────┘
+                         ▲
+                         │
+            ┌────────┬────────┐
+            │  fn2   │        │
+            └────────┴────────┘
+                         ▲
+                         │
+            ┌────────┬────────┐
+            │  fn3   │        │
+            └────────┴────────┘
+                         ▲
+                         │
+            ┌────────┬────────┐
+            │  fn4   │        │
+            └────────┴────────┘
+                         ▲
+                         │
+            ┌────────┬────────┐
+     leaf:  │  fn5   │        │
+            └────────┴────────┘
+      v}
+
+      {[
+        Frame.iter_n leaf 3 ~f:(fun frame -> printf "%s; " (Symbol.display_name frame.location.symbol));
+        > fn5; fn4; fn3
+        Frame.iter_n_rev leaf 3 ~f:(fun frame -> printf "%s; " (Symbol.display_name frame.location.symbol));
+        > fn3; fn4; fn5
+      ]}
+  *)
+
+  val find_ancestor
+    :  t
+    -> ancestor:t
+    -> #(distance:int or_null * leaf_of_inlined_stack:#(t or_null * int))
+
+  (** Unlike the other functions, this *can* return a [Sentinel.t]. This is probably a bad
+      idea. *)
+  val find_first_physical : t -> #(t * distance:int)
+
+  val nth_ancestor_exn : t -> int -> t
 
   module Sentinel : sig
     type frame := t
@@ -43,9 +116,8 @@ module Frame : sig
 
     val create : unit -> t
 
-    (** Mutate [t]'s contents to the provided [location] and [parent] and return [t] as a
-        [frame]. *)
-    val become_frame : t -> Location.t -> parent:frame -> frame
+    (** Mutate [t]'s fields to the provided arguments and return [t] as a [frame]. *)
+    val become_frame : t -> Location.t -> parent:frame -> kind:Kind.t -> frame
   end
 
   module For_testing : sig
@@ -53,22 +125,61 @@ module Frame : sig
     val print_callstack : t -> unit
   end
 end = struct
+  module Kind = struct
+    type t =
+      | Physical
+      | Inlined
+  end
+
   type t =
     { mutable location : Event.Location.t
-    ; mutable parent : t Or_null.t
+    ; mutable parent : t or_null
+    ; mutable kind : Kind.t
+    ; mutable instruction_pointer : int64
     }
 
-  let[@inline always] create location ~parent = { location; parent = This parent }
-
-  let rec find t target distance =
-    match t with
-    | { parent = Null; _ } -> #(Null, ~distance)
-    | { location = { symbol; _ }; _ } when Symbol.equal symbol target ->
-      #(This t, ~distance)
-    | { parent = This parent; _ } -> find parent target (distance + 1)
+  let create location ~parent ~kind =
+    { location
+    ; parent = This parent
+    ; kind
+    ; instruction_pointer = location.instruction_pointer
+    }
   ;;
 
-  let find t target = find t target 0
+  let[@inline always] set_instruction_pointer t instruction_pointer =
+    t.instruction_pointer <- instruction_pointer
+  ;;
+
+  let rec find t target ~distance ~physical_distance ~leaf_of_inlined_stack =
+    match t with
+    | { parent = Null; _ } ->
+      #(Null, ~distance, ~physical_distance, ~leaf_of_inlined_stack)
+    | { kind = Physical; location = { symbol; _ }; _ } when Symbol.equal symbol target ->
+      #(This t, ~distance, ~physical_distance, ~leaf_of_inlined_stack)
+    | { parent = This parent; kind = Physical; _ } ->
+      find
+        parent
+        target
+        ~distance:(distance + 1)
+        ~physical_distance:(physical_distance + 1)
+        ~leaf_of_inlined_stack:#(Null, distance)
+    | { parent = This parent; kind = Inlined; _ } ->
+      let leaf_of_inlined_stack =
+        match leaf_of_inlined_stack with
+        | #(Null, _) -> #(This t, distance)
+        | leaf_of_inlined_stack -> leaf_of_inlined_stack
+      in
+      find
+        parent
+        target
+        ~distance:(distance + 1)
+        ~physical_distance
+        ~leaf_of_inlined_stack
+  ;;
+
+  let find t target =
+    find t target ~distance:0 ~physical_distance:0 ~leaf_of_inlined_stack:#(Null, 0)
+  ;;
 
   let rec iter_n t n ~f =
     match t, n with
@@ -78,37 +189,86 @@ end = struct
       iter_n parent (n - 1) ~f
   ;;
 
-  let rec iter_rev t ~f =
-    match t with
-    | { parent = Null; _ } -> ()
-    | { parent = This parent; _ } ->
-      iter_rev parent ~f;
+  let rec iter_n_rev t n ~f =
+    match t, n with
+    | { parent = Null; _ }, _ | _, 0 -> ()
+    | { parent = This parent; _ }, n ->
+      iter_n_rev parent (n - 1) ~f;
       f t
   ;;
 
-  let rec find_ancestor t ~ancestor distance =
+  let rec find_ancestor t ~ancestor ~distance ~leaf_of_inlined_stack =
     if phys_equal t ancestor
-    then This distance
+    then #(~distance:(This distance), ~leaf_of_inlined_stack)
     else (
       match t with
-      | { parent = Null; _ } -> Null
-      | { parent = This parent; _ } -> find_ancestor parent ~ancestor (distance + 1))
+      | { parent = Null; _ } -> #(~distance:Null, ~leaf_of_inlined_stack:#(Null, distance))
+      | { parent = This parent; kind = Physical; _ } ->
+        find_ancestor
+          parent
+          ~ancestor
+          ~distance:(distance + 1)
+          ~leaf_of_inlined_stack:#(Null, distance)
+      | { parent = This parent; kind = Inlined; _ } ->
+        let leaf_of_inlined_stack =
+          match leaf_of_inlined_stack with
+          | #(Null, _) -> #(This t, distance)
+          | leaf_of_inlined_stack -> leaf_of_inlined_stack
+        in
+        find_ancestor parent ~ancestor ~distance:(distance + 1) ~leaf_of_inlined_stack)
   ;;
 
-  let find_ancestor t ~ancestor = find_ancestor t ~ancestor 0
+  let find_ancestor t ~ancestor =
+    find_ancestor t ~ancestor ~distance:0 ~leaf_of_inlined_stack:#(Null, 0)
+  ;;
+
+  let rec find_first_physical t ~distance =
+    match t with
+    | { kind = Physical; _ } -> #(t, ~distance)
+    | { parent = This parent; _ } -> find_first_physical parent ~distance:(distance + 1)
+    | { parent = Null; kind = Inlined; _ } ->
+      (* [Sentinel.t]s cannot have [kind = Inlined]. *)
+      assert false
+  ;;
+
+  let find_first_physical t = find_first_physical t ~distance:0
+
+  let nth_ancestor_exn t n =
+    let mutable t = t in
+    for _ = 1 to n do
+      t <- Or_null.value_exn t.parent
+    done;
+    t
+  ;;
 
   module Sentinel = struct
     type nonrec t = t
 
     let sentinel_location : Location.t =
-      { instruction_pointer = 0L; symbol_offset = 0; symbol = From_perf "\x00" }
+      { instruction_pointer = 0L
+      ; symbol_offset = 0
+      ; (* For the sake of being defensive, we define a special symbol for the sentinel which is *impossible*
+           to confuse with a real symbol, because ELF symbol names are NULL-terminated strings.
+
+           See https://refspecs.linuxbase.org/elf/gabi4+/ch4.strtab.html *)
+        symbol = From_perf "\x00_"
+      ; dso = Interned_string.empty
+      }
     ;;
 
-    let[@inline always] create () = { location = sentinel_location; parent = Null }
+    let[@inline always] create () =
+      { location = sentinel_location
+      ; parent = Null
+      ; kind = Physical
+      ; instruction_pointer = 0L
+      }
+    ;;
 
-    let become_frame t location ~parent =
+    let become_frame t location ~parent ~kind =
       t.location <- location;
       t.parent <- This parent;
+      t.kind <- kind;
+      t.instruction_pointer <- location.instruction_pointer;
       t
     ;;
   end
@@ -118,22 +278,33 @@ end = struct
       match t.parent with
       | Null -> acc
       | This parent ->
-        to_string_list (Symbol.display_name t.location.symbol :: acc) parent
+        let kind =
+          if not debug
+          then ""
+          else (
+            match t.kind with
+            | Physical -> " PHYSICAL"
+            | Inlined -> " INLINED")
+        in
+        to_string_list
+          ([%string "%{Symbol.display_name t.location.symbol}%{kind}"] :: acc)
+          parent
     ;;
 
     let to_string_list t = to_string_list [] t
-    let print_callstack leaf = to_string_list leaf |> String.concat_lines |> print_endline
+    let print_callstack leaf = to_string_list leaf |> String.concat_lines |> printf "%s"
   end
 end
 
 module Control_flow = struct
   type t =
-    | Jump
-    | Call
+    | Call of { depth : int }
+    (** [depth] indicates how many new frames were introduced. *)
     | Return of { distance : int }
     (** [distance] indicates how many frames this return pops off of the callstack.
         [distance = 1] is the usual case of returning from the current frame to its
         parent. *)
+  [@@deriving sexp_of]
 end
 
 module Callstack = struct
@@ -155,14 +326,13 @@ type t =
       the following invariants in order for [callstacks] to be correctly processed during
       [write_trace]:
 
-      1. A callstack with [control_flow = Call] introduces **exactly** one new frame which
-         was not present in the callstack immediately preceding it. This new frame is its
-         [leaf].
+      1. A callstack with [control_flow = Call { depth }] introduces [depth] new frames
+         which were not present in the callstack immediately preceding it. These new
+         frames are the first [depth] frames starting from this callstack's [leaf].
       2. A callstack with [control_flow = Return { distance }] **exits** [distance]
-         frames, starting from the leaf of the callstack immediately preceding it.
-      3. A callstack with [control_flow = Jump] exits the [leaf] of the callstack
-         immediately preceding it, and enters a new frame, which is its [leaf]. *)
-  ; ocaml_exception_info : Ocaml_exception_info.t Or_null.t
+         frames, starting from the [leaf] of the callstack immediately preceding it. *)
+  ; symbolizer : Symbolizer.t
+  ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
@@ -172,11 +342,10 @@ type t =
       later examination — [exception_handlers] represents the state **as of the event we
       are currently processing**, and as such is only used during the "ingestion" phase
       (i.e. while calls are still being made to [add_event]). *)
-  ; mutable last_known_instruction_pointer : int64
-  ; in_filtered_region : bool
+  ; mutable last_known_location : Location.t
   }
 
-let create ocaml_exception_info ~in_filtered_region =
+let create ocaml_exception_info =
   let root = Frame.Sentinel.create () in
   { root
   ; last_event_time = Timestamp.zero
@@ -187,59 +356,199 @@ let create ocaml_exception_info ~in_filtered_region =
           ; control_flow = Return { distance = 0 }
           }
          : Callstack.t)
+  ; symbolizer = Symbolizer.create ()
   ; exception_handlers = Vec.create ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
-  ; last_known_instruction_pointer = Int64.max_value
-  ; in_filtered_region
+  ; last_known_location : Location.t =
+      { symbol = Unknown
+      ; symbol_offset = 0
+      ; instruction_pointer = Int64.max_value
+      ; dso = Interned_string.empty
+      }
   }
 ;;
 
-let create_continuing_from existing ~in_filtered_region =
+let create_continuing_from existing =
   let last_callstack = Nonempty_vec.last existing.callstacks in
   { existing with
     callstacks =
       Nonempty_vec.create
         (#{ last_callstack with control_flow = Return { distance = 0 } } : Callstack.t)
   ; exception_handlers = Vec.copy existing.exception_handlers
-  ; in_filtered_region
   }
 ;;
 
-let in_filtered_region t = t.in_filtered_region
 let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
+let[@inline always] current_physical_frame t = Frame.find_first_physical (current_frame t)
 
-let replace_root t location =
+let replace_root t location ~kind =
   let new_sentinel = Frame.Sentinel.create () in
   let root =
-    Frame.Sentinel.become_frame t.root location ~parent:(new_sentinel :> Frame.t)
+    Frame.Sentinel.become_frame t.root location ~parent:(new_sentinel :> Frame.t) ~kind
   in
   t.root <- new_sentinel;
   root
 ;;
 
-(* [handle_call] uses [src], unlike the other event handlers. The rationale for this
-   is that in the context of a call, [src] is the parent frame of the call to [dst]
-   and thus *it continues to exist*. We want our callstacks to reflect that. *)
-let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
-  (* First, reconcile things such that [src] matches [current_frame t] if it doesn't
-     already. *)
-  let () =
-    match Frame.find (current_frame t) src.symbol with
-    | #(This _, ~distance:0) -> (* The happy case, [src] matches [current_frame t]. *) ()
-    | #(This src_frame, ~distance) ->
-      (* [src] exists, but is higher up the callstack. *)
+let diff_inlined_frames'
+  (t : t)
+  time
+  ~dso:_
+  ~(before : Symbolizer.Info.t Slice.t)
+  ~(after : Symbolizer.Info.t Slice.t)
+  =
+  let length = Int.min (Slice.length before) (Slice.length after) in
+  let mutable first_different_index = 0 in
+  while
+    first_different_index < length
+    && Symbolizer.Info.equal
+         (Slice.unsafe_get before first_different_index)
+         (Slice.unsafe_get after first_different_index)
+  do
+    first_different_index <- first_different_index + 1
+  done;
+  let return_distance = Slice.length before - first_different_index in
+  if return_distance <> 0
+  then
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time
+       ; leaf = Frame.nth_ancestor_exn (current_frame t) return_distance
+       ; control_flow = Return { distance = return_distance }
+       };
+  let mutable parent = current_frame t in
+  for i = first_different_index to Slice.length after - 1 do
+    let inlined_frame_info = Slice.unsafe_get after i in
+    let inlined_frame =
+      Frame.create (Symbolizer.Info.to_location inlined_frame_info) ~parent ~kind:Inlined
+    in
+    parent <- inlined_frame
+  done;
+  let frames_created = Slice.length after - first_different_index in
+  if frames_created > 0
+  then
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = parent; control_flow = Call { depth = frames_created } }
+;;
+
+let symbolize_inlined_frames t ~dso ~addr =
+  match Symbolizer.symbolize t.symbolizer ~executable:dso ~addr with
+  | Null -> Slice.empty
+  | This result -> Symbolizer.Response.inlined_frames result
+;;
+
+let diff_inlined_frames (t : t) time ~dso ~(before : int64) ~(after : int64) =
+  if Env_vars.check_invariants
+  then (
+    let #(current_physical_frame, ~distance:_) = current_physical_frame t in
+    [%test_eq: Interned_string.t] current_physical_frame.location.dso dso);
+  diff_inlined_frames'
+    t
+    time
+    ~dso
+    ~before:(symbolize_inlined_frames t ~dso ~addr:before)
+    ~after:(symbolize_inlined_frames t ~dso ~addr:after)
+;;
+
+let append_inlined_frames t time ~(physical_frame : Frame.t) ~physical_frame_is_new =
+  assert (phys_equal physical_frame.kind Physical);
+  match
+    Symbolizer.symbolize
+      t.symbolizer
+      ~executable:physical_frame.location.dso
+      ~addr:physical_frame.instruction_pointer
+  with
+  | Null ->
+    if physical_frame_is_new
+    then
       Nonempty_vec.push_back
         t.callstacks
-        #{ time; leaf = src_frame; control_flow = Return { distance } }
-    | #(Null, ~distance:0) ->
-      (* I would only ever expect this to occur at the very beginning of a trace. *)
+        #{ time; leaf = physical_frame; control_flow = Call { depth = 1 } }
+  | This response ->
+    let parent = stack_ (ref physical_frame) in
+    let inlined_frames = Symbolizer.Response.inlined_frames response in
+    Slice.iter inlined_frames ~f:(stack_ fun inlined_frame_info ->
+      let inlined_leaf_frame =
+        Frame.create
+          ~kind:Inlined
+          (Symbolizer.Info.to_location inlined_frame_info)
+          ~parent:!parent
+      in
+      parent := inlined_leaf_frame);
+    if physical_frame_is_new || Slice.length inlined_frames > 0
+    then
       Nonempty_vec.push_back
         t.callstacks
         #{ time
-         ; leaf = Frame.create src ~parent:(t.root :> Frame.t)
-         ; control_flow = Call
+         ; leaf = !parent
+         ; control_flow =
+             Call
+               { depth = Bool.to_int physical_frame_is_new + Slice.length inlined_frames }
          }
-    | #(Null, ~distance:_) ->
+;;
+
+(** This is intended to mark code we hope is *unreachable*, not merely uncommon. Hopefully
+    over time we can strengthen its callsites to assertions. *)
+let[@cold] log_unexpected_case ~(here : [%call_pos]) sexp =
+  eprintf
+    "Warning, unexpected case reached [%s:%d:%d]: %s\n"
+    here.pos_fname
+    here.pos_lnum
+    (here.pos_cnum - here.pos_bol)
+    (Sexp.to_string_mach sexp)
+;;
+
+(* [handle_call] uses [src], unlike the other event handlers. The rationale for this
+   is that in the context of a call, [src] is the parent frame of the call to [dst]
+   and thus *it continues to exist*. We want our callstacks to reflect that. *)
+(* TODO I think now that we have inlined frames the [src] reconciliation logic wouldn't
+   work because we run the "straightline-execution inline frames" logic in [add_event]
+   before we ever get here. *)
+let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
+  (* First, reconcile things such that [src] matches [current_physical_frame t] if it doesn't
+     already. *)
+  let () =
+    match Frame.find (current_frame t) src.symbol with
+    | #(This _, ~physical_distance:0, ..) ->
+      (* The happy case, [src] matches [current_physical_frame t]. The inlined frames
+         should already be correct on account of the straightline-execution
+         inlined frames logic at the start of [add_event]. *)
+      ()
+    | #(Null, ~physical_distance:0, ..) ->
+      (* I would only ever expect this to occur at the very beginning of a trace. *)
+      let src_frame = Frame.create src ~parent:(t.root :> Frame.t) ~kind:Physical in
+      append_inlined_frames t time ~physical_frame:src_frame ~physical_frame_is_new:true
+    | #(This src_frame, ~physical_distance:_, ~distance, ~leaf_of_inlined_stack) ->
+      log_unexpected_case
+        [%message "call [src] exists, but is higher up the callstack." (src : Location.t)];
+      (match leaf_of_inlined_stack with
+       | #(Null, _) ->
+         Nonempty_vec.push_back
+           t.callstacks
+           #{ time; leaf = src_frame; control_flow = Return { distance } };
+         diff_inlined_frames
+           t
+           time
+           ~dso:src.dso
+           ~before:src_frame.instruction_pointer
+           ~after:src.instruction_pointer
+       | #(This inlined_leaf, inlined_leaf_distance) ->
+         Nonempty_vec.push_back
+           t.callstacks
+           #{ time
+            ; leaf = inlined_leaf
+            ; control_flow = Return { distance = inlined_leaf_distance }
+            };
+         diff_inlined_frames
+           t
+           time
+           ~dso:src.dso
+           ~before:src_frame.instruction_pointer
+           ~after:src.instruction_pointer)
+    | #(Null, ~physical_distance:_, ..) ->
+      log_unexpected_case
+        [%message "call [src] does not match known trace state." (src : Location.t)];
       (* We've somehow reached [src] without seeing the control-flow that brought us here.
 
          To maximize our chances of producing a coherent trace, we create a frame for
@@ -248,97 +557,138 @@ let handle_call (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Locatio
          frame for [src] ( *in addition* to the frame we always create for [dst]) gives us
          better odds of resynchronizing with the event stream, since now we can easily
          handle a later return event to [src], [dst], or even both. *)
-      let src_frame = Frame.create src ~parent:(current_frame t) in
-      Nonempty_vec.push_back t.callstacks #{ time; leaf = src_frame; control_flow = Call }
+      let src_frame = Frame.create src ~parent:(current_frame t) ~kind:Physical in
+      append_inlined_frames t time ~physical_frame:src_frame ~physical_frame_is_new:true
   in
+  let #(src_frame, ~distance:_) = current_physical_frame t in
+  assert (not (Or_null.is_null src_frame.parent));
+  Frame.set_instruction_pointer src_frame src.instruction_pointer;
   (* Then create the new frame for [dst]. *)
+  let dst_frame = Frame.create dst ~parent:(current_frame t) ~kind:Physical in
+  append_inlined_frames t time ~physical_frame:dst_frame ~physical_frame_is_new:true
+;;
+
+(** We are returning into something we did not see the call for. This can happen if
+    there's a series of calls like [fn1 -> fn2 -> fn3] and we started tracing during the
+    execution of [fn2], then we see a return into [fn1]. *)
+let return_to_unseen (t : t) (time : Timestamp.t) ~(dst : Location.t) ~(distance : int) =
+  (* We symbolize at one byte before the return address because the callstack we want to
+     see reflected as roots of the whole trace corresponds to the code as of the [call]
+     instruction we are returning from, *not* whatever comes immediately after it. *)
+  let addr = Int64.O.(dst.instruction_pointer - 1L) in
+  let inlined_frames = symbolize_inlined_frames t ~dso:dst.dso ~addr in
+  let mutable inlined_leaf = Null in
+  for i = Slice.length inlined_frames - 1 downto 0 do
+    let%tydi inlined_frame_info = Slice.unsafe_get inlined_frames i in
+    let inlined_frame =
+      replace_root t (Symbolizer.Info.to_location inlined_frame_info) ~kind:Inlined
+    in
+    if Or_null.is_null inlined_leaf then inlined_leaf <- This inlined_frame
+  done;
+  let (physical_root : Frame.t) =
+    replace_root t { dst with instruction_pointer = addr } ~kind:Physical
+  in
   Nonempty_vec.push_back
     t.callstacks
-    #{ time; leaf = Frame.create dst ~parent:(current_frame t); control_flow = Call }
+    #{ time
+     ; leaf = Or_null.value inlined_leaf ~default:physical_root
+     ; control_flow = Return { distance }
+     };
+  diff_inlined_frames t time ~dso:dst.dso ~before:addr ~after:dst.instruction_pointer;
+  Frame.set_instruction_pointer physical_root dst.instruction_pointer
 ;;
 
 let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
-  match (current_frame t).parent with
-  | Null ->
-    (* We are returning into something we did not see the call for. This can happen if
-       there's a series of calls like [fn1 -> fn2 -> fn3] and we started tracing during
-       the execution of [fn2], then we see a return into [fn1]. *)
-    Nonempty_vec.push_back
-      t.callstacks
-      #{ time; leaf = replace_root t dst; control_flow = Return { distance = 0 } }
-  | This parent_frame ->
-    (* We start our search for [dst] from the parent of the current frame because
+  match current_physical_frame t with
+  | #({ parent = Null; _ }, ~distance:_) -> return_to_unseen t time ~dst ~distance:0
+  | #({ parent = This parent_frame; _ }, ~distance:distance_to_current_frame) ->
+    (* We start our search for [dst] from the parent of the current physical frame because
        otherwise you'd incorrectly handle non-tail recursion, and because returning to the
-       current frame is impossible anyway. We add 1 to [distance] in the [control_flow] to
+       current frame is impossible anyway. We add 1 to the distance here to
        account for the one extra frame implicitly traversed by doing this. *)
+    let distance_to_parent_frame = distance_to_current_frame + 1 in
     (match Frame.find parent_frame dst.symbol with
-     | #(This dst_frame, ~distance) ->
-       (* 99% of the time [distance] should be 0, indicating we are returning to
+     | #(This dst_frame, ~distance, ~leaf_of_inlined_stack, ..) ->
+       (* 99% of the time [physical_distance] should be 0, indicating we are returning to
           [parent_frame] as expected. We allow for the possibility of "long" returns to
           account for [Sysret]/[Iret] events that return to userspace directly from deep
           within their kernel/interrupt stack. *)
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = dst_frame; control_flow = Return { distance = distance + 1 } }
-     | #(Null, ~distance:0) ->
-       (* Our [parent_frame] is the sentinel. We treat this identically to the [Null] case
-          in the outer match, for the same reasons stated in the comment there. *)
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = replace_root t dst; control_flow = Return { distance = 0 + 1 } }
-     | #(Null, ~distance:_) ->
+       (match leaf_of_inlined_stack with
+        | #(Null, _) ->
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time
+             ; leaf = dst_frame
+             ; control_flow = Return { distance = distance + distance_to_parent_frame }
+             };
+          append_inlined_frames
+            t
+            time
+            ~physical_frame:dst_frame
+            ~physical_frame_is_new:false
+        | #(This inlined_leaf, inlined_leaf_distance) ->
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time
+             ; leaf = inlined_leaf
+             ; control_flow =
+                 Return { distance = inlined_leaf_distance + distance_to_parent_frame }
+             };
+          diff_inlined_frames
+            t
+            time
+            ~dso:dst.dso
+            ~before:dst_frame.instruction_pointer
+            ~after:dst.instruction_pointer;
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer)
+     | #(Null, ~physical_distance:0, ~distance, ..) ->
+       (* Our [parent_frame] is the sentinel. *)
+       return_to_unseen t time ~dst ~distance:(distance + distance_to_parent_frame)
+     | #(Null, ~physical_distance:_, ..) ->
+       log_unexpected_case
+         [%message "return [dst] does not match known trace state." (dst : Location.t)];
        (* Something is probably wrong if we ever make it to this case, where the state
           we're maintaining and the event we are processing seem to completely disagree.
           Treating it like a tail-call seems like the least bad option, and at the very
           least gets us to agree with the event stream that the current frame is [dst]. *)
        Nonempty_vec.push_back
          t.callstacks
-         #{ time; leaf = Frame.create dst ~parent:parent_frame; control_flow = Jump })
+         #{ time
+          ; leaf = parent_frame
+          ; control_flow = Return { distance = distance_to_parent_frame }
+          };
+       let dst_frame = Frame.create dst ~parent:parent_frame ~kind:Physical in
+       append_inlined_frames t time ~physical_frame:dst_frame ~physical_frame_is_new:true)
 ;;
 
-let handle_jump (t : t) (time : Timestamp.t) ~(dst : Location.t) =
-  let current_frame = current_frame t in
-  if Symbol.equal current_frame.location.symbol dst.symbol
-  then
-    (* [dst] matches [current_frame t]. This is either a branch within a function, or
-       tail-recursion. For now we don't need to do anything in this case. That will change
-       once we support inlined frames. *)
-    ()
+let handle_jump (t : t) (time : Timestamp.t) ~(src : Location.t) ~(dst : Location.t) =
+  let #(current_physical_frame, ~distance) = current_physical_frame t in
+  if Symbol.equal current_physical_frame.location.symbol dst.symbol
+  then (
+    (* [dst] matches [current_frame t]. This is either a branch within a function, or tail-recursion. *)
+    diff_inlined_frames
+      t
+      time
+      ~dso:dst.dso
+      ~before:src.instruction_pointer
+      ~after:dst.instruction_pointer;
+    Frame.set_instruction_pointer current_physical_frame dst.instruction_pointer)
   else (
-    match current_frame.parent with
+    match current_physical_frame.parent with
     | Null ->
       (* This is probably a non-recursive tail-call, but we don't know anything
          about the previous frame, so we treat this is a [Call] because we only
          want to emit a frame-enter while writing out the trace. *)
-      Nonempty_vec.push_back
-        t.callstacks
-        #{ time
-         ; leaf = Frame.create dst ~parent:(t.root :> Frame.t)
-         ; control_flow = Call
-         }
+      let dst_frame = Frame.create dst ~parent:(t.root :> Frame.t) ~kind:Physical in
+      append_inlined_frames t time ~physical_frame:dst_frame ~physical_frame_is_new:true
     | This parent ->
       (* This is probably a non-recursive tail-call. *)
       Nonempty_vec.push_back
         t.callstacks
-        #{ time; leaf = Frame.create dst ~parent; control_flow = Jump })
-;;
-
-let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
-  match event with
-  | Trace { kind; src; dst; trace_state_change } ->
-    eprint_s
-      ~mach:()
-      [%message
-        (kind : Event.Kind.t option)
-          ~time:(Time_ns.Span.to_int_ns (time :> Time_ns.Span.t) % 10000000 : int)
-          ~src:(Symbol.display_name src.symbol)
-          ~dst:(Symbol.display_name dst.symbol)
-          (trace_state_change : Trace_state_change.t option)]
-  | _ -> ()
-;;
-
-let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
-  if debug then print event time
+        #{ time; leaf = parent; control_flow = Return { distance = distance + 1 } };
+      let dst_frame = Frame.create dst ~parent ~kind:Physical in
+      append_inlined_frames t time ~physical_frame:dst_frame ~physical_frame_is_new:true)
 ;;
 
 let is_ocaml_exception_handler t ~(dst : Location.t) =
@@ -350,29 +700,38 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
 
 let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   match Vec.last t.exception_handlers with
-  | Null ->
-    eprintf
-      "Warning 1: [exception_handlers] appears to be out-of-sync with callstacks.\n%!";
-    (match Frame.find (current_frame t) dst.symbol with
-     | #(This dst_frame, ~distance) ->
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = dst_frame; control_flow = Return { distance } }
-     | #(Null, ~distance) ->
-       (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = replace_root t dst; control_flow = Return { distance } })
-  | This frame ->
+  | This dst_frame ->
     Vec.pop_back_unit_exn t.exception_handlers;
-    assert (Symbol.equal frame.location.symbol dst.symbol);
-    (match Frame.find_ancestor (current_frame t) ~ancestor:frame with
-     | This distance ->
+    assert (Symbol.equal dst_frame.location.symbol dst.symbol);
+    (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
+     | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = frame; control_flow = Return { distance } }
-     | Null ->
+       (match leaf_of_inlined_stack with
+        | #(Null, _) ->
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time; leaf = dst_frame; control_flow = Return { distance } };
+          append_inlined_frames
+            t
+            time
+            ~physical_frame:dst_frame
+            ~physical_frame_is_new:false
+        | #(This inlined_leaf, inlined_leaf_distance) ->
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time
+             ; leaf = inlined_leaf
+             ; control_flow = Return { distance = inlined_leaf_distance }
+             };
+          diff_inlined_frames
+            t
+            time
+            ~dso:dst.dso
+            ~before:dst_frame.instruction_pointer
+            ~after:dst.instruction_pointer;
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer)
+     | #(~distance:Null, ..) ->
        let message =
          match Frame.find (current_frame t) dst.symbol with
          | #(Null, ..) -> "This is likely to be a bug."
@@ -380,39 +739,149 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
            "This is deeply concerning because another frame with a matching symbol was \
             found. This is very likely to be a bug."
        in
-       eprintf
-         "Warning 2: [exception_handlers] appears to be out-of-sync with [callstacks]. %s\n\
-          %!"
-         message;
+       log_unexpected_case
+         [%message
+           [%string
+             "[exception_handlers] appears to be out-of-sync with [callstacks]; active \
+              exception handler was not found in [callstacks]. %{message}"]
+             (dst : Location.t)];
+       (* TODO Decide if maybe we should just raise in this case? The trace is probably going to be pretty broken if we make it here. *)
        handle_return t time ~dst)
+  | Null ->
+    (match Frame.find (current_frame t) dst.symbol with
+     | #(Null, ~distance, ..) ->
+       (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
+       let dst_frame = replace_root t dst ~kind:Physical in
+       Nonempty_vec.push_back
+         t.callstacks
+         #{ time; leaf = dst_frame; control_flow = Return { distance } };
+       (* Unlike [handle_return] we do *not* make the inlined frames at [dst] (or [dst.instruction_pointer - 1])
+          the parents of the existing frames. The rationale is that unlike [handle_return], we have no idea
+          where we might've been within the frame for [dst] that we just inferred. *)
+       append_inlined_frames
+         t
+         time
+         ~physical_frame:dst_frame
+           (* This is subtle; Yes the frame is new, but we *don't* want to reflect that in a
+              [Call], because discovered roots are handled separately. *)
+         ~physical_frame_is_new:false
+     | #(This dst_frame, ~distance, ~leaf_of_inlined_stack, ..) ->
+       log_unexpected_case
+         [%message
+           "[exception_handlers] appears to be out-of-sync with [callstacks]; there is \
+            no active exception handler, but a frame with a matching symbol was found."
+             (dst : Location.t)];
+       (match leaf_of_inlined_stack with
+        | #(Null, _) ->
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time; leaf = dst_frame; control_flow = Return { distance } };
+          append_inlined_frames
+            t
+            time
+            ~physical_frame:dst_frame
+            ~physical_frame_is_new:false
+        | #(This inlined_leaf, inlined_leaf_distance) ->
+          Nonempty_vec.push_back
+            t.callstacks
+            #{ time
+             ; leaf = inlined_leaf
+             ; control_flow = Return { distance = inlined_leaf_distance }
+             };
+          diff_inlined_frames
+            t
+            time
+            ~dso:dst.dso
+            ~before:dst_frame.instruction_pointer
+            ~after:dst.instruction_pointer;
+          Frame.set_instruction_pointer dst_frame dst.instruction_pointer))
+;;
+
+let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
+  match event with
+  | Trace { kind; src; dst; trace_state_change } ->
+    eprint_s
+      ~mach:()
+      [%message
+        (kind : Event.Kind.t option)
+          ~time:(Time_ns.Span.to_int_ns (time :> Time_ns.Span.t) % 10000000 : int)
+          ~src:(Symbol.display_name src.symbol)
+          ~src_ip:(src.instruction_pointer : Int64.Hex.t)
+          ~dst:(Symbol.display_name dst.symbol)
+          ~dst_ip:(dst.instruction_pointer : Int64.Hex.t)
+          (trace_state_change : Trace_state_change.t option)]
+  | _ -> ()
+;;
+
+let[@inline always] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
+  if debug then print event time
 ;;
 
 let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
   print event time;
   assert (Timestamp.( >= ) time t.last_event_time);
   t.last_event_time <- time;
-  (match t.ocaml_exception_info with
-   | Null -> ()
-   | This ocaml_exception_info ->
-     (match event with
-      | Trace { src; dst; _ } ->
+  (match event with
+   | Trace { src; dst; _ } ->
+     if Interned_string.equal t.last_known_location.dso src.dso
+        && Int64.( <> ) t.last_known_location.instruction_pointer 0L
+        && Int64.( <> ) src.instruction_pointer 0L
+     then (
+       let mutable prev_inlined_frames =
+         symbolize_inlined_frames
+           t
+           ~dso:t.last_known_location.dso
+           ~addr:t.last_known_location.instruction_pointer
+       in
+       (* TODO I fear symbolizing at every byte like this is likely to be *very* expensive, but let's focus on just getting things working for now. *)
+       let mutable addr = I64.of_int64 t.last_known_location.instruction_pointer in
+       let src_addr = I64.of_int64 src.instruction_pointer in
+       (* There are no [i64] for-loops yet :( *)
+       while I64.O.(addr <= src_addr) do
+         let addr_inlined_frames =
+           symbolize_inlined_frames t ~dso:src.dso ~addr:(I64.box addr)
+         in
+         diff_inlined_frames'
+           t
+           time
+           ~dso:src.dso
+           ~before:prev_inlined_frames
+           ~after:addr_inlined_frames;
+         prev_inlined_frames <- addr_inlined_frames;
+         addr <- I64.O.(addr + #1L)
+       done);
+     let #(current_physical_frame, ~distance:_) = current_physical_frame t in
+     (match t.ocaml_exception_info with
+      | Null -> ()
+      | This ocaml_exception_info ->
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
-          ~from:t.last_known_instruction_pointer
+          ~from:t.last_known_location.instruction_pointer
           ~to_:src.instruction_pointer
           ~f:(stack_ fun (_address, kind) ->
             match kind with
-            | Pushtrap -> Vec.push_back t.exception_handlers (current_frame t)
+            | Pushtrap -> Vec.push_back t.exception_handlers current_physical_frame
             | Poptrap ->
-              if phys_equal (This (current_frame t)) (Vec.last t.exception_handlers)
-              then Vec.pop_back_unit_exn t.exception_handlers
-              else
-                eprintf
-                  "Warning 3: [exception_handlers] appears to be out-of-sync with \
-                   callstacks.\n\
-                   %!");
-        t.last_known_instruction_pointer <- dst.instruction_pointer
-      | _ -> ()));
+              (match Vec.last t.exception_handlers with
+               | This current_exception_handler
+                 when phys_equal current_exception_handler current_physical_frame ->
+                 Vec.pop_back_unit_exn t.exception_handlers
+               | Null ->
+                 (* Hitting this case a couple of times early in the trace is not unusual. *)
+                 ()
+               | This current_exception_handler ->
+                 log_unexpected_case
+                   [%message
+                     "[exception_handlers] appears to be out-of-sync with [callstacks]; \
+                      the active exception handler does not match the current physical \
+                      frame."
+                       ~current_exception_handler:
+                         (current_exception_handler.location : Location.t)
+                       ~current_physical_frame:
+                         (current_physical_frame.location : Location.t)])));
+     t.last_known_location <- dst
+   | _ -> ());
   (match event with
    (* TODO Get the untraced "kind" right instead of always showing [Location.untraced] for untraced time. *)
    | Trace { trace_state_change = Some Start; dst; _ } -> handle_return t time ~dst
@@ -424,14 +893,48 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | (Return | Jump) when is_ocaml_exception_handler t ~dst ->
         handle_ocaml_exception t time ~dst
       | Return | Sysret | Iret -> handle_return t time ~dst
-      | Jump | Tx_abort | Async -> handle_jump t time ~dst)
+      | Jump | Tx_abort | Async -> handle_jump t time ~src ~dst)
    | Trace { kind = None; _ } -> ()
-   (* All of the below events are handled in [trace_writer.ml]. *)
+   (* All of the below events are handled in [new_trace_writer.ml]. *)
    | Power _ | Stacktrace_sample _ | Event_sample _ -> ());
   if debug
   then (
     Frame.For_testing.print_callstack (current_frame t);
-    print_endline "-------------------------------")
+    print_endline "-------------------------------");
+  if Env_vars.check_invariants
+  then (
+    let #(current_physical_frame, ~distance) = current_physical_frame t in
+    (* Maintaining [t.last_known_location] separately is a minor optimization so that
+       we don't have to walk from [current_frame t] to find the current physical frame
+       at the start of processing each event. The corollary is that updating the [instruction_pointer]
+       on the current physical frame on each event **is truly necessary**; maintaining *only*
+       [t.last_known_location] would be insufficient to accurately process traces.
+       In particular this comes up when handling returns (and by extension, exceptions),
+       where you need to know what the instruction-pointer was in the physical frame you
+       are returning to the last time the program was there, so that you can
+       [diff_inlined_frames] in order to return to *the correct inlined child* of that
+       physical frame. *)
+    [%test_eq: Int64.Hex.t]
+      ~message:
+        "Recorded [last_known_location] does not match the current physical frame after \
+         processing this event"
+      t.last_known_location.instruction_pointer
+      current_physical_frame.instruction_pointer;
+    let actual_inlined_frames = ref [] in
+    Frame.iter_n (current_frame t) distance ~f:(fun { location = { symbol; _ }; _ } ->
+      actual_inlined_frames := Symbol.display_name symbol :: !actual_inlined_frames);
+    let expected_inlined_frames =
+      symbolize_inlined_frames
+        t
+        ~dso:t.last_known_location.dso
+        ~addr:t.last_known_location.instruction_pointer
+      |> Slice.map_to_list ~f:(fun inlined_frame_info ->
+        Symbolizer.Info.display_name inlined_frame_info)
+    in
+    [%test_result: string list]
+      ~message:"Inlined frames in callstacks did not match expectation"
+      !actual_inlined_frames
+      ~expect:expected_inlined_frames)
 ;;
 
 module Writer : sig
@@ -481,6 +984,8 @@ end = struct
       }
   ;;
 
+  (* TODO We should probably scrap Owee entirely and get this information directly from
+     LLVM instead given that we're already using it to resolve inlined frames. *)
   let location_args debug_info (location : Location.t) =
     let display_name = Symbol.display_name location.symbol in
     let base_address =
@@ -552,7 +1057,7 @@ let smear_times (callstacks : Callstack.t Nonempty_vec.t) =
      time substantially reduces the frequency where we need to use zero-duration events.
      In general the traces are easier to read if returns aren't counted as consuming time. *)
   let[@inline always] consumes_time : Callstack.t -> bool = function
-    | #{ control_flow = Call | Jump; _ } -> true
+    | #{ control_flow = Call _; _ } -> true
     | _ -> false
   in
   let len = Nonempty_vec.length callstacks in
@@ -614,45 +1119,35 @@ let write_trace
   ~exit_final_callstack
   =
   let writer = Writer.create trace thread debug_info in
-  if Nonempty_vec.length t.callstacks > 1
+  smear_times t.callstacks;
+  if enter_initial_callstack
   then (
-    smear_times t.callstacks;
-    if enter_initial_callstack
-    then (
-      let first_callstack = Nonempty_vec.get t.callstacks 1 in
-      let () =
-        match first_callstack.#leaf.parent with
-        | Null -> ()
-        | This parent_frame ->
-          (* Emit a frame enter for everything except the leaf in the initial callstack. We
-             need to do this because otherwise we'd be missing parent frames in the trace that
-             we discovered by returning into them (see the [Null] case in [handle_return]). *)
-          Frame.iter_rev parent_frame ~f:(stack_ fun frame ->
-            Writer.emit_frame_enter writer first_callstack.#time frame)
-      in
-      (* Modify [t.callstacks] so that the first pair processed in
-         [Nonempty_vec.iter_pairs] below calls [emit_frame_enter] for the leaf frame. *)
-      Nonempty_vec.set t.callstacks 1 #{ first_callstack with control_flow = Call });
-    Nonempty_vec.iter_pairs
-      t.callstacks
-      ~f:(stack_ fun (#(prev, curr) : #(Callstack.t * Callstack.t)) ->
-        let time = curr.#time in
-        match curr.#control_flow with
-        | Jump ->
-          Writer.emit_frame_exit writer time prev.#leaf;
-          Writer.emit_frame_enter writer time curr.#leaf
-        | Call -> Writer.emit_frame_enter writer time curr.#leaf
-        | Return { distance } ->
-          Frame.iter_n prev.#leaf distance ~f:(stack_ fun frame ->
-            Writer.emit_frame_exit writer time frame)
-          [@nontail]);
-    if exit_final_callstack
-    then (
-      (* Call [emit_frame_exit] for all remaining frames at the end of the segment. *)
-      let last_callstack = Nonempty_vec.last t.callstacks in
-      Frame.iter_n last_callstack.#leaf Int.max_value ~f:(stack_ fun frame ->
-        Writer.emit_frame_exit writer last_callstack.#time frame)
-      [@nontail]))
+    (* Call [emit_frame_enter] for everything in the initial callstack. This takes care of
+       entering any root frames that we discovered by returning into them (i.e. the places
+       where we call [replace_root]). *)
+    let%tydi #{ leaf; time; _ } = Nonempty_vec.first t.callstacks in
+    Frame.iter_n_rev leaf Int.max_value ~f:(stack_ fun frame ->
+      Writer.emit_frame_enter writer time frame));
+  Nonempty_vec.iter_pairs
+    t.callstacks
+    ~f:(stack_ fun (#(prev, curr) : #(Callstack.t * Callstack.t)) ->
+      let time = curr.#time in
+      match curr.#control_flow with
+      | Call { depth } ->
+        Frame.iter_n_rev curr.#leaf depth ~f:(stack_ fun frame ->
+          Writer.emit_frame_enter writer time frame)
+        [@nontail]
+      | Return { distance } ->
+        Frame.iter_n prev.#leaf distance ~f:(stack_ fun frame ->
+          Writer.emit_frame_exit writer time frame)
+        [@nontail]);
+  if exit_final_callstack
+  then (
+    (* Call [emit_frame_exit] for all remaining frames at the end of the segment. *)
+    let last_callstack = Nonempty_vec.last t.callstacks in
+    Frame.iter_n last_callstack.#leaf Int.max_value ~f:(stack_ fun frame ->
+      Writer.emit_frame_exit writer last_callstack.#time frame)
+    [@nontail])
 ;;
 
 module%test _ = struct
@@ -670,8 +1165,10 @@ module%test _ = struct
                  { symbol_offset = 0
                  ; instruction_pointer = 0L
                  ; symbol = From_perf leaf_name
+                 ; dso = Interned_string.empty
                  }
-               ~parent:root)
+               ~parent:root
+               ~kind:Physical)
     in
     #(~root, ~leaf)
   ;;
@@ -721,7 +1218,7 @@ module%test _ = struct
     ;;
 
     let create_callstacks (times : int list) : Callstack.t Nonempty_vec.t =
-      List.map ~f:(fun time -> time, Control_flow.Call) times
+      List.map ~f:(fun time -> time, Control_flow.Call { depth = 1 }) times
       |> create_callstacks_with_control_flow
     ;;
 
@@ -785,14 +1282,14 @@ module%test _ = struct
       [%expect {| 50 50 50 |}]
     ;;
 
-    let%expect_test "[smear_times] only Call and Jump events consume time" =
+    let%expect_test "[smear_times] only Call events consume time" =
       let callstacks =
         create_callstacks_with_control_flow
           [ 0, Return { distance = 1 }
-          ; 0, Call
+          ; 0, Call { depth = 1 }
           ; 0, Return { distance = 1 }
-          ; 0, Jump
-          ; 100, Call
+          ; 0, Call { depth = 1 }
+          ; 100, Call { depth = 1 }
           ]
       in
       print_times callstacks;
@@ -805,7 +1302,11 @@ module%test _ = struct
     let%expect_test "[smear_times] first event is a Call" =
       let callstacks =
         create_callstacks_with_control_flow
-          [ 0, Call; 0, Return { distance = 1 }; 0, Jump; 90, Call ]
+          [ 0, Call { depth = 1 }
+          ; 0, Return { distance = 1 }
+          ; 0, Call { depth = 1 }
+          ; 90, Call { depth = 1 }
+          ]
       in
       print_times callstacks;
       [%expect {|  0  0  0 90 |}];
@@ -820,7 +1321,7 @@ module%test _ = struct
           [ 0, Return { distance = 1 }
           ; 0, Return { distance = 1 }
           ; 0, Return { distance = 1 }
-          ; 90, Call
+          ; 90, Call { depth = 1 }
           ]
       in
       print_times callstacks;
@@ -832,7 +1333,7 @@ module%test _ = struct
   end
 
   let setup_test () =
-    let t = create None ~in_filtered_region:true in
+    let t = create None in
     let ip = ref (-1) in
     let time = ref Time_ns.Span.zero in
     let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in
@@ -842,6 +1343,7 @@ module%test _ = struct
         { instruction_pointer = Int64.of_int !ip
         ; symbol_offset = 0
         ; symbol = From_perf name
+        ; dso = Interned_string.empty
         }
     in
     let call ~src ~dst =
@@ -1070,10 +1572,12 @@ module%test _ = struct
     jump ~src:"fn1" ~dst:"fn2";
     return ~src:"fn2" ~dst:"main";
     print_callstacks t;
+    (* TODO Showing a return to [main] and subsequent call into [fn2] is a bug that was
+       introduced when adding support for inlined frames. We need to fix this. *)
     [%expect
       {|
-      main                main                main                main
-                          fn1                 fn2
+      main                main                main                main                main
+                          fn1                                     fn2
       -
       |}]
   ;;

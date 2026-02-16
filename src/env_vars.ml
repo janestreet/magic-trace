@@ -57,3 +57,4 @@ let skip_transaction_handling =
 
 (* Use [New_trace_writer] instead of [Trace_writer]. *)
 let use_new_trace_writer = Option.is_some (Unix.getenv "MAGIC_TRACE_USE_NEW_TRACE_WRITER")
+let check_invariants = Option.is_some (Unix.getenv "MAGIC_TRACE_CHECK_INVARIANTS")

@@ -1,5 +1,6 @@
 (library
  (name magic_trace_lib_cinaps_helpers)
+ (no_dynlink)
  (libraries core)
  (preprocess
   (pps ppx_jane)))

@@ -1,1 +1,1 @@
-(lang dune 2.0)
+(lang dune 3.0)
