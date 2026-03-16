@@ -57,15 +57,24 @@ let extra_events = function
     extra_events
 ;;
 
+let hardware_trace_device_path () =
+  let arch = Core_unix.Utsname.machine (Core_unix.uname ()) in
+  if String.( = ) arch "aarch64"
+  then "/sys/bus/event_source/devices/cs_etm"
+  else "/sys/bus/event_source/devices/intel_pt"
+;;
+
 let select_collection_mode ~extra_events ~use_sampling =
   match use_sampling with
   | true -> Stacktrace_sampling { extra_events }
   | false ->
-    (match Core_unix.access "/sys/bus/event_source/devices/intel_pt" [ `Exists ] with
+    let device_path = hardware_trace_device_path () in
+    (match Core_unix.access device_path [ `Exists ] with
      | Ok () -> Intel_processor_trace { extra_events }
      | Error _ ->
        Core.eprintf
-         "Intel PT support not found. magic-trace will continue and use sampling instead.\n";
+         "Hardware trace support not found. magic-trace will continue and use sampling \
+          instead.\n";
        Stacktrace_sampling { extra_events })
 ;;
 
@@ -86,8 +95,9 @@ let param =
       "-sampling"
       no_arg
       ~doc:
-        "Use stacktrace sampling instead of Intel PT. If Intel PT is not available, \
-         magic-trace will default to this. For more info: https://magic-trace.org/w/b"
+        "Use stacktrace sampling instead of hardware trace (Intel PT / CoreSight ETM). \
+         If hardware trace is not available, magic-trace will default to this. For more \
+         info: https://magic-trace.org/w/b"
   in
   select_collection_mode ~extra_events ~use_sampling
 ;;

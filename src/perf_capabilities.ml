@@ -48,19 +48,18 @@ end
 
 let supports_configurable_psb_period () =
   try
-    let cyc_cap =
-      In_channel.read_all "/sys/bus/event_source/devices/intel_pt/caps/psb_cyc"
-    in
+    let device_path = Collection_mode.hardware_trace_device_path () in
+    let cyc_cap = In_channel.read_all (device_path ^ "/caps/psb_cyc") in
     String.( = ) cyc_cap "1\n"
   with
-  (* Even if this file is not present (i.e. when Intel PT isn't present), we
-     don't want capability checking to fail. *)
+  (* Even if this file is not present (i.e. when hardware trace isn't present), we don't
+     want capability checking to fail. *)
   | Sys_error _ -> false
 ;;
 
-(* This checks if pdcm flag is present in /proc/cpuinfo. This is necessary for
-   LBR to work. Although I couldn't ascertain that it is also sufficient.
-   However it seems unlikely this would fail on most machines. *)
+(* This checks if pdcm flag is present in /proc/cpuinfo. This is necessary for LBR to
+   work. Although I couldn't ascertain that it is also sufficient. However it seems
+   unlikely this would fail on most machines. *)
 let supports_last_branch_record () =
   let cpuinfo = In_channel.read_lines "/proc/cpuinfo" in
   let flag_re = Re.Perl.re {|^flags\s*:\s+(\S.*)$|} |> Re.compile in
