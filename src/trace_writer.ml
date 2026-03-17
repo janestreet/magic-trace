@@ -3,10 +3,11 @@ open! Core
 let debug = ref false
 let is_kernel_address addr = Int64.(addr < 0L)
 
-(* Time spans from perf start whenever the machine booted. Perfetto uses floats to represent time
-   spans, which struggles with large spans when we care about small differences in them. To
-   compensate, the trace writer subtracts the time of the first event from all time spans, producing
-   what we call a "mapped time". Only mapped times may be written to the trace file. *)
+(* Time spans from perf start whenever the machine booted. Perfetto uses floats to
+   represent time spans, which struggles with large spans when we care about small
+   differences in them. To compensate, the trace writer subtracts the time of the first
+   event from all time spans, producing what we call a "mapped time". Only mapped times
+   may be written to the trace file. *)
 module Mapped_time : sig
   type t = private Time_ns.Span.t [@@deriving sexp, compare, bin_io]
 
@@ -268,9 +269,9 @@ let write_hits (T t) hits =
           ; "ip", Pointer hit.ip
           ]
       in
-      (* Args that are computed from captured registers are only meaningful on our
-         special stop symbol, we still capture them regardless, but on other symbols
-         they'll just have confusing broken values. *)
+      (* Args that are computed from captured registers are only meaningful on our special
+         stop symbol, we still capture them regardless, but on other symbols they'll just
+         have confusing broken values. *)
       let args =
         if is_default_symbol
         then
@@ -358,18 +359,18 @@ let write_pending_event'
   let display_name = Symbol.display_name symbol in
   match kind with
   | Call { addr; offset; from_untraced } ->
-    (* Adding a call is always the result of seeing something new on the top of the
-       stack, so the base address is just the current base address. *)
+    (* Adding a call is always the result of seeing something new on the top of the stack,
+       so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
     let open Tracing.Trace.Arg in
     let symbol_args =
       (* Using [Interned] may cause some issues with the 32k interned string limit, on
          sufficiently large programs if the trace goes through a lot of different code,
-         but that'll also be a problem with the span names. This will just make it
-         happen around twice as fast. It does make the traces noticeably smaller.
+         but that'll also be a problem with the span names. This will just make it happen
+         around twice as fast. It does make the traces noticeably smaller.
 
-         The real solution is to get around to improving the interning table management
-         in the trace writer library.
+         The real solution is to get around to improving the interning table management in
+         the trace writer library.
 
          ---
 
@@ -415,10 +416,9 @@ let write_pending_event'
       ~args:[]
 ;;
 
-(* It would be reasonable to also have returns consume time, but making them not
-   consume time substantially reduces the frequency where we need to use zero-duration
-   events. In general the traces are easier to read if returns aren't counted as consuming
-   time. *)
+(* It would be reasonable to also have returns consume time, but making them not consume
+   time substantially reduces the frequency where we need to use zero-duration events. In
+   general the traces are easier to read if returns aren't counted as consuming time. *)
 let consumes_time { Pending_event.symbol = _; kind } =
   match kind with
   | Call _ -> true
@@ -472,20 +472,22 @@ let opt_pid_to_string opt_pid =
   | Some pid -> Pid.to_string pid
 ;;
 
-(* A practical, but not perfect, fix for #155: If events happen with the exact same timestamp
-   as a decode error, stacks break. We implement this "#155 hack" to prevent that:
+(* A practical, but not perfect, fix for #155: If events happen with the exact same
+   timestamp as a decode error, stacks break. We implement this "#155 hack" to prevent
+   that:
 
-   If an event happens at exactly the same time as the previous decode error, slide it forward
-   by one nanosecond. Maintain the invariant that no event which follows a decode error has the
-   same timestamp as that decode error.
+   If an event happens at exactly the same time as the previous decode error, slide it
+   forward by one nanosecond. Maintain the invariant that no event which follows a decode
+   error has the same timestamp as that decode error.
 
-   This should have minimal impact on the timestamps displayed to the user, they're precise to at
-   most ~40ns anyhow. But it does make sure our stacks always come out in the right order.
+   This should have minimal impact on the timestamps displayed to the user, they're
+   precise to at most ~40ns anyhow. But it does make sure our stacks always come out in
+   the right order.
 
-   Also worth noting is that despite the fact that we're changing timestamps, this can't reorder
-   events. 1ns is the minimum amount of time by which timestamps can differ. So even if there were
-   more events exactly 1ns after the decode error, they'll be seen as having the exact same
-   timestamp as the events that happened during the decode error. *)
+   Also worth noting is that despite the fact that we're changing timestamps, this can't
+   reorder events. 1ns is the minimum amount of time by which timestamps can differ. So
+   even if there were more events exactly 1ns after the decode error, they'll be seen as
+   having the exact same timestamp as the events that happened during the decode error. *)
 let hack_155 (thread_info : _ Thread_info.t) time =
   let last_decode_error_time = thread_info.last_decode_error_time in
   if Mapped_time.( = ) time last_decode_error_time
@@ -568,8 +570,8 @@ let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some { symbol; _ } -> add_event t thread_info time { symbol; kind = Ret }
   | None ->
-    (* No known stackframe was popped --- could occur if the start of the snapshot
-       started in the middle of a tracing region *)
+    (* No known stackframe was popped --- could occur if the start of the snapshot started
+       in the middle of a tracing region *)
     add_event
       t
       thread_info
@@ -610,14 +612,15 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
   Thread_info.set_callstack thread_info ~is_kernel_address ~time
 ;;
 
-(* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
-   from one goroutine to the next. Since [gogo] can jump anywhere, it's a shining example of what
-   magic-trace can't handle out of the box. So, we hack it.
+(* Go (the programming language) has coroutines known as goroutines. The function [gogo]
+   jumps from one goroutine to the next. Since [gogo] can jump anywhere, it's a shining
+   example of what magic-trace can't handle out of the box. So, we hack it.
 
-   Most of the time, control flow returns parallel to (i.e. as if jumped from) the previous caller
-   of [runtime.mcall] or [runtime.morestack.abi0].
+   Most of the time, control flow returns parallel to (i.e. as if jumped from) the
+   previous caller of [runtime.mcall] or [runtime.morestack.abi0].
 
-   At startup (and maybe other situations?), gogo clears all callstacks and executes [main]. *)
+   At startup (and maybe other situations?), gogo clears all callstacks and executes
+   [main]. *)
 module Go_hacks : sig
   val ret_track_gogo
     :  'a inner
@@ -653,13 +656,14 @@ end = struct
       (* Return one past the known gogo destination. This hack is necessary because:
 
          - all gogo-destination functions are jumped into and out of
-         - magic-trace translates the jump returning from gogo-destination into a ret/call pair
+         - magic-trace translates the jump returning from gogo-destination into a ret/call
+           pair
          - this runs on the ret, but the call is to gogo-destination's caller and we don't
            want a second stack frame for that.
 
-         This is a little janky because you see a stack frame momentarily end then start back
-         up again on every [gogo]. I think that's a small price to pay to keep all the Go hacks
-         in one place. *)
+         This is a little janky because you see a stack frame momentarily end then start
+         back up again on every [gogo]. I think that's a small price to pay to keep all
+         the Go hacks in one place. *)
       if is_known_gogo_destination location
       then ret t thread_info ~time
       else pop_until_gogo_destination t thread_info ~time
@@ -689,20 +693,20 @@ let check_current_symbol
   ~time
   (location : Event.Location.t)
   =
-  (* After every operation, we should be in a situation where the current symbol under
-     the pc matches the symbol at the top of the callstack. This can go out-of-sync
-     with jumps between functions (e.g. tailcalls, PLT) or returns out of the highest
-     known function, so we have to correct the top of the stack here. *)
+  (* After every operation, we should be in a situation where the current symbol under the
+     pc matches the symbol at the top of the callstack. This can go out-of-sync with jumps
+     between functions (e.g. tailcalls, PLT) or returns out of the highest known function,
+     so we have to correct the top of the stack here. *)
   match Callstack.top thread_info.callstack with
   | Some { symbol; _ } when not ([%compare.equal: Symbol.t] symbol location.symbol) ->
     ret t thread_info ~time;
     call t thread_info ~time ~location
   | Some _ -> ()
   | None ->
-    (* If we have no callstack left, then we just returned out of something we didn't
-       see the call for. Since we're in snapshot mode, this happens with functions
-       called before the perf events started, so add in a call that begins at the
-       start of the trace for that pid.
+    (* If we have no callstack left, then we just returned out of something we didn't see
+       the call for. Since we're in snapshot mode, this happens with functions called
+       before the perf events started, so add in a call that begins at the start of the
+       trace for that pid.
 
        These shouldn't be buffered for spreading since we want them exactly at the reset
        time. *)
@@ -711,16 +715,15 @@ let check_current_symbol
     Callstack.push thread_info.callstack location
 ;;
 
-(* OCaml-specific hacks around tracking exception control flow. Supports two
-   modes.
+(* OCaml-specific hacks around tracking exception control flow. Supports two modes.
 
-   With exception info provided by the compiler: read
-   [core/ocaml_exception_info.mli] for details.
+   With exception info provided by the compiler: read [core/ocaml_exception_info.mli] for
+   details.
 
-   Without exception info provided by the compiler: the way this works is that
-   it counts the number of [caml_next_frame_descriptor] calls while an
-   exception is unwinding, and knows to unwind the stack that many times (+/- a
-   constant) when the next [caml_raise_exn] or [caml_raise_exception] return.
+   Without exception info provided by the compiler: the way this works is that it counts
+   the number of [caml_next_frame_descriptor] calls while an exception is unwinding, and
+   knows to unwind the stack that many times (+/- a constant) when the next
+   [caml_raise_exn] or [caml_raise_exception] return.
 
    This mode fails to account for [raise_notrace] exceptions. *)
 
@@ -857,9 +860,9 @@ end = struct
                        (dst : Event.Location.t)
                        (last_known_instruction_pointer : Int64.Hex.t)]
                else (
-                 (* Only pop the exception callstack if we're at the same callstack
-                    depth as we were when we saw [Pushtrap]. This should let us recover
-                    from situations like:
+                 (* Only pop the exception callstack if we're at the same callstack depth
+                    as we were when we saw [Pushtrap]. This should let us recover from
+                    situations like:
 
                     - Pushtrap 1
                     - Pushtrap 2
@@ -906,13 +909,15 @@ let rewrite_callstack t ~(callstack : Callstack.t) ~thread_info ~time =
       thread_info
       time
       (Pending_event.create_call location ~from_untraced:true)
-    (* Not necessarily true, but setting [~from_untraced:true] causes the timestamp to be annotated as inferred *));
+    (* Not necessarily true, but setting [~from_untraced:true] causes the timestamp to be
+       annotated as inferred *));
   callstack.create_time
   <- Mapped_time.add
        time
        (Time_ns.Span.of_ns
           (-1.)
-          (* Set the reset time of future untraced returns to before the rewritten callstack *))
+          (* Set the reset time of future untraced returns to before the rewritten
+             callstack *))
 ;;
 
 let rewrite_all_callstacks t ~(thread_info : _ Thread_info.t) ~time =
@@ -989,8 +994,8 @@ let rec write_event (T t) ?events_writer original_event =
     let { Event.With_write_info.event; should_write = _ } = original_event in
     (* 1. If this event is within a transaction, queue it.
        2. If this event ends a transaction, deliver all queued events (then deliver it)
-       3. If this event is a transaction abort, clear all queued events and discard
-       the [Tx_abort]. *)
+       3. If this event is a transaction abort, clear all queued events and discard the
+          [Tx_abort]. *)
     match event with
     | Ok { Event.Ok.thread = _; time = _; data; in_transaction } ->
       let is_abort =
@@ -1132,14 +1137,16 @@ and write_event' (T t) ?events_writer event =
               | Tx_abort )
           , Some Start )
         | Some Async, None
-        | Some (Hardware_interrupt | Jump | Interrupt | Tx_abort), Some End ->
+        | Some (Hardware_interrupt | Tx_abort), Some End ->
           raise_s
             [%message
               "BUG: magic-trace devs thought this event was impossible, but you just \
                proved them wrong. Please report this to \
                https://github.com/janestreet/magic-trace/issues/"
                 (event : Event.t)]
-        | (None | Some Async), Some End ->
+        | (None | Some Async | Some Jump | Some Interrupt), Some End ->
+          (* CoreSight ETM can end a trace at any branch type (e.g. "tr end jcc"), so Jump
+             and Interrupt with End are expected on aarch64. *)
           call t thread_info ~time ~location:Event.Location.untraced
         | Some Syscall, Some End ->
           (* We should only be getting these under /u *)
@@ -1149,18 +1156,18 @@ and write_event' (T t) ?events_writer event =
           call t thread_info ~time ~location:Event.Location.returned
         | Some Return, None ->
           Ocaml_hacks.ret_track_exn_data t thread_info ~time;
-          (* [caml_raise_exn], at least at the time of writing, modifies the stack
-             and then [ret]s when raising. The OCaml compiler's codegen uses indirect
-             [jmp]s instead. *)
+          (* [caml_raise_exn], at least at the time of writing, modifies the stack and
+             then [ret]s when raising. The OCaml compiler's codegen uses indirect [jmp]s
+             instead. *)
           Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         | None, Some Start ->
           (* Might get this under /u, /k, and /uk, but we need to handle them all
              differently. *)
           if Trace_scope.equal t.trace_scope Kernel
           then (
-            (* We're back in the kernel after having been in userspace. We have a
-               brand new stack to work with. [clear_callstack] here should only be
-               clearing the [untraced] frame here pushed by [End (Iret | Sysret)]. *)
+            (* We're back in the kernel after having been in userspace. We have a brand
+               new stack to work with. [clear_callstack] here should only be clearing the
+               [untraced] frame here pushed by [End (Iret | Sysret)]. *)
             clear_callstack t thread_info ~time;
             Thread_info.set_callstack_from_addr
               thread_info
@@ -1168,17 +1175,17 @@ and write_event' (T t) ?events_writer event =
               ~time)
           else if Callstack.is_empty thread_info.callstack
           then
-            (* View stopping tracing always as a call (typically the result of a call
-               into a special library / linker), with starting tracing again as
-               exiting it. The one exception is the initial start of the trace for
-               that process, when there is no stack and a prior end won't have pushed
-               a synthetic stack frame. *)
+            (* View stopping tracing always as a call (typically the result of a call into
+               a special library / linker), with starting tracing again as exiting it. The
+               one exception is the initial start of the trace for that process, when
+               there is no stack and a prior end won't have pushed a synthetic stack
+               frame. *)
             call t thread_info ~time ~location:dst
           else
-            (* We don't call [check_current_symbol] here because stops don't change
-               the program location in most cases, and when a call to a symbol page
-               faults, the restart after the page fault at the new location would get
-               treated as a tail call if we did call [check_current_symbol]. *)
+            (* We don't call [check_current_symbol] here because stops don't change the
+               program location in most cases, and when a call to a symbol page faults,
+               the restart after the page fault at the new location would get treated as a
+               tail call if we did call [check_current_symbol]. *)
             Ocaml_hacks.ret_track_exn_data t thread_info ~time
         | Some ((Syscall | Hardware_interrupt) as kind), None ->
           (* We should only be getting [Syscall] these under /uk, but we can get
@@ -1190,11 +1197,11 @@ and write_event' (T t) ?events_writer event =
           ]
           |> List.concat
           |> assert_trace_scope t outer_event;
-          (* A syscall or hardware interrupt can be modelled as operating on a new
-             stack, and shouldn't be allowed to modify the previous stack.
+          (* A syscall or hardware interrupt can be modelled as operating on a new stack,
+             and shouldn't be allowed to modify the previous stack.
 
-             Also, hardware interrupts can occur during syscalls, so we maintain a
-             "stack of callstacks" here. *)
+             Also, hardware interrupts can occur during syscalls, so we maintain a "stack
+             of callstacks" here. *)
           Stack.push thread_info.inactive_callstacks thread_info.callstack;
           Thread_info.set_callstack_from_addr
             thread_info
@@ -1207,8 +1214,8 @@ and write_event' (T t) ?events_writer event =
           clear_callstack t thread_info ~time;
           call t thread_info ~time ~location:Event.Location.untraced
         | Some ((Iret | Sysret) as kind), None ->
-          (* We should only get [Sysret] under /uk, but might get [Iret] under /k as
-             well (because the kernel can be interrupted). *)
+          (* We should only get [Sysret] under /uk, but might get [Iret] under /k as well
+             (because the kernel can be interrupted). *)
           [ [ Trace_scope.Userspace_and_kernel ]
           ; (if [%compare.equal: Event.Kind.t] kind Iret then [ Kernel ] else [])
           ]
