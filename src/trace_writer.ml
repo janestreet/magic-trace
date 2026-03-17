@@ -700,10 +700,6 @@ let check_current_symbol
   match Callstack.top thread_info.callstack with
   | Some { symbol; _ } when not ([%compare.equal: Symbol.t] symbol location.symbol) ->
     ret t thread_info ~time;
-    (* After popping, check if the new top already matches the destination. This happens
-       when CoreSight ETM classifies indirect branches (br xN) as returns for tail calls
-       and vtable dispatches — the pop reveals the true caller which already matches the
-       destination, so pushing again would create a duplicate. *)
     (match Callstack.top thread_info.callstack with
      | Some { symbol; _ } when [%compare.equal: Symbol.t] symbol location.symbol -> ()
      | _ -> call t thread_info ~time ~location)
@@ -716,6 +712,25 @@ let check_current_symbol
 
        These shouldn't be buffered for spreading since we want them exactly at the reset
        time. *)
+    let ev = Pending_event.create_call location ~from_untraced:true in
+    write_pending_event t thread_info thread_info.callstack.create_time ev;
+    Callstack.push thread_info.callstack location
+;;
+
+(* Like [check_current_symbol], but used after a [ret] has already popped one frame. When
+   the new top doesn't match the destination, this means the popped function was a
+   trampoline (e.g. PLT stub, vtable dispatch wrapper) and the destination is the real
+   callee. We should push it on top of the caller without popping anything else. *)
+let check_current_symbol_after_ret
+  t
+  (thread_info : _ Thread_info.t)
+  ~time
+  (location : Event.Location.t)
+  =
+  match Callstack.top thread_info.callstack with
+  | Some { symbol; _ } when [%compare.equal: Symbol.t] symbol location.symbol -> ()
+  | Some _ -> call t thread_info ~time ~location
+  | None ->
     let ev = Pending_event.create_call location ~from_untraced:true in
     write_pending_event t thread_info thread_info.callstack.create_time ev;
     Callstack.push thread_info.callstack location
@@ -745,6 +760,13 @@ module Ocaml_hacks : sig
     -> unit
 
   val check_current_symbol_track_entertraps
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> Event.Location.t
+    -> unit
+
+  val check_current_symbol_after_ret_track_entertraps
     :  'a inner
     -> 'a Thread_info.t
     -> time:Mapped_time.t
@@ -807,6 +829,25 @@ end = struct
       List.iter (List.rev s) ~f:(fun x -> Stack.push thread_info.callstack.stack x);
       clear_trap_stack t thread_info ~time
     | _ -> check_current_symbol t thread_info ~time dst
+  ;;
+
+  let check_current_symbol_after_ret_track_entertraps
+    t
+    (thread_info : 'a Thread_info.t)
+    ~time
+    (dst : Event.Location.t)
+    =
+    match thread_info.ocaml_exception_state with
+    | With_exception_info { ocaml_exception_info; _ }
+      when Ocaml_exception_info.is_entertrap
+             ocaml_exception_info
+             ~addr:dst.instruction_pointer ->
+      let s = thread_info.callstack.stack |> Stack.to_list in
+      let s = List.take s (List.length s - 1) in
+      Stack.clear thread_info.callstack.stack;
+      List.iter (List.rev s) ~f:(fun x -> Stack.push thread_info.callstack.stack x);
+      clear_trap_stack t thread_info ~time
+    | _ -> check_current_symbol_after_ret t thread_info ~time dst
   ;;
 
   let track_executed_pushtraps_and_poptraps_in_range
@@ -1166,10 +1207,14 @@ and write_event' (T t) ?events_writer event =
           call t thread_info ~time ~location:Event.Location.returned
         | Some Return, None ->
           Ocaml_hacks.ret_track_exn_data t thread_info ~time;
-          (* [caml_raise_exn], at least at the time of writing, modifies the stack and
-             then [ret]s when raising. The OCaml compiler's codegen uses indirect [jmp]s
-             instead. *)
-          Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
+          (* After [ret] has already popped the returning function, a mismatch means the
+             popped function was a trampoline (e.g. PLT stub, vtable dispatch). The
+             destination is the real callee; push it without popping the caller. *)
+          Ocaml_hacks.check_current_symbol_after_ret_track_entertraps
+            t
+            thread_info
+            ~time
+            dst
         | None, Some Start ->
           (* Might get this under /u, /k, and /uk, but we need to handle them all
              differently. *)

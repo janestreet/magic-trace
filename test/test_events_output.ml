@@ -3239,7 +3239,6 @@ let%expect_test "test-events-output" =
     30549/30549 174427.938591166:                           1    branches:uH:   call                     7ffff7ddc175 _dl_start_user+0x2d (/usr/lib64/ld-2.17.so) =>     7ffff7dea8b0 _dl_init+0x0 (/usr/lib64/ld-2.17.so)
     30549/30549 174427.938591244:                           1    branches:uH:   call                     7ffff7dea97d _dl_init+0xcd (/usr/lib64/ld-2.17.so) =>     7ffff7a2f320 _init+0x0 (/usr/lib64/libc-2.17.so)
     -> 130.79us END   _dl_start
-    -> 130.79us END   _start
     -> 130.79us BEGIN _dl_start_user
     -> 130.829us BEGIN _dl_init
     30549/30549 174427.938591490:                           1    branches:uH:   tr end                   7ffff7a2f320 _init+0x0 (/usr/lib64/libc-2.17.so) =>                0 [unknown] ([unknown])
@@ -3454,7 +3453,6 @@ let%expect_test "test-events-output" =
     -> 140.265us END   _dl_init
     30549/30549 174427.938600891:                           1    branches:uH:   tr end                         401060 _start+0x0 (/j/igm/user/tbrindus/pub/helloworld) =>                0 [unknown] ([unknown])
     -> 140.286us END   _dl_start_user
-    -> 140.286us BEGIN _start
     30549/30549 174427.938601514:                           1    branches:uH:   tr strt                             0 [unknown] ([unknown]) =>           401060 _start+0x0 (/j/igm/user/tbrindus/pub/helloworld)
     -> 140.515us BEGIN [untraced]
     30549/30549 174427.938601514:                           1    branches:uH:   call                           401084 _start+0x24 (/j/igm/user/tbrindus/pub/helloworld) =>           401030 __libc_start_main@plt+0x0 (/j/igm/user/tbrindus/pub/helloworld)
@@ -44953,1578 +44951,1579 @@ let%expect_test "test-events-output" =
        ((thread ((pid (30549)) (tid (30549)))) (time 130.79us)
         (data (Trace (kind Call) (src 0x7ffff7ddc175) (dst 0x7ffff7dea8b0))))))
      (callstack
-      ((new_symbols (((From_perf _dl_start_user) 83))) (callstack ((83 0))))))
+      ((new_symbols (((From_perf _dl_start_user) 83)))
+       (callstack ((83 0) (0 0))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 130.837us)
         (data (Trace (kind Jump) (src 0x7ffff7dea955) (dst 0x7ffff7dea9f8))))))
      (callstack
-      ((new_symbols (((From_perf _dl_init) 84))) (callstack ((84 0) (83 0))))))
+      ((new_symbols (((From_perf _dl_init) 84))) (callstack ((84 0) (83 1))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 130.837us)
         (data (Trace (kind Jump) (src 0x7ffff7deaa0a) (dst 0x7ffff7dea9d0))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 130.837us)
         (data (Trace (kind Jump) (src 0x7ffff7dea9d4) (dst 0x7ffff7dea910))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 130.868us)
         (data (Trace (kind Call) (src 0x7ffff7dea97d) (dst 0x7ffff7a2f320))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 131.114us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a2f320) (dst 0x0))))))
      (callstack
-      ((new_symbols (((From_perf _init) 85))) (callstack ((85 0) (84 1))))))
+      ((new_symbols (((From_perf _init) 85))) (callstack ((85 0) (84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 131.724us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a2f320))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (85 2))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 131.771us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f346) (dst 0x7ffff7a2f410))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 131.771us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f42f) (dst 0x7ffff7a2f356))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 131.941us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a2f367) (dst 0x0))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 132.883us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a2f367))))))
-     (callstack ((new_symbols ()) (callstack ((1 3))))))
+     (callstack ((new_symbols ()) (callstack ((1 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.062us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a2f387) (dst 0x0))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.779us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a2f387))))))
-     (callstack ((new_symbols ()) (callstack ((1 3))))))
+     (callstack ((new_symbols ()) (callstack ((1 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.779us)
         (data (Trace (kind Call) (src 0x7ffff7a2f39e) (dst 0x7ffff7b4b2a0))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.8us)
         (data (Trace (kind Call) (src 0x7ffff7b4b307) (dst 0x7ffff7de4f80))))))
-     (callstack ((new_symbols ()) (callstack ((73 0) (85 2))))))
+     (callstack ((new_symbols ()) (callstack ((73 0) (85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.801us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 0) (73 3))))))
+     (callstack ((new_symbols ()) (callstack ((68 0) (73 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.801us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.801us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.801us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.801us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.804us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.808us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.812us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.812us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.812us)
         (data (Trace (kind Call) (src 0x7ffff7de509a) (dst 0x7ffff7de46b0))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.839us)
         (data (Trace (kind Jump) (src 0x7ffff7de475c) (dst 0x7ffff7de476b))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.839us)
         (data (Trace (kind Jump) (src 0x7ffff7de47b2) (dst 0x7ffff7de4ddc))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.855us)
         (data (Trace (kind Jump) (src 0x7ffff7de4de7) (dst 0x7ffff7de4ed8))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.861us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.861us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.861us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.861us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.861us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.869us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.869us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.869us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.869us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.869us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f71) (dst 0x7ffff7de4dfc))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e0c) (dst 0x7ffff7de4e37))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.882us)
         (data (Trace (kind Call) (src 0x7ffff7de4e53) (dst 0x7ffff7de4560))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.92us)
         (data (Trace (kind Call) (src 0x7ffff7de45b4) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.92us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.925us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.925us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.925us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.926us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.926us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.926us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.929us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.929us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.929us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.936us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.936us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.936us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.946us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.946us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.946us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.948us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.948us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.948us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.95us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.958us)
         (data (Trace (kind Return) (src 0x7ffff7df4dd2) (dst 0x7ffff7de45b9))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.958us)
         (data (Trace (kind Jump) (src 0x7ffff7de4601) (dst 0x7ffff7de4678))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.958us)
         (data (Trace (kind Call) (src 0x7ffff7de467f) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.972us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.972us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.972us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.974us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.974us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.974us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.975us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.975us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.975us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.978us)
         (data (Trace (kind Return) (src 0x7ffff7df4dd2) (dst 0x7ffff7de4684))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.978us)
         (data (Trace (kind Jump) (src 0x7ffff7de468b) (dst 0x7ffff7de4619))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.978us)
         (data (Trace (kind Return) (src 0x7ffff7de4623) (dst 0x7ffff7de4e58))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.978us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e6c) (dst 0x7ffff7de4862))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.988us)
         (data (Trace (kind Jump) (src 0x7ffff7de4876) (dst 0x7ffff7de48a6))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.988us)
         (data (Trace (kind Return) (src 0x7ffff7de48d5) (dst 0x7ffff7de509f))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.988us)
         (data (Trace (kind Jump) (src 0x7ffff7de50a2) (dst 0x7ffff7de50b6))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.992us)
         (data (Trace (kind Return) (src 0x7ffff7de5141) (dst 0x7ffff7b4b30d))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.993us)
         (data (Trace (kind Return) (src 0x7ffff7b4b327) (dst 0x7ffff7a2f3a3))))))
-     (callstack ((new_symbols ()) (callstack ((73 3))))))
+     (callstack ((new_symbols ()) (callstack ((73 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 133.993us)
         (data (Trace (kind Call) (src 0x7ffff7a2f3ca) (dst 0x7ffff7b4b2a0))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.002us)
         (data (Trace (kind Call) (src 0x7ffff7b4b307) (dst 0x7ffff7de4f80))))))
-     (callstack ((new_symbols ()) (callstack ((73 3))))))
+     (callstack ((new_symbols ()) (callstack ((73 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.003us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.003us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.003us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.003us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.003us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.006us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.01us)
         (data (Trace (kind Jump) (src 0x7ffff7de4fde) (dst 0x7ffff7de4fc8))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.01us)
         (data (Trace (kind Call) (src 0x7ffff7de509a) (dst 0x7ffff7de46b0))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.01us)
         (data (Trace (kind Jump) (src 0x7ffff7de475c) (dst 0x7ffff7de476b))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.025us)
         (data (Trace (kind Jump) (src 0x7ffff7de47b2) (dst 0x7ffff7de4ddc))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.025us)
         (data (Trace (kind Jump) (src 0x7ffff7de4de7) (dst 0x7ffff7de4ed8))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.036us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.036us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f54) (dst 0x7ffff7de4f33))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.042us)
         (data (Trace (kind Jump) (src 0x7ffff7de4f71) (dst 0x7ffff7de4dfc))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.056us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e0c) (dst 0x7ffff7de4e37))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.056us)
         (data (Trace (kind Call) (src 0x7ffff7de4e53) (dst 0x7ffff7de4560))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.056us)
         (data (Trace (kind Call) (src 0x7ffff7de45b4) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.06us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.06us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.06us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.062us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.062us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.062us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dc4) (dst 0x7ffff7df4dd3))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Return) (src 0x7ffff7df4de0) (dst 0x7ffff7de45b9))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Jump) (src 0x7ffff7de45bb) (dst 0x7ffff7de4668))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Return) (src 0x7ffff7de4674) (dst 0x7ffff7de4e58))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.064us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e6a) (dst 0x7ffff7de4e18))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.078us)
         (data (Trace (kind Call) (src 0x7ffff7de4e53) (dst 0x7ffff7de4560))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.078us)
         (data (Trace (kind Call) (src 0x7ffff7de45b4) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.078us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dc4) (dst 0x7ffff7df4dd3))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.082us)
         (data (Trace (kind Return) (src 0x7ffff7df4de0) (dst 0x7ffff7de45b9))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.082us)
         (data (Trace (kind Jump) (src 0x7ffff7de45bb) (dst 0x7ffff7de4668))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.082us)
         (data (Trace (kind Return) (src 0x7ffff7de4674) (dst 0x7ffff7de4e58))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.082us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e6a) (dst 0x7ffff7de4e18))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.082us)
         (data (Trace (kind Call) (src 0x7ffff7de4e53) (dst 0x7ffff7de4560))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.085us)
         (data (Trace (kind Call) (src 0x7ffff7de45b4) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.085us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.088us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.088us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.088us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.09us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.09us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.09us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.091us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.091us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.091us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.097us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.097us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.097us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.101us)
         (data (Trace (kind Return) (src 0x7ffff7df4dd2) (dst 0x7ffff7de45b9))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.101us)
         (data (Trace (kind Jump) (src 0x7ffff7de4601) (dst 0x7ffff7de4678))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.101us)
         (data (Trace (kind Call) (src 0x7ffff7de467f) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.116us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.116us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.116us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.118us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.118us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.118us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.12us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.12us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.12us)
         (data (Trace (kind Jump) (src 0x7ffff7df4dce) (dst 0x7ffff7df4dc0))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.122us)
         (data (Trace (kind Return) (src 0x7ffff7df4dd2) (dst 0x7ffff7de4684))))))
-     (callstack ((new_symbols ()) (callstack ((24 7))))))
+     (callstack ((new_symbols ()) (callstack ((24 8))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.122us)
         (data (Trace (kind Jump) (src 0x7ffff7de468b) (dst 0x7ffff7de4619))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.122us)
         (data (Trace (kind Return) (src 0x7ffff7de4623) (dst 0x7ffff7de4e58))))))
-     (callstack ((new_symbols ()) (callstack ((70 6))))))
+     (callstack ((new_symbols ()) (callstack ((70 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.122us)
         (data (Trace (kind Jump) (src 0x7ffff7de4e6c) (dst 0x7ffff7de4862))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.13us)
         (data (Trace (kind Jump) (src 0x7ffff7de4876) (dst 0x7ffff7de48a6))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.13us)
         (data (Trace (kind Return) (src 0x7ffff7de48d5) (dst 0x7ffff7de509f))))))
-     (callstack ((new_symbols ()) (callstack ((69 5))))))
+     (callstack ((new_symbols ()) (callstack ((69 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.13us)
         (data (Trace (kind Jump) (src 0x7ffff7de50a2) (dst 0x7ffff7de50b6))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.134us)
         (data (Trace (kind Return) (src 0x7ffff7de5141) (dst 0x7ffff7b4b30d))))))
-     (callstack ((new_symbols ()) (callstack ((68 4))))))
+     (callstack ((new_symbols ()) (callstack ((68 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.136us)
         (data (Trace (kind Return) (src 0x7ffff7b4b327) (dst 0x7ffff7a2f3cf))))))
-     (callstack ((new_symbols ()) (callstack ((73 3))))))
+     (callstack ((new_symbols ()) (callstack ((73 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.136us)
         (data (Trace (kind Call) (src 0x7ffff7a2f3f9) (dst 0x7ffff7b0b990))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.357us)
         (data (Trace (trace_state_change End) (src 0x7ffff7b0b990) (dst 0x0))))))
      (callstack
-      ((new_symbols (((From_perf __init_misc) 86))) (callstack ((86 0) (85 2))))))
+      ((new_symbols (((From_perf __init_misc) 86))) (callstack ((86 0) (85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.786us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7b0b990))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (86 3))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (86 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 134.826us)
         (data (Trace (kind Call) (src 0x7ffff7b0b9ae) (dst 0x7ffff7a9b930))))))
-     (callstack ((new_symbols ()) (callstack ((86 3))))))
+     (callstack ((new_symbols ()) (callstack ((86 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.058us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a9b930) (dst 0x0))))))
      (callstack
-      ((new_symbols (((From_perf __GI_strrchr) 87))) (callstack ((87 0) (86 3))))))
+      ((new_symbols (((From_perf __GI_strrchr) 87))) (callstack ((87 0) (86 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.452us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a9b930))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (87 4))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (87 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.501us)
         (data (Trace (kind Jump) (src 0x7ffff7a9b97a) (dst 0x7ffff7a9b99e))))))
-     (callstack ((new_symbols ()) (callstack ((87 4))))))
+     (callstack ((new_symbols ()) (callstack ((87 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.501us)
         (data (Trace (kind Jump) (src 0x7ffff7a9b9b9) (dst 0x7ffff7a9b97c))))))
-     (callstack ((new_symbols ()) (callstack ((87 4))))))
+     (callstack ((new_symbols ()) (callstack ((87 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.501us)
         (data (Trace (kind Jump) (src 0x7ffff7a9b9ad) (dst 0x7ffff7a9b9bb))))))
-     (callstack ((new_symbols ()) (callstack ((87 4))))))
+     (callstack ((new_symbols ()) (callstack ((87 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.524us)
         (data (Trace (kind Return) (src 0x7ffff7a9b9ce) (dst 0x7ffff7b0b9b3))))))
-     (callstack ((new_symbols ()) (callstack ((87 4))))))
+     (callstack ((new_symbols ()) (callstack ((87 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.536us)
         (data (Trace (kind Return) (src 0x7ffff7b0b9db) (dst 0x7ffff7a2f3fe))))))
-     (callstack ((new_symbols ()) (callstack ((86 3))))))
+     (callstack ((new_symbols ()) (callstack ((86 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.536us)
         (data (Trace (kind Call) (src 0x7ffff7a2f3fe) (dst 0x7ffff7a3c720))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 135.749us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a3c720) (dst 0x0))))))
      (callstack
-      ((new_symbols (((From_perf __ctype_init) 88))) (callstack ((88 0) (85 2))))))
+      ((new_symbols (((From_perf __ctype_init) 88))) (callstack ((88 0) (85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.143us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a3c720))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (88 3))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (88 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.208us)
         (data (Trace (kind Return) (src 0x7ffff7a3c770) (dst 0x7ffff7a2f403))))))
-     (callstack ((new_symbols ()) (callstack ((88 3))))))
+     (callstack ((new_symbols ()) (callstack ((88 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.208us)
         (data (Trace (kind Return) (src 0x7ffff7a2f40d) (dst 0x7ffff7dea97f))))))
-     (callstack ((new_symbols ()) (callstack ((85 2))))))
+     (callstack ((new_symbols ()) (callstack ((85 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.219us)
         (data (Trace (kind Call) (src 0x7ffff7dea9c0) (dst 0x7ffff7a2f000))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.255us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f015) (dst 0x7ffff7a2f033))))))
      (callstack
       ((new_symbols (((From_perf check_stdfiles_vtables) 89)))
-       (callstack ((89 0) (84 1))))))
+       (callstack ((89 0) (84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.255us)
         (data (Trace (kind Return) (src 0x7ffff7a2f053) (dst 0x7ffff7dea9c3))))))
-     (callstack ((new_symbols ()) (callstack ((89 2))))))
+     (callstack ((new_symbols ()) (callstack ((89 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.255us)
         (data (Trace (kind Jump) (src 0x7ffff7dea9ca) (dst 0x7ffff7dea9b8))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.265us)
         (data (Trace (kind Call) (src 0x7ffff7dea9c0) (dst 0x7ffff7a2f060))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.275us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f076) (dst 0x7ffff7a2f188))))))
      (callstack
       ((new_symbols (((From_perf init_cacheinfo) 90)))
-       (callstack ((90 0) (84 1))))))
+       (callstack ((90 0) (84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.275us)
         (data (Trace (kind Call) (src 0x7ffff7a2f18d) (dst 0x7ffff7ab3ff0))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.503us)
         (data (Trace (trace_state_change End) (src 0x7ffff7ab3ff0) (dst 0x0))))))
      (callstack
       ((new_symbols (((From_perf handle_intel.isra.0) 91)))
-       (callstack ((91 0) (90 2))))))
+       (callstack ((91 0) (90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 136.88us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7ab3ff0))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (91 3))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.133us)
         (data (Trace (trace_state_change End) (src 0x7ffff7ab3fff) (dst 0x0))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.656us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7ab3fff))))))
-     (callstack ((new_symbols ()) (callstack ((1 4))))))
+     (callstack ((new_symbols ()) (callstack ((1 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.656us)
         (data (Trace (kind Jump) (src 0x7ffff7ab4022) (dst 0x7ffff7ab408d))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.786us)
         (data (Trace (kind Jump) (src 0x7ffff7ab40aa) (dst 0x7ffff7ab4028))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.786us)
         (data (Trace (kind Call) (src 0x7ffff7ab4032) (dst 0x7ffff7ab3ce0))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.808us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d24) (dst 0x7ffff7ab3dae))))))
      (callstack
       ((new_symbols (((From_perf intel_check_word) 92)))
-       (callstack ((92 0) (91 3))))))
+       (callstack ((92 0) (91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.808us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3db4) (dst 0x7ffff7ab3d30))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.808us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d3e) (dst 0x7ffff7ab3d6a))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 137.808us)
         (data (Trace (kind Call) (src 0x7ffff7ab3d88) (dst 0x7ffff7a44c40))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 138.046us)
         (data (Trace (trace_state_change End) (src 0x7ffff7a44c40) (dst 0x0))))))
      (callstack
-      ((new_symbols (((From_perf bsearch) 93))) (callstack ((93 0) (92 4))))))
+      ((new_symbols (((From_perf bsearch) 93))) (callstack ((93 0) (92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 138.439us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7a44c40))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (93 5))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 138.482us)
         (data (Trace (kind Jump) (src 0x7ffff7a44c66) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 138.49us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 138.67us)
         (data (Trace (trace_state_change End) (src 0x7ffff7ab3b30) (dst 0x0))))))
      (callstack
       ((new_symbols (((From_perf intel_02_known_compare) 94)))
-       (callstack ((94 0) (93 5))))))
+       (callstack ((94 0) (93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.034us)
         (data (Trace (trace_state_change Start) (src 0x0) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((1 0) (94 6))))))
+     (callstack ((new_symbols ()) (callstack ((1 0) (94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.075us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.075us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.076us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.078us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.078us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.088us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.105us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.105us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.107us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.107us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.107us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.109us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.111us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.111us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.112us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.112us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.112us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.114us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.114us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.116us)
         (data (Trace (kind Return) (src 0x7ffff7a44cb4) (dst 0x7ffff7ab3d8d))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.116us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d90) (dst 0x7ffff7ab3da7))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.116us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3db4) (dst 0x7ffff7ab3d30))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.116us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d35) (dst 0x7ffff7ab3e00))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.199us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3e27) (dst 0x7ffff7ab3eb1))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.199us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3ece) (dst 0x7ffff7ab3fb0))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.199us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3fde) (dst 0x7ffff7ab3dca))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.218us)
         (data (Trace (kind Return) (src 0x7ffff7ab3dd8) (dst 0x7ffff7ab4037))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.218us)
         (data (Trace (kind Jump) (src 0x7ffff7ab403a) (dst 0x7ffff7ab40c8))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.22us)
         (data (Trace (kind Return) (src 0x7ffff7ab40d6) (dst 0x7ffff7a2f192))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.22us)
         (data (Trace (kind Call) (src 0x7ffff7a2f19a) (dst 0x7ffff7ab3ff0))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.22us)
         (data (Trace (kind Jump) (src 0x7ffff7ab4022) (dst 0x7ffff7ab408d))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Jump) (src 0x7ffff7ab40aa) (dst 0x7ffff7ab4028))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Call) (src 0x7ffff7ab4032) (dst 0x7ffff7ab3ce0))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d24) (dst 0x7ffff7ab3dae))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3db4) (dst 0x7ffff7ab3d30))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d3e) (dst 0x7ffff7ab3d6a))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.298us)
         (data (Trace (kind Call) (src 0x7ffff7ab3d88) (dst 0x7ffff7a44c40))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.305us)
         (data (Trace (kind Jump) (src 0x7ffff7a44c66) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.313us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.314us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.314us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.321us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.322us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.322us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.324us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.324us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.324us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.326us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.327us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.327us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.329us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.329us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.329us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.332us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.332us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.332us)
         (data (Trace (kind Jump) (src 0x7ffff7a44ca2) (dst 0x7ffff7a44c7b))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.333us)
         (data (Trace (kind Call) (src 0x7ffff7a44c95) (dst 0x7ffff7ab3b30))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.333us)
         (data (Trace (kind Return) (src 0x7ffff7ab3b3c) (dst 0x7ffff7a44c98))))))
-     (callstack ((new_symbols ()) (callstack ((94 6))))))
+     (callstack ((new_symbols ()) (callstack ((94 7))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.333us)
         (data (Trace (kind Return) (src 0x7ffff7a44cb4) (dst 0x7ffff7ab3d8d))))))
-     (callstack ((new_symbols ()) (callstack ((93 5))))))
+     (callstack ((new_symbols ()) (callstack ((93 6))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.333us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d90) (dst 0x7ffff7ab3da7))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.341us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3db4) (dst 0x7ffff7ab3d30))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.341us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3d35) (dst 0x7ffff7ab3e00))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.424us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3e45) (dst 0x7ffff7ab3f67))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.439us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3f70) (dst 0x7ffff7ab3f50))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.518us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3f70) (dst 0x7ffff7ab3f50))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.601us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3f70) (dst 0x7ffff7ab3f50))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3f72) (dst 0x7ffff7ab3ec1))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3ece) (dst 0x7ffff7ab3fb0))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Jump) (src 0x7ffff7ab3fde) (dst 0x7ffff7ab3dca))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Return) (src 0x7ffff7ab3dd8) (dst 0x7ffff7ab4037))))))
-     (callstack ((new_symbols ()) (callstack ((92 4))))))
+     (callstack ((new_symbols ()) (callstack ((92 5))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Jump) (src 0x7ffff7ab403a) (dst 0x7ffff7ab40c8))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.68us)
         (data (Trace (kind Return) (src 0x7ffff7ab40d6) (dst 0x7ffff7a2f19f))))))
-     (callstack ((new_symbols ()) (callstack ((91 3))))))
+     (callstack ((new_symbols ()) (callstack ((91 4))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.696us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1d1) (dst 0x7ffff7a2f1e5))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.773us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1f1) (dst 0x7ffff7a2f1d8))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.85us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1f1) (dst 0x7ffff7a2f1d8))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 139.931us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1f1) (dst 0x7ffff7a2f1d8))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.01us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1f1) (dst 0x7ffff7a2f1d8))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.01us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f1e1) (dst 0x7ffff7a2f245))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.01us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f263) (dst 0x7ffff7a2f273))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.104us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f284) (dst 0x7ffff7a2f265))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.194us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f284) (dst 0x7ffff7a2f265))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.199us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f26f) (dst 0x7ffff7a2f2ed))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.199us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f2ff) (dst 0x7ffff7a2f286))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.199us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f296) (dst 0x7ffff7a2f1f8))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.199us)
         (data (Trace (kind Jump) (src 0x7ffff7a2f216) (dst 0x7ffff7a2f0fa))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.23us)
         (data (Trace (kind Return) (src 0x7ffff7a2f168) (dst 0x7ffff7dea9c3))))))
-     (callstack ((new_symbols ()) (callstack ((90 2))))))
+     (callstack ((new_symbols ()) (callstack ((90 3))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.234us)
         (data (Trace (kind Jump) (src 0x7ffff7dea9d4) (dst 0x7ffff7dea910))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.247us)
         (data (Trace (kind Jump) (src 0x7ffff7dea945) (dst 0x7ffff7deab4b))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.247us)
         (data (Trace (kind Jump) (src 0x7ffff7deab53) (dst 0x7ffff7dea9cc))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.265us)
         (data (Trace (kind Return) (src 0x7ffff7dea9f2) (dst 0x7ffff7ddc17a))))))
-     (callstack ((new_symbols ()) (callstack ((84 1))))))
+     (callstack ((new_symbols ()) (callstack ((84 2))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.286us)
         (data (Trace (kind Jump) (src 0x7ffff7ddc184) (dst 0x401060))))))
-     (callstack ((new_symbols ()) (callstack ((83 0))))))
+     (callstack ((new_symbols ()) (callstack ((83 1))))))
     ((event
       (Ok
        ((thread ((pid (30549)) (tid (30549)))) (time 140.515us)
@@ -48170,5 +48169,6 @@ let%expect_test "test-events-output" =
         (data
          (Trace (trace_state_change End) (kind Syscall) (src 0x7ffff7ad2da7)
           (dst 0x0))))))
-     (callstack ((new_symbols ()) (callstack ((125 4)))))) |}]
+     (callstack ((new_symbols ()) (callstack ((125 4))))))
+    |}]
 ;;
