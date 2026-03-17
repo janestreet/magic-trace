@@ -50,9 +50,9 @@ jobs:
       - name: Build zlib with musl
         run: |
           mkdir musl-zlib
-          filename='zlib-1.3.1.tar.gz'
+          filename='zlib-1.3.2.tar.gz'
           wget "https://zlib.net/$filename"
-          shasum --check <(echo "f535367b1a11e2f9ac3bec723fb007fbc0d189e5  $filename")
+          shasum -a 256 --check <(echo "bb329a0a2cd0274d05519d61c667c062e06990d72e125ee2dfa8de64f0119d16  $filename")
           tar -xzf "$filename" -C musl-zlib --strip-components=1
           cd musl-zlib
           CC=musl-gcc ./configure --libdir=/usr/lib/x86_64-linux-musl --includedir=/usr/include/x86_64-linux-musl
@@ -86,22 +86,6 @@ jobs:
           opam init --bare -yav https://github.com/ocaml/opam-repository.git
           opam switch set ${{ matrix.ocaml-version }} 2>/dev/null || \
             opam switch create ${{ matrix.ocaml-version }} --repos ox=git+https://github.com/oxcaml/opam-repository.git,default
-
-      - name: Vendor Basement
-        run: |
-          mkdir ../basement
-          curl -L 'https://github.com/janestreet/basement/archive/c657898128a97dcdfbe4b25d79fd0de2e1e5218f.tar.gz' | \
-            tar -C ../basement -xz --strip-components=1
-          git -C ../basement apply $PWD/vendor/basement-semaphore-bug-fix.patch
-          opam pin basement ../basement
-
-      - name: Vendor Core_unix
-        run: |
-          mkdir ../core_unix
-          curl -L 'https://github.com/janestreet/core_unix/archive/63390a3f75376156e77ed49d6cc07ca48a90dd53.tar.gz' | \
-            tar -C ../core_unix -xz --strip-components=1
-          git -C ../core_unix apply $PWD/vendor/core-unix-musl-compatibility.patch
-          opam pin core_unix ../core_unix
 
       - run: opam install ./magic-trace.opam --deps-only --locked
 
