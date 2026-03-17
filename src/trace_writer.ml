@@ -700,7 +700,13 @@ let check_current_symbol
   match Callstack.top thread_info.callstack with
   | Some { symbol; _ } when not ([%compare.equal: Symbol.t] symbol location.symbol) ->
     ret t thread_info ~time;
-    call t thread_info ~time ~location
+    (* After popping, check if the new top already matches the destination. This happens
+       when CoreSight ETM classifies indirect branches (br xN) as returns for tail calls
+       and vtable dispatches — the pop reveals the true caller which already matches the
+       destination, so pushing again would create a duplicate. *)
+    (match Callstack.top thread_info.callstack with
+     | Some { symbol; _ } when [%compare.equal: Symbol.t] symbol location.symbol -> ()
+     | _ -> call t thread_info ~time ~location)
   | Some _ -> ()
   | None ->
     (* If we have no callstack left, then we just returned out of something we didn't see
