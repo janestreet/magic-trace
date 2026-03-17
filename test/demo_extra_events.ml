@@ -14385,16 +14385,15 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.483ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 12.483ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    -> 12.483ms BEGIN call_destructors
+    -> 12.483ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 12.483ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821873477:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 12.483ms END   call_destructors
     -> 12.483ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821873477:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821873491:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     -> 12.483ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    -> 12.483ms BEGIN _dl_catch_exception
     -> 12.483ms END   _dl_catch_exception
-    -> 12.483ms BEGIN _dl_close_worker
     3871580/3871580 434242.821873491:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821873491:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821873491:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -14486,23 +14485,17 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     3871580/3871580 434242.821881094:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     3871580/3871580 434242.821881125:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 12.491ms END   _dl_close_worker
-    -> 12.491ms BEGIN _dl_close
     -> 12.491ms END   _dl_close
     -> 12.491ms BEGIN rtld_lock_default_unlock_recursive
     -> 12.491ms END   rtld_lock_default_unlock_recursive
-    -> 12.491ms BEGIN _dl_catch_exception
     3871580/3871580 434242.821881139:          1                                branches:uH:   return                   7fca994cc294 _dl_catch_error+0x64 (/usr/lib64/libc-2.28.so) =>     7fca99728969 _dlerror_run+0x69 (/usr/lib64/libdl-2.28.so)
     -> 12.491ms END   _dl_catch_exception
-    -> 12.491ms BEGIN _dl_catch_error
     3871580/3871580 434242.821881156:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 12.491ms END   _dl_catch_error
-    -> 12.491ms BEGIN _dlerror_run
     3871580/3871580 434242.821881165:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 12.491ms END   _dlerror_run
-    -> 12.491ms BEGIN dlclose
     3871580/3871580 434242.821881201:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 12.491ms END   dlclose
-    -> 12.491ms BEGIN main
     3871580/3871580 434242.821881212:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 12.491ms BEGIN dlopen@plt
     3871580/3871580 434242.821881232:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -16431,16 +16424,15 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     ->  12.53ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     ->  12.53ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    ->  12.53ms BEGIN call_destructors
+    ->  12.53ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    ->  12.53ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821919859:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     ->  12.53ms END   call_destructors
     ->  12.53ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821919859:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821919875:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     ->  12.53ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    ->  12.53ms BEGIN _dl_catch_exception
     ->  12.53ms END   _dl_catch_exception
-    ->  12.53ms BEGIN _dl_close_worker
     3871580/3871580 434242.821919875:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821919875:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821919875:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -16530,25 +16522,19 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.537ms END   _dl_debug_state
     3871580/3871580 434242.821927334:          1                                branches:uH:   jmp                      7fca99945dca _dl_close+0x3a (/usr/lib64/ld-2.28.so) =>     7fca99931040 rtld_lock_default_unlock_recursive+0x0 (/usr/lib64/ld-2.28.so)
     -> 12.537ms END   _dl_close_worker
-    -> 12.537ms BEGIN _dl_close
     3871580/3871580 434242.821927335:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     -> 12.537ms END   _dl_close
     -> 12.537ms BEGIN rtld_lock_default_unlock_recursive
     3871580/3871580 434242.821927362:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 12.537ms END   rtld_lock_default_unlock_recursive
-    -> 12.537ms BEGIN _dl_catch_exception
     3871580/3871580 434242.821927377:          1                                branches:uH:   return                   7fca994cc294 _dl_catch_error+0x64 (/usr/lib64/libc-2.28.so) =>     7fca99728969 _dlerror_run+0x69 (/usr/lib64/libdl-2.28.so)
     -> 12.537ms END   _dl_catch_exception
-    -> 12.537ms BEGIN _dl_catch_error
     3871580/3871580 434242.821927393:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 12.537ms END   _dl_catch_error
-    -> 12.537ms BEGIN _dlerror_run
     3871580/3871580 434242.821927402:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 12.537ms END   _dlerror_run
-    -> 12.537ms BEGIN dlclose
     3871580/3871580 434242.821927436:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 12.537ms END   dlclose
-    -> 12.537ms BEGIN main
     3871580/3871580 434242.821927450:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 12.537ms BEGIN dlopen@plt
     3871580/3871580 434242.821927450:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -18477,16 +18463,15 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.575ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 12.575ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    -> 12.575ms BEGIN call_destructors
+    -> 12.575ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 12.575ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821965737:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 12.575ms END   call_destructors
     -> 12.575ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821965737:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821965751:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     -> 12.575ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    -> 12.575ms BEGIN _dl_catch_exception
     -> 12.575ms END   _dl_catch_exception
-    -> 12.575ms BEGIN _dl_close_worker
     3871580/3871580 434242.821965751:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821965751:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 434242.821965751:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -18578,14 +18563,11 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     3871580/3871580 434242.821972994:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     3871580/3871580 434242.821973018:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 12.583ms END   _dl_close_worker
-    -> 12.583ms BEGIN _dl_close
     -> 12.583ms END   _dl_close
     -> 12.583ms BEGIN rtld_lock_default_unlock_recursive
     -> 12.583ms END   rtld_lock_default_unlock_recursive
-    -> 12.583ms BEGIN _dl_catch_exception
     3871580/3871580 434242.821973113:          1                                branches:uH:   tr end                   7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so) =>                0 [unknown] ([unknown])
     -> 12.583ms END   _dl_catch_exception
-    -> 12.583ms BEGIN _dl_catch_error
     3871580/3871580 434242.821973883:         50                  branch-misses/period=50/u:                                      0     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     3871580/3871580 434242.821974437:          1                                branches:uH:   tr strt                             0 [unknown] ([unknown]) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 12.583ms BEGIN [untraced]
@@ -18593,13 +18575,10 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.584ms END   [untraced]
     3871580/3871580 434242.821974466:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 12.584ms END   _dl_catch_error
-    -> 12.584ms BEGIN _dlerror_run
     3871580/3871580 434242.821974573:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 12.584ms END   _dlerror_run
-    -> 12.584ms BEGIN dlclose
     3871580/3871580 434242.821974605:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 12.584ms END   dlclose
-    -> 12.584ms BEGIN main
     3871580/3871580 434242.821974618:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 12.584ms BEGIN dlopen@plt
     3871580/3871580 434242.821974647:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -20034,39 +20013,6 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.609ms END   _dl_catch_error
     -> 12.609ms END   _dlerror_run
     -> 12.609ms END   dlopen@@GLIBC_2.2.5
-    -> 12.609ms END   main
-    -> 12.609ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   call_destructors
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_close_worker
-    -> 12.609ms END   _dl_close
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_catch_error
-    -> 12.609ms END   _dlerror_run
-    -> 12.609ms END   dlclose
-    -> 12.609ms END   main
-    -> 12.609ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   call_destructors
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_close_worker
-    -> 12.609ms END   _dl_close
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_catch_error
-    -> 12.609ms END   _dlerror_run
-    -> 12.609ms END   dlclose
-    -> 12.609ms END   main
-    -> 12.609ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 12.609ms END   call_destructors
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_close_worker
-    -> 12.609ms END   _dl_close
-    -> 12.609ms END   _dl_catch_exception
-    -> 12.609ms END   _dl_catch_error
-    -> 12.609ms END   _dlerror_run
-    -> 12.609ms END   dlclose
     -> 12.609ms END   main
     |}]
 ;;
@@ -22006,16 +21952,15 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.544ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.544ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    -> 112.544ms BEGIN call_destructors
+    -> 112.544ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.544ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585701725:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.544ms END   call_destructors
     -> 112.544ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585701725:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585701743:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     -> 112.544ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    -> 112.544ms BEGIN _dl_catch_exception
     -> 112.544ms END   _dl_catch_exception
-    -> 112.544ms BEGIN _dl_close_worker
     3871580/3871580 431345.585701743:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585701743:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585701749:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -22107,23 +22052,17 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585708917:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     3871580/3871580 431345.585708941:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 112.552ms END   _dl_close_worker
-    -> 112.552ms BEGIN _dl_close
     -> 112.552ms END   _dl_close
     -> 112.552ms BEGIN rtld_lock_default_unlock_recursive
     -> 112.552ms END   rtld_lock_default_unlock_recursive
-    -> 112.552ms BEGIN _dl_catch_exception
     3871580/3871580 431345.585708955:          1                                branches:uH:   return                   7fca994cc294 _dl_catch_error+0x64 (/usr/lib64/libc-2.28.so) =>     7fca99728969 _dlerror_run+0x69 (/usr/lib64/libdl-2.28.so)
     -> 112.552ms END   _dl_catch_exception
-    -> 112.552ms BEGIN _dl_catch_error
     3871580/3871580 431345.585708971:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 112.552ms END   _dl_catch_error
-    -> 112.552ms BEGIN _dlerror_run
     3871580/3871580 431345.585708981:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 112.552ms END   _dlerror_run
-    -> 112.552ms BEGIN dlclose
     3871580/3871580 431345.585709016:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 112.552ms END   dlclose
-    -> 112.552ms BEGIN main
     3871580/3871580 431345.585709032:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 112.552ms BEGIN dlopen@plt
     3871580/3871580 431345.585709033:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -24047,16 +23986,15 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.588ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.588ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    -> 112.588ms BEGIN call_destructors
+    -> 112.588ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.588ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585745170:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.588ms END   call_destructors
     -> 112.588ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585745170:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585745188:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     -> 112.588ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    -> 112.588ms BEGIN _dl_catch_exception
     -> 112.588ms END   _dl_catch_exception
-    -> 112.588ms BEGIN _dl_close_worker
     3871580/3871580 431345.585745188:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585745188:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585745188:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -24146,25 +24084,19 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.595ms END   _dl_debug_state
     3871580/3871580 431345.585752387:          1                                branches:uH:   jmp                      7fca99945dca _dl_close+0x3a (/usr/lib64/ld-2.28.so) =>     7fca99931040 rtld_lock_default_unlock_recursive+0x0 (/usr/lib64/ld-2.28.so)
     -> 112.595ms END   _dl_close_worker
-    -> 112.595ms BEGIN _dl_close
     3871580/3871580 431345.585752388:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     -> 112.595ms END   _dl_close
     -> 112.595ms BEGIN rtld_lock_default_unlock_recursive
     3871580/3871580 431345.585752411:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 112.595ms END   rtld_lock_default_unlock_recursive
-    -> 112.595ms BEGIN _dl_catch_exception
     3871580/3871580 431345.585752424:          1                                branches:uH:   return                   7fca994cc294 _dl_catch_error+0x64 (/usr/lib64/libc-2.28.so) =>     7fca99728969 _dlerror_run+0x69 (/usr/lib64/libdl-2.28.so)
     -> 112.595ms END   _dl_catch_exception
-    -> 112.595ms BEGIN _dl_catch_error
     3871580/3871580 431345.585752441:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 112.595ms END   _dl_catch_error
-    -> 112.595ms BEGIN _dlerror_run
     3871580/3871580 431345.585752450:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 112.595ms END   _dlerror_run
-    -> 112.595ms BEGIN dlclose
     3871580/3871580 431345.585752488:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 112.595ms END   dlclose
-    -> 112.595ms BEGIN main
     3871580/3871580 431345.585752501:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 112.595ms BEGIN dlopen@plt
     3871580/3871580 431345.585752501:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -26093,16 +26025,15 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.633ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.633ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
-    -> 112.633ms BEGIN call_destructors
+    -> 112.633ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.633ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585790221:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.633ms END   call_destructors
     -> 112.633ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585790221:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca99945189 _dl_close_worker+0x4f9 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585790239:          1                                branches:uH:   call                     7fca999453c6 _dl_close_worker+0x736 (/usr/lib64/ld-2.28.so) =>     7fca999403f0 _dl_debug_initialize+0x0 (/usr/lib64/ld-2.28.so)
     -> 112.633ms END   [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
-    -> 112.633ms BEGIN _dl_catch_exception
     -> 112.633ms END   _dl_catch_exception
-    -> 112.633ms BEGIN _dl_close_worker
     3871580/3871580 431345.585790239:          1                                branches:uH:   return                   7fca99940480 _dl_debug_initialize+0x90 (/usr/lib64/ld-2.28.so) =>     7fca999453cb _dl_close_worker+0x73b (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585790239:          1                                branches:uH:   call                     7fca999453d6 _dl_close_worker+0x746 (/usr/lib64/ld-2.28.so) =>     7fca999403e0 _dl_debug_state+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585790249:          1                                branches:uH:   return                   7fca999403e4 _dl_debug_state+0x4 (/usr/lib64/ld-2.28.so) =>     7fca999453db _dl_close_worker+0x74b (/usr/lib64/ld-2.28.so)
@@ -26193,24 +26124,18 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585797275:          1                                branches:uH:   jmp                      7fca99945dca _dl_close+0x3a (/usr/lib64/ld-2.28.so) =>     7fca99931040 rtld_lock_default_unlock_recursive+0x0 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585797276:          1                                branches:uH:   return                   7fca99931048 rtld_lock_default_unlock_recursive+0x8 (/usr/lib64/ld-2.28.so) =>     7fca994cc1a4 _dl_catch_exception+0x84 (/usr/lib64/libc-2.28.so)
     -> 112.64ms END   _dl_close_worker
-    -> 112.64ms BEGIN _dl_close
     -> 112.64ms END   _dl_close
     -> 112.64ms BEGIN rtld_lock_default_unlock_recursive
     3871580/3871580 431345.585797300:          1                                branches:uH:   return                   7fca994cc1e4 _dl_catch_exception+0xc4 (/usr/lib64/libc-2.28.so) =>     7fca994cc263 _dl_catch_error+0x33 (/usr/lib64/libc-2.28.so)
     -> 112.64ms END   rtld_lock_default_unlock_recursive
-    -> 112.64ms BEGIN _dl_catch_exception
     3871580/3871580 431345.585797315:          1                                branches:uH:   return                   7fca994cc294 _dl_catch_error+0x64 (/usr/lib64/libc-2.28.so) =>     7fca99728969 _dlerror_run+0x69 (/usr/lib64/libdl-2.28.so)
     -> 112.64ms END   _dl_catch_exception
-    -> 112.64ms BEGIN _dl_catch_error
     3871580/3871580 431345.585797339:          1                                branches:uH:   return                   7fca99728984 _dlerror_run+0x84 (/usr/lib64/libdl-2.28.so) =>     7fca99728318 dlclose+0x28 (/usr/lib64/libdl-2.28.so)
     -> 112.64ms END   _dl_catch_error
-    -> 112.64ms BEGIN _dlerror_run
     3871580/3871580 431345.585797349:          1                                branches:uH:   return                   7fca99728326 dlclose+0x36 (/usr/lib64/libdl-2.28.so) =>           4009bc main+0x165 (/usr/local/home/demo)
     -> 112.64ms END   _dlerror_run
-    -> 112.64ms BEGIN dlclose
     3871580/3871580 431345.585797386:          1                                branches:uH:   call                           4008de main+0x87 (/usr/local/home/demo) =>           4006f0 dlopen@plt+0x0 (/usr/local/home/demo)
     -> 112.64ms END   dlclose
-    -> 112.64ms BEGIN main
     3871580/3871580 431345.585797401:          1                                branches:uH:   jmp                            4006f0 dlopen@plt+0x0 (/usr/local/home/demo) =>     7fca99728240 dlopen@@GLIBC_2.2.5+0x0 (/usr/lib64/libdl-2.28.so)
     -> 112.64ms BEGIN dlopen@plt
     3871580/3871580 431345.585797401:          1                                branches:uH:   call                     7fca99728285 dlopen@@GLIBC_2.2.5+0x45 (/usr/lib64/libdl-2.28.so) =>     7fca99728900 _dlerror_run+0x0 (/usr/lib64/libdl-2.28.so)
@@ -27248,39 +27173,6 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.66ms END   _dl_catch_error
     -> 112.66ms END   _dlerror_run
     -> 112.66ms END   dlopen@@GLIBC_2.2.5
-    -> 112.66ms END   main
-    -> 112.66ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   call_destructors
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_close_worker
-    -> 112.66ms END   _dl_close
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_catch_error
-    -> 112.66ms END   _dlerror_run
-    -> 112.66ms END   dlclose
-    -> 112.66ms END   main
-    -> 112.66ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   call_destructors
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_close_worker
-    -> 112.66ms END   _dl_close
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_catch_error
-    -> 112.66ms END   _dlerror_run
-    -> 112.66ms END   dlclose
-    -> 112.66ms END   main
-    -> 112.66ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
-    -> 112.66ms END   call_destructors
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_close_worker
-    -> 112.66ms END   _dl_close
-    -> 112.66ms END   _dl_catch_exception
-    -> 112.66ms END   _dl_catch_error
-    -> 112.66ms END   _dlerror_run
-    -> 112.66ms END   dlclose
     -> 112.66ms END   main
     |}]
 ;;

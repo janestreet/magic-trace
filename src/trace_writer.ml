@@ -74,6 +74,11 @@ module Callstack = struct
   let is_empty t = Stack.is_empty t.stack
   let depth t = Stack.length t.stack
 
+  let mem t symbol =
+    Stack.exists t.stack ~f:(fun (location : Event.Location.t) ->
+      [%compare.equal: Symbol.t] location.symbol symbol)
+  ;;
+
   let how_many_match { stack; create_time = _ } (future_callstack : Event.Location.t list)
     =
     let zipped_stacks, _ =
@@ -717,10 +722,15 @@ let check_current_symbol
     Callstack.push thread_info.callstack location
 ;;
 
-(* Like [check_current_symbol], but used after a [ret] has already popped one frame. When
-   the new top doesn't match the destination, this means the popped function was a
-   trampoline (e.g. PLT stub, vtable dispatch wrapper) and the destination is the real
-   callee. We should push it on top of the caller without popping anything else. *)
+(* Like [check_current_symbol], but used after a [ret] has already popped one frame.
+
+   When the new top doesn't match the destination, we search the callstack:
+   - If the destination is found deeper on the stack, this is a normal return that skipped
+     over intermediate frames (e.g. a "same-function, different-label" ghost frame like
+     __entry_text_start vs entry_SYSCALL_64_after_hwframe). Pop down to it.
+   - If the destination is NOT on the stack, the popped function was a trampoline (e.g.
+     PLT stub, vtable dispatch wrapper) and the destination is the real callee. Push it on
+     top of the caller without popping anything else. *)
 let check_current_symbol_after_ret
   t
   (thread_info : _ Thread_info.t)
@@ -729,11 +739,27 @@ let check_current_symbol_after_ret
   =
   match Callstack.top thread_info.callstack with
   | Some { symbol; _ } when [%compare.equal: Symbol.t] symbol location.symbol -> ()
-  | Some _ -> call t thread_info ~time ~location
-  | None ->
-    let ev = Pending_event.create_call location ~from_untraced:true in
-    write_pending_event t thread_info thread_info.callstack.create_time ev;
-    Callstack.push thread_info.callstack location
+  | _ ->
+    if Callstack.mem thread_info.callstack location.symbol
+    then (
+      (* Destination is on the stack — pop until we reach it. *)
+      let rec pop_until_match () =
+        match Callstack.top thread_info.callstack with
+        | Some { symbol; _ } when [%compare.equal: Symbol.t] symbol location.symbol -> ()
+        | Some _ ->
+          ret t thread_info ~time;
+          pop_until_match ()
+        | None -> ()
+      in
+      pop_until_match ())
+    else (
+      (* Destination is not on the stack — it's a trampoline target, push it. *)
+      match Callstack.top thread_info.callstack with
+      | Some _ -> call t thread_info ~time ~location
+      | None ->
+        let ev = Pending_event.create_call location ~from_untraced:true in
+        write_pending_event t thread_info thread_info.callstack.create_time ev;
+        Callstack.push thread_info.callstack location)
 ;;
 
 (* OCaml-specific hacks around tracking exception control flow. Supports two modes.
