@@ -105,23 +105,21 @@ module Recording = struct
 
        The mechanism we use depends on the user-selected event.
 
-       # Snapshot on function call (breakpoint)
-       snapshot-on-exit doesn't apply because it can't support multi-snapshot. Prefer
-       ctlfd, fallback to SIGUSR2.
+       # Snapshot on function call (breakpoint) snapshot-on-exit doesn't apply because it
+       can't support multi-snapshot. Prefer ctlfd, fallback to SIGUSR2.
 
        If a tracee exits soon after hitting the breakpoint, perf may exit before we tell
        it to snapshot. We could fix this in single-snapshot mode by using snapshot-on-exit
        in combination with SIGINT or the stop command. But this is rare enough that we
        don't implement this.
 
-       # Snapshot on Exit
-       Practically, this means take a snapshot when the tracee exits or when the user
-       sends SIGINT to magic-trace.
+       # Snapshot on Exit Practically, this means take a snapshot when the tracee exits or
+       when the user sends SIGINT to magic-trace.
 
        In run mode, it is guaranteed via waitpid that the tracee exits before backend
-       snapshotting logic runs. In attach mode, magic-trace doesn't get any notification when
-       the tracee exits. So, when we enter [maybe_take_snapshot] any of these could have
-       happened:
+       snapshotting logic runs. In attach mode, magic-trace doesn't get any notification
+       when the tracee exits. So, when we enter [maybe_take_snapshot] any of these could
+       have happened:
        1. tracee died, perf has exited (and took a snapshot if snapshot-on-exit)
        2. tracee died, perf is snapshotting due to snapshot-on-exit
        3. tracee alive, perf is nominal (attach mode, magic-trace got SIGINT)
@@ -135,11 +133,10 @@ module Recording = struct
 
        perf support | MT event | --snapshot=e | snapshot | shutdown | note
        ================================================================================================
-       old          | *        | unsupported  | SIGUSR2  | SIGTERM  | tracee exit won't induce snapshot
-       snap-on-exit | on-exit  | yes          | SIGINT   | SIGTERM  | one or both signal is redundant
-       snap-on-exit | function | no           | SIGUSR2  | SIGTERM  |
-       ctlfd        | on-exit  | yes          | stop     | stop     | one or both controls is redundant
-       ctlfd        | function | no           | snapshot | stop     |
+       old | * | unsupported | SIGUSR2 | SIGTERM | tracee exit won't induce snapshot
+       snap-on-exit | on-exit | yes | SIGINT | SIGTERM | one or both signal is redundant
+       snap-on-exit | function | no | SIGUSR2 | SIGTERM | ctlfd | on-exit | yes | stop |
+       stop | one or both controls is redundant ctlfd | function | no | snapshot | stop |
     *)
 
     type t =
@@ -229,6 +226,12 @@ module Recording = struct
     | Userspace_and_kernel -> "uk"
   ;;
 
+  let hardware_trace_event_name () =
+    match Collection_mode.hardware_trace_device_path () with
+    | Some device_path -> Filename.basename device_path
+    | None -> "intel_pt"
+  ;;
+
   let perf_intel_pt_config_of_timer_resolution
     ~capabilities
     (timer_resolution : Timer_resolution.t)
@@ -279,8 +282,8 @@ module Recording = struct
     | Sample { freq } -> Or_error.return [%string "freq=%{freq#Int}"]
     | Custom _ ->
       Or_error.error_string
-        "[-timer-resolution Custom] can only be used with Intel PT. (Are you running on \
-         a physical Intel machine without [-sampling]?)"
+        "[-timer-resolution Custom] can only be used with hardware trace (Intel PT / \
+         CoreSight ETM). (Are you running without [-sampling]?)"
   ;;
 
   let perf_config_of_extra_events ~selector extra_events =
@@ -317,7 +320,8 @@ module Recording = struct
         let%map.Or_error intel_pt_config =
           perf_intel_pt_config_of_timer_resolution ~capabilities timer_resolution
         in
-        [%string "intel_pt/%{intel_pt_config}/%{selector}"]
+        let event_name = hardware_trace_event_name () in
+        [%string "%{event_name}/%{intel_pt_config}/%{selector}"]
       | Stacktrace_sampling _ ->
         let%map.Or_error cycles_config =
           perf_cycles_config_of_timer_resolution timer_resolution
@@ -379,15 +383,13 @@ module Recording = struct
             https://github.com/janestreet/magic-trace/wiki/Supported-platforms,-programming-languages,-and-runtimes#supported-perf-versions\n\
             %!"
      | Application_calls_a_function _, _ | _, Attach -> ());
-    (* CR-someday alamoreaux: [--per-thread] is an important argument here.
-       However perf fails with an invalid argument to mmap if [--per-thread] is
-       given as well as additional events to sample. Without [--per-thread], you
-       can end up with traces have gaps in time if a process was switching
-       between CPUs.
+    (* CR-someday alamoreaux: [--per-thread] is an important argument here. However perf
+       fails with an invalid argument to mmap if [--per-thread] is given as well as
+       additional events to sample. Without [--per-thread], you can end up with traces
+       have gaps in time if a process was switching between CPUs.
 
-       We would allow this flag always if perf didn't crash. Even then, it might
-       be worth having magic-trace potentially be able to handle / filter the
-       trace better. *)
+       We would allow this flag always if perf didn't crash. Even then, it might be worth
+       having magic-trace potentially be able to handle / filter the trace better. *)
     let per_thread_opts =
       match Collection_mode.extra_events collection_mode with
       | [] -> [ "--per-thread" ]
@@ -414,10 +416,10 @@ module Recording = struct
            ( callgraph_mode
            , Perf_capabilities.(do_intersect capabilities last_branch_record) )
          with
-         (* We choose to default to dwarf if lbr is not available. This is
-            because dwarf will work on any setup, while frame pointers requires
-            compilation with [-fno-omit-frame-pointers]. Although decoding is
-            slow and perf.data file sizes are larger. *)
+         (* We choose to default to dwarf if lbr is not available. This is because dwarf
+            will work on any setup, while frame pointers requires compilation with
+            [-fno-omit-frame-pointers]. Although decoding is slow and perf.data file sizes
+            are larger. *)
          | None, false ->
            Core.eprintf
              "Warning: [-callgraph-mode] is defaulting to [Dwarf] which may have high \
@@ -456,9 +458,9 @@ module Recording = struct
         | Intel_processor_trace _, Userspace, _ | Stacktrace_sampling _, _, _ -> []
         | Intel_processor_trace _, (Kernel | Userspace_and_kernel), true -> [ "--kcore" ]
         | Intel_processor_trace _, (Kernel | Userspace_and_kernel), false ->
-          (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh
-             here instead of bailing. But that's tricky, and upgrading to a newer
-             perf is easier. *)
+          (* Strictly speaking, we could recreate tools/perf/perf-with-kcore.sh here
+             instead of bailing. But that's tricky, and upgrading to a newer perf is
+             easier. *)
           Core.eprintf
             "Warning: old perf version detected! perf userspace tools v5.5 contain an \
              important feature, kcore, that make decoding kernel traces more reliable. \
@@ -475,7 +477,7 @@ module Recording = struct
         [ [%string "-m,%{Pow2_pages.num_pages snapshot_size#Int}"] ]
       | Some _, Stacktrace_sampling _ ->
         Core.eprintf
-          "Warning: -snapshot-size is ignored when not running with Intel PT.\n";
+          "Warning: -snapshot-size is ignored when not running with hardware trace.\n";
         []
       | None, Intel_processor_trace _ | None, Stacktrace_sampling _ -> []
     in
@@ -522,14 +524,14 @@ module Recording = struct
     (* Perf prints output we don't care about and --quiet doesn't work for some reason *)
     let perf_pid = perf_fork_exec ~env:perf_env ~prog:perf ~argv () in
     (* This detaches the perf process from our "process group" but not our session. This
-       makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an attach
-       session, it doesn't also send SIGINT to the perf process, allowing us to send it a
-       SIGUSR2 first to get it to capture a snapshot before exiting. *)
+       makes it so that when Ctrl-C is sent to magic_trace in the terminal to end an
+       attach session, it doesn't also send SIGINT to the perf process, allowing us to
+       send it a SIGUSR2 first to get it to capture a snapshot before exiting. *)
     Core_unix.setpgid ~of_:perf_pid ~to_:perf_pid;
     invoke_after_fork ();
     let%map () = Async.Clock_ns.after (Time_ns.Span.of_ms 500.0) in
-    (* Check that the process hasn't failed after waiting, because there's no point pausing
-       to do recording if we've already failed. *)
+    (* Check that the process hasn't failed after waiting, because there's no point
+       pausing to do recording if we've already failed. *)
     let res = Core_unix.wait_nohang (`Pid perf_pid) in
     let%map.Or_error () =
       match res with
@@ -547,8 +549,8 @@ module Recording = struct
     | Never, _ -> ()
     (* Do not snapshot at the end of a program if the user has set up a trigger symbol. *)
     | Function_call, `ctrl_c -> ()
-    (* This shouldn't happen unless there was a bug elsewhere. It would imply that a trigger
-       symbol was hit when there is no trigger symbol configured. *)
+    (* This shouldn't happen unless there was a bug elsewhere. It would imply that a
+       trigger symbol was hit when there is no trigger symbol configured. *)
     | At_exit, `function_call -> ()
     (* Trigger symbol was hit, and we're configured to look for them. *)
     | Function_call, `function_call -> Control.take_snapshot t.control t.pid
@@ -628,9 +630,8 @@ let decode_events
       in
       if debug_print_perf_commands
       then Core.printf "%s %s\n%!" perf (String.concat ~sep:" " args);
-      (* CR-someday tbrindus: this should be switched over to using
-         [perf_fork_exec] to avoid the [perf script] process from outliving
-         the parent. *)
+      (* CR-someday tbrindus: this should be switched over to using [perf_fork_exec] to
+         avoid the [perf script] process from outliving the parent. *)
       let%map perf_script_proc = Process.create_exn ~env:perf_env ~prog:perf ~args () in
       let line_pipe = Process.stdout perf_script_proc |> Reader.lines in
       don't_wait_for

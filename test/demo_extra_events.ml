@@ -14375,7 +14375,6 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     3871580/3871580 434242.821873453:          1                                branches:uH:   jcc                      7fca98fec531 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so)
     -> 12.483ms END   __unregister_atfork
     -> 12.483ms END   __cxa_finalize
-    -> 12.483ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821873453:          1                                branches:uH:   return                   7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec5bc [unknown] (/usr/lib64/libm-2.28.so)
@@ -14384,9 +14383,10 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.483ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    -> 12.483ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 12.483ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 12.483ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    -> 12.483ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 12.483ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821873477:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 12.483ms END   call_destructors
     -> 12.483ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -16414,7 +16414,6 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     3871580/3871580 434242.821919835:          1                                branches:uH:   jcc                      7fca98fec531 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so)
     ->  12.53ms END   __unregister_atfork
     ->  12.53ms END   __cxa_finalize
-    ->  12.53ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821919835:          1                                branches:uH:   return                   7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec5bc [unknown] (/usr/lib64/libm-2.28.so)
@@ -16423,9 +16422,10 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     ->  12.53ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    ->  12.53ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     ->  12.53ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     ->  12.53ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    ->  12.53ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    ->  12.53ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821919859:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     ->  12.53ms END   call_destructors
     ->  12.53ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -18453,7 +18453,6 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     3871580/3871580 434242.821965717:          1                                branches:uH:   jcc                      7fca98fec531 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so)
     -> 12.575ms END   __unregister_atfork
     -> 12.575ms END   __cxa_finalize
-    -> 12.575ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821965717:          1                                branches:uH:   return                   7fca98fec548 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca98fec5bc [unknown] (/usr/lib64/libm-2.28.so)
@@ -18462,9 +18461,10 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.575ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    -> 12.575ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 12.575ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 12.575ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    -> 12.575ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 12.575ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 434242.821965737:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 12.575ms END   call_destructors
     -> 12.575ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -20013,7 +20013,8 @@ let%expect_test "C Demo with sampled branch misses and cache misses" =
     -> 12.609ms END   _dl_catch_error
     -> 12.609ms END   _dlerror_run
     -> 12.609ms END   dlopen@@GLIBC_2.2.5
-    -> 12.609ms END   main |}]
+    -> 12.609ms END   main
+    |}]
 ;;
 
 let%expect_test "C Demo which also traces branch misses" =
@@ -21944,15 +21945,15 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585701701:          1                                branches:uH:   return                   7fca98fec5c4 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca99944b25 call_destructors+0x45 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585701705:          1                                branches:uH:   jmp                      7fca99944b47 call_destructors+0x67 (/usr/lib64/ld-2.28.so) =>     7fca9908b7bc [unknown] (/usr/lib64/libm-2.28.so)
     -> 112.544ms END   __cxa_finalize
-    -> 112.544ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    -> 112.544ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.544ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.544ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    -> 112.544ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.544ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585701725:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.544ms END   call_destructors
     -> 112.544ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -23978,15 +23979,15 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585745148:          1                                branches:uH:   return                   7fca98fec5c4 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca99944b25 call_destructors+0x45 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585745151:          1                                branches:uH:   jmp                      7fca99944b47 call_destructors+0x67 (/usr/lib64/ld-2.28.so) =>     7fca9908b7bc [unknown] (/usr/lib64/libm-2.28.so)
     -> 112.588ms END   __cxa_finalize
-    -> 112.588ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    -> 112.588ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.588ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.588ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    -> 112.588ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.588ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585745170:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.588ms END   call_destructors
     -> 112.588ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -26017,15 +26018,15 @@ let%expect_test "C Demo which also traces branch misses" =
     3871580/3871580 431345.585790198:          1                                branches:uH:   return                   7fca98fec5c4 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca99944b25 call_destructors+0x45 (/usr/lib64/ld-2.28.so)
     3871580/3871580 431345.585790201:          1                                branches:uH:   jmp                      7fca99944b47 call_destructors+0x67 (/usr/lib64/ld-2.28.so) =>     7fca9908b7bc [unknown] (/usr/lib64/libm-2.28.so)
     -> 112.633ms END   __cxa_finalize
-    -> 112.633ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms BEGIN [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms BEGIN [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms END   [unknown @ 0x7fca98fec520 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms BEGIN [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms END   [unknown @ 0x7fca98fec548 (/usr/lib64/libm-2.28.so)]
-    -> 112.633ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
     -> 112.633ms BEGIN [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
     -> 112.633ms END   [unknown @ 0x7fca98fec5bc (/usr/lib64/libm-2.28.so)]
+    -> 112.633ms END   [unknown @ 0x7fca98fec5b7 (/usr/lib64/libm-2.28.so)]
+    -> 112.633ms END   [unknown @ 0x7fca98fec590 (/usr/lib64/libm-2.28.so)]
     3871580/3871580 431345.585790221:          1                                branches:uH:   return                   7fca9908b7c8 [unknown] (/usr/lib64/libm-2.28.so) =>     7fca994cc1fc _dl_catch_exception+0xdc (/usr/lib64/libc-2.28.so)
     -> 112.633ms END   call_destructors
     -> 112.633ms BEGIN [unknown @ 0x7fca9908b7bc (/usr/lib64/libm-2.28.so)]
@@ -27172,5 +27173,6 @@ let%expect_test "C Demo which also traces branch misses" =
     -> 112.66ms END   _dl_catch_error
     -> 112.66ms END   _dlerror_run
     -> 112.66ms END   dlopen@@GLIBC_2.2.5
-    -> 112.66ms END   main |}]
+    -> 112.66ms END   main
+    |}]
 ;;

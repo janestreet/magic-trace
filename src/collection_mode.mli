@@ -37,4 +37,10 @@ type t =
   | Stacktrace_sampling of { extra_events : Event.t list }
 
 val extra_events : t -> Event.t list
+
+(** Returns the sysfs device path for the hardware trace source, if one exists. Returns
+    [/sys/bus/event_source/devices/intel_pt] or [/sys/bus/event_source/devices/cs_etm],
+    whichever is present. *)
+val hardware_trace_device_path : unit -> string option
+
 val param : t Command.Param.t

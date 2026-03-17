@@ -3213,7 +3213,6 @@ let%expect_test "C hello world, userspace only, gcc" =
     30549/30549 174427.938591166:                           1    branches:uH:   call                     7ffff7ddc175 _dl_start_user+0x2d (/usr/lib64/ld-2.17.so) =>     7ffff7dea8b0 _dl_init+0x0 (/usr/lib64/ld-2.17.so)
     30549/30549 174427.938591244:                           1    branches:uH:   call                     7ffff7dea97d _dl_init+0xcd (/usr/lib64/ld-2.17.so) =>     7ffff7a2f320 _init+0x0 (/usr/lib64/libc-2.17.so)
     -> 130.79us END   _dl_start
-    -> 130.79us END   _start
     -> 130.79us BEGIN _dl_start_user
     -> 130.829us BEGIN _dl_init
     30549/30549 174427.938591490:                           1    branches:uH:   tr end                   7ffff7a2f320 _init+0x0 (/usr/lib64/libc-2.17.so) =>                0 [unknown] ([unknown])
@@ -3428,7 +3427,6 @@ let%expect_test "C hello world, userspace only, gcc" =
     -> 140.265us END   _dl_init
     30549/30549 174427.938600891:                           1    branches:uH:   tr end                         401060 _start+0x0 (/j/igm/user/tbrindus/pub/helloworld) =>                0 [unknown] ([unknown])
     -> 140.286us END   _dl_start_user
-    -> 140.286us BEGIN _start
     30549/30549 174427.938601514:                           1    branches:uH:   tr strt                             0 [unknown] ([unknown]) =>           401060 _start+0x0 (/j/igm/user/tbrindus/pub/helloworld)
     -> 140.515us BEGIN [untraced]
     30549/30549 174427.938601514:                           1    branches:uH:   call                           401084 _start+0x24 (/j/igm/user/tbrindus/pub/helloworld) =>           401030 __libc_start_main@plt+0x0 (/j/igm/user/tbrindus/pub/helloworld)
@@ -3695,5 +3693,6 @@ let%expect_test "C hello world, userspace only, gcc" =
     -> 156.068us END   __run_exit_handlers
     -> 156.068us END   exit
     -> 156.068us END   __libc_start_main
-    -> 156.068us END   _start |}]
+    -> 156.068us END   _start
+    |}]
 ;;

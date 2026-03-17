@@ -123,14 +123,19 @@ static int dump_perf_buffer(int fd, char *base,
   return 0;
 }
 
-// See [lib/pmc/src/msr_stubs.c:187] for an explanation
+// Read memory barrier: on x86 a compiler barrier suffices (strong memory
+// ordering), on aarch64 we need a real barrier instruction.
+#if defined(__aarch64__)
+#define rmb() asm volatile("dmb ishld" ::: "memory")
+#else
 #define rmb() asm volatile("" ::: "memory")
+#endif
 
 /*** OPERATIONS ***/
 
 struct tracing_state {
   bool failure_state;
-  int intel_pt_type;
+  int trace_event_type;
   int perf_fd;
   struct perf_event_mmap_page *header;
   char *base, *data, *aux;
@@ -148,8 +153,18 @@ static int read_int_file(const char *path, int *result) {
   return (res != 1) ? -1 : 0;
 }
 
+static const char *trace_device_path(void) {
+  if (access("/sys/bus/event_source/devices/intel_pt", F_OK) == 0)
+    return "/sys/bus/event_source/devices/intel_pt";
+  if (access("/sys/bus/event_source/devices/cs_etm", F_OK) == 0)
+    return "/sys/bus/event_source/devices/cs_etm";
+  return "/sys/bus/event_source/devices/intel_pt";
+}
+
 static int init_tracing_state(struct tracing_state *s) {
-  if(read_int_file("/sys/bus/event_source/devices/intel_pt/type", &s->intel_pt_type))
+  char type_path[256];
+  snprintf(type_path, sizeof(type_path), "%s/type", trace_device_path());
+  if(read_int_file(type_path, &s->trace_event_type))
     return -1;
 
   s->failure_state = false;
@@ -225,7 +240,9 @@ static int start_tracing(struct tracing_state *s, value config, value trace_meta
   s->sb_fd = Long_val(Field(config, recording_config_field_sb_fd));
 
   int max_nonturbo_ratio;
-  if(read_int_file("/sys/bus/event_source/devices/intel_pt/max_nonturbo_ratio", &max_nonturbo_ratio))
+  char ratio_path[256];
+  snprintf(ratio_path, sizeof(ratio_path), "%s/max_nonturbo_ratio", trace_device_path());
+  if(read_int_file(ratio_path, &max_nonturbo_ratio))
     goto failed_tracing;
 
   int pid = Int_val(Field(config, recording_config_field_pid));
@@ -240,21 +257,27 @@ static int start_tracing(struct tracing_state *s, value config, value trace_meta
   struct perf_event_attr attr;
   memset(&attr, 0, sizeof(attr));
 
-  attr.type = s->intel_pt_type;
+  attr.type = s->trace_event_type;
   attr.exclude_kernel = 1;
   attr.exclude_hv = 1;
   attr.sample_period = attr.sample_freq = 1;
   attr.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_TID | PERF_SAMPLE_TIME;
   attr.sample_id_all = attr.mmap = attr.mmap2 = attr.context_switch = 1;
 
-  // These config bits were determined by running this command:
-  // grep -H . /sys/bus/event_source/devices/intel_pt/format/*
-  // It's reasonably complex to parse these dynamically, and they seem consistent
-  // so for now we'll just hard-code the following bits:
-  // cyc (bit 1)=1 - enable high-resolution cycle counts
-  // cyc_thresh (bits 19-22)=1 - set them to the maximum possible frequency
-  // tsc (bit 10)=1 - enable time stamp counter packets for calibration
-  attr.config = (1 << 19) | (1 << 1) | (1 << 10);
+  if (access("/sys/bus/event_source/devices/cs_etm", F_OK) == 0) {
+    // On CoreSight ETM, config bits are determined by the ETM hardware.
+    // Use default config (0) and let the kernel/perf handle it.
+    attr.config = 0;
+  } else {
+    // These config bits were determined by running this command:
+    // grep -H . /sys/bus/event_source/devices/intel_pt/format/*
+    // It's reasonably complex to parse these dynamically, and they seem consistent
+    // so for now we'll just hard-code the following bits:
+    // cyc (bit 1)=1 - enable high-resolution cycle counts
+    // cyc_thresh (bits 19-22)=1 - set them to the maximum possible frequency
+    // tsc (bit 10)=1 - enable time stamp counter packets for calibration
+    attr.config = (1 << 19) | (1 << 1) | (1 << 10);
+  }
 
   attr.comm = attr.comm_exec = 1;
   attr.task = 1;
