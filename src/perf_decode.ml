@@ -264,16 +264,7 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
     let kind : Event.Kind.t option =
       match String.strip kind with
       | "call" -> Some Call
-      | "return" ->
-        (* On aarch64, CoreSight ETM classifies PLT indirect branches (br xN) as returns.
-           A "return" from foo@plt to foo is really a jump. Detect this by checking if the
-           src symbol without @plt matches the dst symbol. *)
-        let src_name = Symbol.display_name src_symbol in
-        let dst_name = Symbol.display_name dst_symbol in
-        if String.is_suffix src_name ~suffix:"@plt"
-           && String.( = ) (String.chop_suffix_exn src_name ~suffix:"@plt") dst_name
-        then Some Jump
-        else Some Return
+      | "return" -> Some Return
       | "int" -> Some Interrupt
       | "jmp" -> Some Jump
       | "jcc" -> Some Jump
