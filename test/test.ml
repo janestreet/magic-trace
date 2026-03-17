@@ -618,8 +618,8 @@ let%expect_test "enqueuing events at start" =
   let events =
     Trace_helpers.(
       (* Tests double-ended queuing of events starting at time zero, with normal events
-         starting at time zero done last in forward order, and inferred events in
-         reverse order before the forward events. *)
+         starting at time zero done last in forward order, and inferred events in reverse
+         order before the forward events. *)
       add Return 0 "fn1";
       add Call 0 "fn2";
       add Call 0 "fn3";
@@ -785,6 +785,324 @@ let%expect_test "filtered trace" =
   return ()
 ;;
 
+(* Tests for CoreSight ETM / ARM aarch64 trampoline patterns, but these patterns also
+   occur on x86 with stripped symbols or in the dynamic linker. *)
+
+let%expect_test "PLT trampoline: call @plt, return @plt -> real_func, return real_func" =
+  let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
+  (* Simulates: call ptmalloc_init -> __tunable_get_val@plt return __tunable_get_val@plt
+     -> __tunable_get_val (PLT stub jumps to real func) return __tunable_get_val ->
+     ptmalloc_init (real func returns to caller) call ptmalloc_init ->
+     __tunable_get_val@plt (second call) return __tunable_get_val@plt -> __tunable_get_val
+     return __tunable_get_val -> ptmalloc_init *)
+  let events =
+    Trace_helpers.(
+      add Call 0 "ptmalloc_init";
+      add Call 10 "__tunable_get_val@plt";
+      add Return 20 "__tunable_get_val";
+      add Return 30 "ptmalloc_init";
+      add Call 40 "__tunable_get_val@plt";
+      add Return 50 "__tunable_get_val";
+      add Return 60 "ptmalloc_init";
+      events ())
+  in
+  let%bind () = dump_using_file events in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value address))
+    (Interned_string (index 105) (value __tunable_get_val@plt))
+    (Interned_string (index 106) (value symbol))
+    (Interned_string (index 107) (value ""))
+    (Event
+     ((timestamp 10ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 108) (value __tunable_get_val))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 30ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 40ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 50ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 50ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Interned_string (index 109) (value ptmalloc_init))
+    (Event
+     ((timestamp 0s) (thread 1) (category 107) (name 109)
+      (arguments ((104 (Pointer 0x0)) (106 (String 109))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 60ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 60ns) (thread 1) (category 107) (name 109) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words)
+    |}];
+  return ()
+;;
+
+let%expect_test "vtable dispatch: call wrapper, return wrapper -> impl" =
+  let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
+  (* Simulates: call _IO_puts -> __overflow return __overflow -> _IO_file_overflow (vtable
+     dispatch, indirect branch as return) call _IO_file_overflow -> _IO_do_write return
+     _IO_do_write -> _IO_file_overflow return _IO_file_overflow -> _IO_puts *)
+  let events =
+    Trace_helpers.(
+      add Call 0 "_IO_puts";
+      add Call 10 "__overflow";
+      add Return 20 "_IO_file_overflow";
+      add Call 30 "_IO_do_write";
+      add Return 40 "_IO_file_overflow";
+      add Return 50 "_IO_puts";
+      events ())
+  in
+  let%bind () = dump_using_file events in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value address))
+    (Interned_string (index 105) (value __overflow))
+    (Interned_string (index 106) (value symbol))
+    (Interned_string (index 107) (value ""))
+    (Event
+     ((timestamp 10ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 108) (value _IO_file_overflow))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Interned_string (index 109) (value _IO_do_write))
+    (Event
+     ((timestamp 30ns) (thread 1) (category 107) (name 109)
+      (arguments ((104 (Pointer 0x0)) (106 (String 109))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 40ns) (thread 1) (category 107) (name 109) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 110) (value _IO_puts))
+    (Event
+     ((timestamp 0s) (thread 1) (category 107) (name 110)
+      (arguments ((104 (Pointer 0x0)) (106 (String 110))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 50ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 50ns) (thread 1) (category 107) (name 110) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words)
+    |}];
+  return ()
+;;
+
+let%expect_test "tail call via jump: _setjmp -> __sigsetjmp" =
+  let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
+  (* Simulates: call __libc_start_call_main -> _setjmp jmp _setjmp -> __sigsetjmp (tail
+     call via jump) return __sigsetjmp -> __libc_start_call_main *)
+  let events =
+    Trace_helpers.(
+      add Call 0 "__libc_start_call_main";
+      add Call 10 "_setjmp";
+      add Jump 20 "__sigsetjmp";
+      add Return 30 "__libc_start_call_main";
+      events ())
+  in
+  let%bind () = dump_using_file events in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value address))
+    (Interned_string (index 105) (value _setjmp))
+    (Interned_string (index 106) (value symbol))
+    (Interned_string (index 107) (value ""))
+    (Event
+     ((timestamp 10ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 108) (value __sigsetjmp))
+    (Event
+     ((timestamp 20ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Interned_string (index 109) (value __libc_start_call_main))
+    (Event
+     ((timestamp 0s) (thread 1) (category 107) (name 109)
+      (arguments ((104 (Pointer 0x0)) (106 (String 109))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 30ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 30ns) (thread 1) (category 107) (name 109) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words)
+    |}];
+  return ()
+;;
+
+let%expect_test "repeated PLT calls don't staircase" =
+  let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
+  (* Simulates 4 consecutive calls through the same PLT stub. The key invariant is that
+     ptmalloc_init should remain open throughout, and each __tunable_get_val call should
+     be a clean nested frame without ptmalloc_init being closed and reopened. *)
+  let events =
+    Trace_helpers.(
+      add Call 0 "ptmalloc_init";
+      (* first call *)
+      add Call 100 "__tunable_get_val@plt";
+      add Return 200 "__tunable_get_val";
+      add Return 300 "ptmalloc_init";
+      (* second call *)
+      add Call 400 "__tunable_get_val@plt";
+      add Return 500 "__tunable_get_val";
+      add Return 600 "ptmalloc_init";
+      (* third call *)
+      add Call 700 "__tunable_get_val@plt";
+      add Return 800 "__tunable_get_val";
+      add Return 900 "ptmalloc_init";
+      (* fourth call *)
+      add Call 1000 "__tunable_get_val@plt";
+      add Return 1100 "__tunable_get_val";
+      add Return 1200 "ptmalloc_init";
+      events ())
+  in
+  let%bind () = dump_using_file events in
+  [%expect
+    {|
+    (Interned_string (index 1) (value process))
+    (Tick_initialization (ticks_per_second 1000000000))
+    (Interned_string (index 102) (value "[pid=1234] [tid=456]"))
+    (Process_name_change (name 102) (pid 1))
+    (Interned_string (index 103) (value main))
+    (Thread_name_change (name 103) (pid 1) (tid 2))
+    (Interned_thread (index 1)
+     (value
+      ((pid 1) (tid 2) (process_name ("[pid=1234] [tid=456]"))
+       (thread_name (main)))))
+    (Interned_string (index 104) (value address))
+    (Interned_string (index 105) (value __tunable_get_val@plt))
+    (Interned_string (index 106) (value symbol))
+    (Interned_string (index 107) (value ""))
+    (Event
+     ((timestamp 100ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 200ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Interned_string (index 108) (value __tunable_get_val))
+    (Event
+     ((timestamp 200ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 300ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 400ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 500ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 500ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 600ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 700ns) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 800ns) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 800ns) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 900ns) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 1us) (thread 1) (category 107) (name 105)
+      (arguments ((104 (Pointer 0x0)) (106 (String 105))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 1.1us) (thread 1) (category 107) (name 105) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 1.1us) (thread 1) (category 107) (name 108)
+      (arguments ((104 (Pointer 0x0)) (106 (String 108))))
+      (event_type Duration_begin)))
+    (Interned_string (index 109) (value ptmalloc_init))
+    (Event
+     ((timestamp 0s) (thread 1) (category 107) (name 109)
+      (arguments ((104 (Pointer 0x0)) (106 (String 109))))
+      (event_type Duration_begin)))
+    (Event
+     ((timestamp 1.2us) (thread 1) (category 107) (name 108) (arguments ())
+      (event_type Duration_end)))
+    (Event
+     ((timestamp 1.2us) (thread 1) (category 107) (name 109) (arguments ())
+      (event_type Duration_end)))
+    (Error No_more_words)
+    |}];
+  return ()
+;;
+
 let%expect_test "get debug information from ELF" =
   let elf = Magic_trace_lib.Elf.create "sample-targets/ocaml-raise/sample.exe" in
   let debug_table =
@@ -804,8 +1122,8 @@ let%expect_test "get debug information from ELF" =
      expect test because different compiler versions and build parameters will cause the
      output to change. *)
   (* print_s [%sexp (debug_table : Magic_trace_lib.Address_info.t Int.Table.t)]; *)
-  (* We should hopefully be able to rely on the [function] of [raise_after] having
-     an entry with the correct column. *)
+  (* We should hopefully be able to rely on the [function] of [raise_after] having an
+     entry with the correct column. *)
   Expect_test_helpers_base.require_equal (module Int) raise_after_col 22;
   [%expect {| |}];
   return ()
