@@ -1144,9 +1144,13 @@ and write_event' (T t) ?events_writer event =
                proved them wrong. Please report this to \
                https://github.com/janestreet/magic-trace/issues/"
                 (event : Event.t)]
-        | (None | Some Async | Some Jump | Some Interrupt), Some End ->
-          (* CoreSight ETM can end a trace at any branch type (e.g. "tr end jcc"), so Jump
-             and Interrupt with End are expected on aarch64. *)
+        | Some (Jump | Interrupt), Some End ->
+          (* CoreSight ETM can end a trace at any branch type (e.g. "tr end jcc"). These
+             are brief decoder sync gaps, not real transitions to untraced code. The trace
+             resumes immediately with a "tr strt", so we should not push an untraced frame
+             here (which would never get popped, causing a staircase). *)
+          ()
+        | (None | Some Async), Some End ->
           call t thread_info ~time ~location:Event.Location.untraced
         | Some Syscall, Some End ->
           (* We should only be getting these under /u *)
