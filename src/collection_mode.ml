@@ -58,20 +58,22 @@ let extra_events = function
 ;;
 
 let hardware_trace_device_path () =
-  let arch = Core_unix.Utsname.machine (Core_unix.uname ()) in
-  if String.( = ) arch "aarch64"
-  then "/sys/bus/event_source/devices/cs_etm"
-  else "/sys/bus/event_source/devices/intel_pt"
+  let candidates =
+    [ "/sys/bus/event_source/devices/intel_pt"; "/sys/bus/event_source/devices/cs_etm" ]
+  in
+  List.find candidates ~f:(fun path ->
+    match Core_unix.access path [ `Exists ] with
+    | Ok () -> true
+    | Error _ -> false)
 ;;
 
 let select_collection_mode ~extra_events ~use_sampling =
   match use_sampling with
   | true -> Stacktrace_sampling { extra_events }
   | false ->
-    let device_path = hardware_trace_device_path () in
-    (match Core_unix.access device_path [ `Exists ] with
-     | Ok () -> Intel_processor_trace { extra_events }
-     | Error _ ->
+    (match hardware_trace_device_path () with
+     | Some _ -> Intel_processor_trace { extra_events }
+     | None ->
        Core.eprintf
          "Hardware trace support not found. magic-trace will continue and use sampling \
           instead.\n";

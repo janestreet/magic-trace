@@ -227,8 +227,9 @@ module Recording = struct
   ;;
 
   let hardware_trace_event_name () =
-    let device_path = Collection_mode.hardware_trace_device_path () in
-    Filename.basename device_path
+    match Collection_mode.hardware_trace_device_path () with
+    | Some device_path -> Filename.basename device_path
+    | None -> "intel_pt"
   ;;
 
   let perf_intel_pt_config_of_timer_resolution

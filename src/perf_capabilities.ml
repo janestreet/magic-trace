@@ -48,9 +48,11 @@ end
 
 let supports_configurable_psb_period () =
   try
-    let device_path = Collection_mode.hardware_trace_device_path () in
-    let cyc_cap = In_channel.read_all (device_path ^ "/caps/psb_cyc") in
-    String.( = ) cyc_cap "1\n"
+    match Collection_mode.hardware_trace_device_path () with
+    | None -> false
+    | Some device_path ->
+      let cyc_cap = In_channel.read_all (device_path ^ "/caps/psb_cyc") in
+      String.( = ) cyc_cap "1\n"
   with
   (* Even if this file is not present (i.e. when hardware trace isn't present), we don't
      want capability checking to fail. *)

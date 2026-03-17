@@ -154,11 +154,11 @@ static int read_int_file(const char *path, int *result) {
 }
 
 static const char *trace_device_path(void) {
-#if defined(__aarch64__)
-  return "/sys/bus/event_source/devices/cs_etm";
-#else
+  if (access("/sys/bus/event_source/devices/intel_pt", F_OK) == 0)
+    return "/sys/bus/event_source/devices/intel_pt";
+  if (access("/sys/bus/event_source/devices/cs_etm", F_OK) == 0)
+    return "/sys/bus/event_source/devices/cs_etm";
   return "/sys/bus/event_source/devices/intel_pt";
-#endif
 }
 
 static int init_tracing_state(struct tracing_state *s) {
@@ -264,20 +264,20 @@ static int start_tracing(struct tracing_state *s, value config, value trace_meta
   attr.sample_type = PERF_SAMPLE_IP | PERF_SAMPLE_TID | PERF_SAMPLE_TIME;
   attr.sample_id_all = attr.mmap = attr.mmap2 = attr.context_switch = 1;
 
-#if defined(__aarch64__)
-  // On aarch64 with CoreSight ETM, config bits are determined by the ETM
-  // hardware. Use default config (0) and let the kernel/perf handle it.
-  attr.config = 0;
-#else
-  // These config bits were determined by running this command:
-  // grep -H . /sys/bus/event_source/devices/intel_pt/format/*
-  // It's reasonably complex to parse these dynamically, and they seem consistent
-  // so for now we'll just hard-code the following bits:
-  // cyc (bit 1)=1 - enable high-resolution cycle counts
-  // cyc_thresh (bits 19-22)=1 - set them to the maximum possible frequency
-  // tsc (bit 10)=1 - enable time stamp counter packets for calibration
-  attr.config = (1 << 19) | (1 << 1) | (1 << 10);
-#endif
+  if (access("/sys/bus/event_source/devices/cs_etm", F_OK) == 0) {
+    // On CoreSight ETM, config bits are determined by the ETM hardware.
+    // Use default config (0) and let the kernel/perf handle it.
+    attr.config = 0;
+  } else {
+    // These config bits were determined by running this command:
+    // grep -H . /sys/bus/event_source/devices/intel_pt/format/*
+    // It's reasonably complex to parse these dynamically, and they seem consistent
+    // so for now we'll just hard-code the following bits:
+    // cyc (bit 1)=1 - enable high-resolution cycle counts
+    // cyc_thresh (bits 19-22)=1 - set them to the maximum possible frequency
+    // tsc (bit 10)=1 - enable time stamp counter packets for calibration
+    attr.config = (1 << 19) | (1 << 1) | (1 << 10);
+  }
 
   attr.comm = attr.comm_exec = 1;
   attr.task = 1;
