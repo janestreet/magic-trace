@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu_x64_8_cores
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -23,7 +23,7 @@ jobs:
           # Because actions/upload-artifact will refuse to upload relative paths...
           mv ../*.deb .
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: Packages
           path: '*.deb'
