@@ -66,9 +66,8 @@ CAMLprim value magic_breakpoint_fd_stub(value state) {
   return Val_long(Breakpoint_state_val(state)->fd);
 }
 
-CAMLprim value magic_breakpoint_create_stub(value pid, value addr,
-                                            value single_hit) {
-  CAMLparam3(pid, addr, single_hit);
+CAMLprim value magic_breakpoint_create_stub(value pid, value addr) {
+  CAMLparam2(pid, addr);
   CAMLlocal2(wrap, v);
   struct perf_event_attr attr;
 
@@ -83,7 +82,7 @@ CAMLprim value magic_breakpoint_create_stub(value pid, value addr,
                      PERF_SAMPLE_TID;
   attr.exclude_hv = 1;
   attr.exclude_kernel = 1;
-  attr.disabled = Bool_val(single_hit);
+  attr.disabled = 1;
   attr.wakeup_events = 1;
   attr.precise_ip = 2;
   // first and second argument register
@@ -106,12 +105,6 @@ CAMLprim value magic_breakpoint_create_stub(value pid, value addr,
   if (s->mmap == MAP_FAILED)
     goto failed;
 
-  // Makes it so the breakpoint only triggers once before being disabled
-  if (Bool_val(single_hit)) {
-    if (ioctl(s->fd, PERF_EVENT_IOC_REFRESH, 1) < 0)
-      goto failed;
-  }
-
   v = caml_alloc_custom(&breakpoint_state_ops, sizeof(s), 0, 1);
   Breakpoint_state_val(v) = s;
 
@@ -125,6 +118,22 @@ failed:
   wrap = caml_alloc(1, 1); // Error constructor of result
   Field(wrap, 0) = Val_long(errno);
   CAMLreturn(wrap);
+}
+
+CAMLprim value magic_breakpoint_enable_stub(value state, value single_hit) {
+  const struct breakpoint_state *s = Breakpoint_state_val(state);
+  int ret;
+  if (Bool_val(single_hit)) {
+    // Makes it so the breakpoint only triggers once before being disabled
+    ret = ioctl(s->fd, PERF_EVENT_IOC_REFRESH, 1);
+  } else {
+    ret = ioctl(s->fd, PERF_EVENT_IOC_ENABLE, 0);
+  }
+  if (ret < 0) {
+    assert(errno > 0);
+    return Val_long(errno);
+  }
+  return (value)NULL;
 }
 
 struct my_sample {

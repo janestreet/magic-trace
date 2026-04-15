@@ -395,7 +395,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
         let single_hit = not opts.multi_snapshot in
-        let bp = Breakpoint.breakpoint_fd head_pid ~addr ~single_hit in
+        let bp = Breakpoint.breakpoint_fd head_pid ~addr in
         let bp = Or_error.ok_exn bp in
         let fd =
           Async_unix.Fd.create
@@ -411,7 +411,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           | None -> ()
         in
         let interrupt = Ivar.read done_ivar in
-        let%map.Deferred res =
+        let monitoring =
           Async_unix.Fd.interruptible_every_ready_to
             fd
             `Read
@@ -419,6 +419,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
             (fun () -> read_evs true)
             ()
         in
+        (* Yield to let the scheduler register the fd with [epoll], then enable
+           the breakpoint. This avoids a race where a single-hit breakpoint
+           fires and disables itself before [epoll] starts monitoring the fd. *)
+        let%bind.Deferred () = Scheduler.yield () in
+        Breakpoint.enable bp ~single_hit |> Or_error.ok_exn;
+        let%map.Deferred res = monitoring in
         (match res with
          | `Interrupted -> Breakpoint.destroy bp
          | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
