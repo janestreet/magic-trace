@@ -58,12 +58,16 @@ depends: [
   "ctypes" {= "0.23.0+ox"}
   "domain-name" {= "0.5.0"}
   "dune" {= "3.21.1"}
+  "dune-build-info" {= "3.21.1" & with-test}
   "dune-configurator" {= "3.21.1"}
+  "either" {= "1.0.0" & with-test}
   "expect_test_helpers_async" {= "v0.18~preview.130.83+317"}
   "expect_test_helpers_core" {= "v0.18~preview.130.83+317"}
   "fieldslib" {= "v0.18~preview.130.83+317"}
+  "fix" {= "20250919" & with-test}
   "flexible_sexp" {= "v0.18~preview.130.83+317"}
   "fmt" {= "0.10.0"}
+  "fpath" {= "0.7.3" & with-test}
   "int_repr" {= "v0.18~preview.130.83+317"}
   "integers" {= "0.7.0"}
   "ipaddr" {= "5.6.2"}
@@ -74,6 +78,11 @@ depends: [
   "logs" {= "0.9.0"}
   "macaddr" {= "5.6.2"}
   "magic-mime" {= "1.3.1"}
+  "menhir" {= "20260209" & with-test}
+  "menhirCST" {= "20260209" & with-test}
+  "menhirGLR" {= "20260209" & with-test}
+  "menhirLib" {= "20260209" & with-test}
+  "menhirSdk" {= "20260209" & with-test}
   "num" {= "1.6"}
   "ocaml" {= "5.2.0"}
   "ocaml-compiler-libs" {= "v0.17.0+ox"}
@@ -81,10 +90,14 @@ depends: [
   "ocaml-options-vanilla" {= "1"}
   "ocaml-syntax-shims" {= "1.0.0"}
   "ocaml-variants" {= "5.2.0+ox"}
+  "ocaml-version" {= "4.0.4" & with-test}
   "ocaml_intrinsics" {= "v0.18~preview.130.83+317"}
   "ocaml_intrinsics_kernel" {= "v0.18~preview.130.83+317"}
   "ocamlbuild" {= "0.15.0+ox"}
   "ocamlfind" {= "1.9.8+ox"}
+  "ocamlformat" {= "0.26.2+ox" & with-test}
+  "ocamlformat-lib" {= "0.26.2+ox" & with-test}
+  "ocp-indent" {= "1.9.0" & with-test}
   "odoc-parser" {= "3.1.0+ox"}
   "owee" {= "0.8"}
   "parsexp" {= "v0.18~preview.130.83+317"}
@@ -166,9 +179,15 @@ depends: [
   "uopt" {= "v0.18~preview.130.83+317"}
   "uri" {= "4.4.0"}
   "uri-sexp" {= "4.4.0"}
+  "uucp" {= "16.0.0" & with-test}
+  "uuseg" {= "16.0.0" & with-test}
   "uutf" {= "1.0.3+ox"}
   "variantslib" {= "v0.18~preview.130.83+317"}
   "zstandard" {= "v0.18~preview.130.83+317"}
 ]
 build: ["dune" "build" "-p" name "-j" jobs]
 dev-repo: "git+https://github.com/janestreet/magic-trace.git"
+pin-depends: [
+  "dune.3.21.1"
+  "https://github.com/ocaml/dune/releases/download/3.21.1/dune-3.21.1.tbz"
+]

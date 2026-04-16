@@ -11,6 +11,7 @@ build: [
 ]
 depends: [
   "ocaml"        {>= "4.14"}
+  "ocamlformat"  {with-test}
   "ocaml_intrinsics"
   "async"
   "camlzip"

@@ -87,9 +87,8 @@ jobs:
           opam switch set ${{ matrix.ocaml-version }} 2>/dev/null || \
             opam switch create ${{ matrix.ocaml-version }} --repos ox=git+https://github.com/oxcaml/opam-repository.git,default
 
-      - run: opam install ./magic-trace.opam --deps-only --locked
+      - run: opam install . --deps-only --locked --with-test
 
-      - run: opam install ocamlformat
       - run: opam exec -- dune build @fmt
 
       - run: opam exec -- make PROFILE=static
