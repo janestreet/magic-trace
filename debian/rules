@@ -13,7 +13,7 @@ override_dh_clean:
 override_dh_auto_build:
 	opam init -y --bare
 	opam switch create -y 5.2.0+ox --repos ox=git+https://github.com/oxcaml/opam-repository.git,default
-	opam exec -- opam install -y ./magic-trace.opam --deps-only
+	opam exec -- opam install -y . --deps-only --locked
 	opam exec -- dh_auto_build
 
 override_dh_auto_install:
