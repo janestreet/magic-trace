@@ -65,7 +65,7 @@ module Llvm_symbolizer = struct
 end
 
 type t =
-  { symbolization_cache : (Request.t, Response.t Uopt.t) Hashtbl.t
+  { symbolization_cache : (Request.t, Response.t or_null) Hashtbl.t
   ; response_cache : Response.t Hash_set.t
   ; llvm_symbolizer : Llvm_symbolizer.t
   }
@@ -89,15 +89,13 @@ let symbolize t ~executable ~addr =
      avoids us polluting our cache with many [Null] responses. *)
   if I64.O.(addr <= #0L)
   then Null
-  else (
-    let result =
-      Hashtbl.find_or_add
-        t.symbolization_cache
-        { addr; executable }
-        ~default:(stack_ fun () ->
-          match Llvm_symbolizer.symbolize t.llvm_symbolizer ~executable ~addr with
-          | Null -> Uopt.none
-          | This response -> Uopt.some (Hash_set.get_or_add t.response_cache response))
-    in
-    Bool.select (Uopt.is_some result) (This (Uopt.unsafe_value result)) Null)
+  else
+    (Hashtbl.find_or_add [@kind value value_or_null])
+      t.symbolization_cache
+      { addr; executable }
+      ~default:(stack_ fun () ->
+        match Llvm_symbolizer.symbolize t.llvm_symbolizer ~executable ~addr with
+        | Null -> Null
+        | This response -> This (Hash_set.get_or_add t.response_cache response))
+    [@nontail]
 ;;
