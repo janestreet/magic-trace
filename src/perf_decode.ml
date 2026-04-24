@@ -113,7 +113,7 @@ let parse_event_header line =
 ;;
 
 let parse_symbol_and_offset_and_dso ?perf_maps pid str ~addr
-  : Symbol.t * int * Interned_string.t
+  : #(Symbol.t * int * Interned_string.t)
   =
   match Re.Group.all (Re.exec symbol_and_offset_and_dso_re str) with
   | [| _; symbol; offset; dso |] ->
@@ -130,18 +130,18 @@ let parse_symbol_and_offset_and_dso ?perf_maps pid str ~addr
          avoid the extra allocation. *)
       Util.int_trunc_of_hex_string ~remove_hex_prefix:true offset
     in
-    From_perf symbol, offset, dso
+    #(From_perf symbol, offset, dso)
   | _ | (exception _) ->
-    let failed = Symbol.Unknown, 0, Interned_string.empty in
+    let failed = #(Symbol.Unknown, 0, Interned_string.empty) in
     (match perf_maps, pid with
      | None, _ | _, None ->
        (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
         | [| _; dso |] ->
           (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
              from [offset] here. *)
-          ( From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"]
-          , 0
-          , Interned_string.intern dso )
+          #( From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"]
+           , 0
+           , Interned_string.intern dso )
         | _ | (exception _) -> failed)
      | Some perf_map, Some pid ->
        (match Perf_map.Table.symbol ~pid perf_map ~addr with
@@ -150,7 +150,7 @@ let parse_symbol_and_offset_and_dso ?perf_maps pid str ~addr
           (* It's strange that perf isn't resolving these symbols. It says on the
              tin that it supports perf map files! *)
           let offset = saturating_sub_i64 addr location.start_addr in
-          From_perf_map location, offset, Interned_string.empty))
+          #(From_perf_map location, offset, Interned_string.empty)))
 ;;
 
 let trace_error_to_event line : Event.Decode_error.t =
@@ -190,7 +190,7 @@ let parse_location ?perf_maps ~pid instruction_pointer symbol_and_offset
   : Event.Location.t
   =
   let instruction_pointer = Util.int64_of_hex_string instruction_pointer in
-  let symbol, symbol_offset, dso =
+  let #(symbol, symbol_offset, dso) =
     parse_symbol_and_offset_and_dso
       ?perf_maps
       pid
@@ -230,14 +230,14 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
     |] ->
     let src_instruction_pointer = Util.int64_of_hex_string src_instruction_pointer in
     let dst_instruction_pointer = Util.int64_of_hex_string dst_instruction_pointer in
-    let src_symbol, src_symbol_offset, src_dso =
+    let #(src_symbol, src_symbol_offset, src_dso) =
       parse_symbol_and_offset_and_dso
         ?perf_maps
         thread.pid
         src_symbol_and_offset
         ~addr:src_instruction_pointer
     in
-    let dst_symbol, dst_symbol_offset, dst_dso =
+    let #(dst_symbol, dst_symbol_offset, dst_dso) =
       parse_symbol_and_offset_and_dso
         ?perf_maps
         thread.pid
