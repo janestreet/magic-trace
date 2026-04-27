@@ -42,7 +42,7 @@ module Response = struct
 end
 
 module Llvm_symbolizer = struct
-  type t = Iptr.t
+  type t : word
 
   external create
     :  unit
