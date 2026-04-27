@@ -984,54 +984,22 @@ end = struct
       }
   ;;
 
-  (* TODO We should probably scrap Owee entirely and get this information directly from
-     LLVM instead given that we're already using it to resolve inlined frames. *)
-  let location_args debug_info (location : Location.t) =
-    let display_name = Symbol.display_name location.symbol in
-    let base_address =
-      Int64.(location.instruction_pointer - of_int location.symbol_offset)
-    in
-    let open Tracing.Trace.Arg in
-    (* Using [Interned] may cause some issues with the 32k interned string limit, on
-       sufficiently large programs if the trace goes through a lot of different code,
-       but that'll also be a problem with the span names. This will just make it
-       happen around twice as fast. It does make the traces noticeably smaller.
-
-       The real solution is to get around to improving the interning table management
-       in the trace writer library.
-
-       ---
-
-       [base_address] might be lie in the kernel, in which case [to_int] will fail (but
-       that's alright, because we wouldn't have a symbol for it in the executable's
-       [debug_info] anyway). *)
-    let address = "address", Pointer location.instruction_pointer in
-    match location.symbol with
-    | From_perf_map { start_addr = _; size = _; function_ = _ } ->
-      address :: [ "symbol", Interned display_name ]
-    | _ ->
-      (match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find debug_info) with
-       | None -> address :: [ "symbol", Interned display_name ]
-       | Some (info : Elf.Location.t) ->
-         (address
-          :: [ "line", Int info.line
-             ; "col", Int info.col
-             ; "symbol", Interned display_name
-             ])
-         @
-           (match info.filename with
-           | Some x -> [ "file", Interned x ]
-           | None -> []))
-  ;;
-
   let emit_frame_enter (local_ (t : _ t)) (time : Timestamp.t) (frame : Frame.t) =
     let location = frame.location in
     assert (Timestamp.( >= ) time t.last_time);
     t.last_time <- time;
     Vec.push_back t.active_frames location.symbol;
     if debug then eprintf "Enter %s\n" (Symbol.display_name location.symbol);
+    (* TODO In the future we can surface more detailed information in [args]
+       (e.g. filename, line number, etc.) since LLVM can easily provide it to us,
+       but for now we omit it given that the traces are already huge. *)
+    let args : Tracing.Trace.Arg.t list =
+      match frame.kind with
+      | Inlined -> []
+      | Physical -> [ "address", Pointer location.instruction_pointer ]
+    in
     t.write_duration_begin
-      ~args:(location_args t.debug_info location)
+      ~args
       ~name:(Symbol.display_name location.symbol)
       ~time:(time :> Time_ns.Span.t)
   ;;
