@@ -1,6 +1,6 @@
 open! Core
 
-module%template [@kind k = (value, value & value, value & value & value)] T = struct
+module%template [@kind k = (value & value, value & value & value)] T = struct
   type ('a : k) t = ('a Vec.t[@kind k])
 
   let create x =
@@ -28,6 +28,5 @@ module%template [@kind k = (value, value & value, value & value & value)] T = st
   ;;
 end
 
-module Value = T [@kind value]
 module Valuex2 = T [@kind value & value]
 module Valuex3 = T [@kind value & value & value]
