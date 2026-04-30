@@ -558,12 +558,6 @@ let create_thread t event =
   }
 ;;
 
-let call t thread_info ~time ~location =
-  let ev = Pending_event.create_call location ~from_untraced:false in
-  add_event t thread_info time ev;
-  Callstack.push thread_info.callstack location
-;;
-
 let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some { symbol; _ } -> add_event t thread_info time { symbol; kind = Ret }
@@ -608,6 +602,34 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
   flush t ~to_time thread_info;
   thread_info.last_decode_error_time <- time;
   Thread_info.set_callstack thread_info ~is_kernel_address ~time
+;;
+
+module Cilk_hacks : sig
+  val call_clear_if_scheduler
+    : 'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> location: Event.Location.t
+    -> unit
+end = struct
+  let is_cilk_scheduler (symbol : Symbol.t) =
+    match symbol with
+    | From_perf "worker_scheduler(__cilkrts_worker*, history_t*)" -> true
+    | _ -> false
+  ;;
+
+  let call_clear_if_scheduler t thread_info ~time ~location =
+    let call_symbol = Event.Location.symbol location in
+    if is_cilk_scheduler call_symbol
+      then clear_callstack t thread_info ~time;
+  ;;
+end
+
+let call t thread_info ~time ~location =
+  Cilk_hacks.call_clear_if_scheduler t thread_info ~time ~location;
+  let ev = Pending_event.create_call location ~from_untraced:false in
+  add_event t thread_info time ev;
+  Callstack.push thread_info.callstack location
 ;;
 
 (* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
