@@ -605,31 +605,45 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
 ;;
 
 module Cilk_hacks : sig
-  val call_clear_if_scheduler
+  val call_handle_stack_switch
     : 'a inner
     -> 'a Thread_info.t
     -> time:Mapped_time.t
     -> location: Event.Location.t
     -> unit
 end = struct
-  let is_cilk_scheduler (symbol : Symbol.t) =
-    match symbol with
-    | From_perf "worker_scheduler(__cilkrts_worker*, history_t*)" -> true
-    | _ -> false
+  let ret = ret_without_checking_for_go_hacks
+
+  let call_switch_to_user_code t (thread_info : _ Thread_info.t) ~time =
+    ret t thread_info ~time;
+    Stack.push thread_info.inactive_callstacks thread_info.callstack;
+    thread_info.callstack <- Callstack.create ~create_time:time
   ;;
 
-  let call_clear_if_scheduler t thread_info ~time ~location =
+  let call_switch_to_runtime t (thread_info : _ Thread_info.t) ~time =
+    ret t thread_info ~time;
+    clear_callstack t thread_info ~time;
+    match Stack.pop thread_info.inactive_callstacks with
+    | Some callstack -> thread_info.callstack <- callstack
+    | None -> thread_info.callstack <- Callstack.create ~create_time:time
+  ;;
+
+  let call_handle_stack_switch t thread_info ~time ~location =
     let call_symbol = Event.Location.symbol location in
-    if is_cilk_scheduler call_symbol
-      then clear_callstack t thread_info ~time;
+    match call_symbol with
+    | From_perf "longjmp_to_user_code(__cilkrts_worker*, Closure*)" ->
+      call_switch_to_user_code t thread_info ~time;
+    | From_perf "longjmp_to_runtime(__cilkrts_worker*)" ->
+      call_switch_to_runtime t thread_info ~time;
+    | _ -> ()
   ;;
 end
 
 let call t thread_info ~time ~location =
-  Cilk_hacks.call_clear_if_scheduler t thread_info ~time ~location;
   let ev = Pending_event.create_call location ~from_untraced:false in
   add_event t thread_info time ev;
-  Callstack.push thread_info.callstack location
+  Callstack.push thread_info.callstack location;
+  Cilk_hacks.call_handle_stack_switch t thread_info ~time ~location
 ;;
 
 (* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
