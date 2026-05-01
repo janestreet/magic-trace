@@ -620,7 +620,7 @@ module OpenCilk_hacks : sig
 end = struct
   let ret = ret_without_checking_for_go_hacks
 
-  let call_switch_to_user_code t (thread_info : _ Thread_info.t) ~time =
+  let switch_to_user_code t (thread_info : _ Thread_info.t) ~time =
     (* Pop the sysdep_longjmp_to_sf frame *)
     ret t thread_info ~time;
     (* The next stack frame is either __cilkrts_sync or longjmp_to_user_code.
@@ -634,11 +634,11 @@ end = struct
         thread_info.callstack <- Callstack.create ~create_time:time
       | "__cilkrts_sync" ->
         ret t thread_info ~time
-      | _ -> ())
-    | _ ->()
+      | _ -> Printf.printf "OpenCilk_hacks: Unexpected symbol %s\n" symbol)
+    | _ -> Printf.printf "OpenCilk_hacks: Unexpected symbol [unknown]"
   ;;
 
-  let call_switch_to_runtime t (thread_info : _ Thread_info.t) ~time =
+  let switch_to_runtime t (thread_info : _ Thread_info.t) ~time =
     (* Even though we want to pop the longjmp_to_runtime frame, we're clearing
        the entire user stack anyways, so no point in manually popping. *)
     clear_callstack t thread_info ~time;
@@ -651,9 +651,9 @@ end = struct
     let call_symbol = Event.Location.symbol location in
     match call_symbol with
     | From_perf "sysdep_longjmp_to_sf(__cilkrts_stack_frame*)" ->
-      call_switch_to_user_code t thread_info ~time;
+      switch_to_user_code t thread_info ~time;
     | From_perf "longjmp_to_runtime(__cilkrts_worker*)" ->
-      call_switch_to_runtime t thread_info ~time;
+      switch_to_runtime t thread_info ~time;
     | _ -> ()
   ;;
 end
