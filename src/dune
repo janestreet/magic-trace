@@ -15,6 +15,10 @@
  (foreign_stubs
   (language c)
   (names breakpoint_stubs boot_time_stubs ptrace_stubs))
+ (foreign_stubs
+  (language cxx)
+  (names cxx_demangle_stubs))
+ (c_library_flags (-lstdc++))
  (libraries core async core_unix.filename_unix fzf re shell
    core_unix.sys_unix cohttp cohttp_static_handler core_unix.signal_unix
    tracing magic_trace owee angstrom expect_test_helpers_core)

@@ -160,10 +160,11 @@ let find_symbol t name =
   let some_name = Some name in
   with_return (fun return ->
     Owee_elf.Symbol_table.iter t.symbol ~f:(fun symbol ->
-      if is_func symbol
-         && [%compare.equal: string option]
-              (Owee_elf.Symbol_table.Symbol.name symbol t.string)
-              some_name
+      if
+        is_func symbol
+        && [%compare.equal: string option]
+             (Owee_elf.Symbol_table.Symbol.name symbol t.string)
+             some_name
       then return.return (Some symbol));
     None)
 ;;
@@ -406,6 +407,19 @@ module Symbol_resolver = struct
         , size_in_bytes symb |> Int64.to_int_exn ))
     in
     let%bind name in
+    (* Demangle C++ Itanium ABI symbols (_Z...) and OCaml symbols (caml...).
+       Symbol_resolver is the single path through which all flamegraph frame
+       names flow, so demangling here covers every trace backend uniformly.
+       Cxx_demangle uses __cxa_demangle with a NULL output buffer so it
+       malloc-allocates the exact size needed — no truncation for long names. *)
+    let name =
+      match Cxx_demangle.demangle name with
+      | Some demangled -> demangled
+      | None ->
+        (match Demangle_ocaml_symbols.demangle name with
+         | Some demangled -> demangled
+         | None -> name)
+    in
     return { name; start_addr; end_addr = start_addr + size }
   ;;
 end
