@@ -18,7 +18,7 @@
  (foreign_stubs
   (language cxx)
   (names cxx_demangle_stubs))
- (c_library_flags (-lstdc++))
+ (c_library_flags (-lsupc++))
  (libraries core async core_unix.filename_unix fzf re shell
    core_unix.sys_unix cohttp cohttp_static_handler core_unix.signal_unix
    tracing magic_trace owee angstrom expect_test_helpers_core)

@@ -410,8 +410,8 @@ module Symbol_resolver = struct
     (* Demangle C++ Itanium ABI symbols (_Z...) and OCaml symbols (caml...).
        Symbol_resolver is the single path through which all flamegraph frame
        names flow, so demangling here covers every trace backend uniformly.
-       Cxx_demangle uses __cxa_demangle with a NULL output buffer so it
-       malloc-allocates the exact size needed — no truncation for long names. *)
+       Cxx_demangle short-circuits for non-_Z names, so the FFI cost is only
+       paid for actual C++ symbols. *)
     let name =
       match Cxx_demangle.demangle name with
       | Some demangled -> demangled
