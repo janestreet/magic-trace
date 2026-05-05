@@ -34,7 +34,7 @@ module Location = struct
   module Ignore_symbol = struct
     (* Ignoring symbol strings when serializing to save space. This reduces the size of events file
        by ~50% based on small tests. The symbol information is still available implicitly by looking at the top
-       of the callstack that optionally is exported together with the events. Symbol offset will be missing.*)
+       of the callstack that optionally is exported together with the events. Symbol offset will be missing. *)
 
     type nonrec t = t
 

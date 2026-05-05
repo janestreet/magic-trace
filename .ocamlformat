@@ -1,1 +1,3 @@
 profile=janestreet
+wrap-comments=false
+parse-docstrings=false

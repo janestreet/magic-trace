@@ -12,6 +12,8 @@ jobs:
           - ubuntu_x64_8_cores
         ocaml-version:
           - '5.2.0+ox'
+        oxcaml-opam-commit:
+          - '231c88c2e564fdca40e15e750aacad5fb0887435'
 
     runs-on: ${{ matrix.os }}
     steps:
@@ -21,7 +23,7 @@ jobs:
       - uses: actions/cache@v5
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-1
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-${{ matrix.oxcaml-opam-commit }}-1
 
       - name: Install musl-compatible kernel headers
         run: |
@@ -80,12 +82,14 @@ jobs:
 
           export OPAMYES=1
           export OPAMJOBS=$(($(nproc) + 2))
+          export OPAMROOTISOK=1
           echo "OPAMYES=1" >> "$GITHUB_ENV"
           echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
+          echo "OPAMROOTISOK=$OPAMROOTISOK" >> "$GITHUB_ENV"
 
           opam init --bare -yav https://github.com/ocaml/opam-repository.git
           opam switch set ${{ matrix.ocaml-version }} 2>/dev/null || \
-            opam switch create ${{ matrix.ocaml-version }} --repos ox=git+https://github.com/oxcaml/opam-repository.git,default
+            opam switch create ${{ matrix.ocaml-version }} --repos "ox=git+https://github.com/oxcaml/opam-repository.git#${{ matrix.oxcaml-opam-commit }},default"
 
       - run: opam install . --deps-only --locked --with-test
 
