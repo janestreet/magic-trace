@@ -31,7 +31,7 @@ let perf_cbr_event_re =
 
 let perf_ptwrite_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +(0x[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +((?:0x)?[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -804,9 +804,10 @@ module%test _ = struct
       {| 2769074/2769293 2592496.569782106:          1                                        ptwrite:   call                   IP: 0 payload: 0x1b5                            0     55c7952ad2d0 [unknown] (foo.bin)|};
     [%expect
       {|
-        ((Ok
-          ((thread ((pid (2769074)) (tid (2769293)))) (time 30d8m16.569782106s)
-           (data (Ptwrite (location 0x55c7952ad2d0) (data 0x1b5)))))) |}]
+      ((Ok
+        ((thread ((pid (2769074)) (tid (2769293)))) (time 30d8m16.569782106s)
+         (data (Ptwrite (location 0x55c7952ad2d0) (data 0x1b5))))))
+      |}]
   ;;
 
   let%expect_test "perf ptwrite event with printable payload" =
@@ -814,9 +815,10 @@ module%test _ = struct
       {|2817453/2817483 2596547.813541321:          1                                        ptwrite:   call                   IP: 0 payload: 0x62 b                           0     613d946b42d0 [unknown] (foo.bin)|};
     [%expect
       {|
-        ((Ok
-          ((thread ((pid (2817453)) (tid (2817483)))) (time 30d1h15m47.813541321s)
-           (data (Ptwrite (location 0x613d946b42d0) (data 0x62)))))) |}]
+      ((Ok
+        ((thread ((pid (2817453)) (tid (2817483)))) (time 30d1h15m47.813541321s)
+         (data (Ptwrite (location 0x613d946b42d0) (data 0x62))))))
+      |}]
   ;;
 
   let%expect_test "perf ptwrite event with jcc instruction" =
@@ -826,7 +828,8 @@ module%test _ = struct
       {|
       ((Ok
         ((thread ((pid (3256341)) (tid (3256760)))) (time 30d11h19m6.069047397s)
-         (data (Ptwrite (location 0x577bcad80555) (data 0x5000000000061b2)))))) |}]
+         (data (Ptwrite (location 0x577bcad80555) (data 0x5000000000061b2))))))
+      |}]
   ;;
 
   let%expect_test "perf ptwrite event without instruction" =
@@ -836,7 +839,19 @@ module%test _ = struct
       {|
       ((Ok
         ((thread ((pid (3285832)) (tid (3286108)))) (time 30d11h51m6.172476558s)
-         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000)))))) |}]
+         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000))))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event zero payload" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   jcc                    IP: 0 payload: 0                 0     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0))))))
+      |}]
   ;;
 end
 
