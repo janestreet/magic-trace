@@ -172,6 +172,7 @@ type 'thread inner =
   ; annotate_inferred_start_times : bool
   ; mutable in_filtered_region : bool
   ; mutable transaction_events : Event.With_write_info.t Deque.t
+  ; pending_flows : ('thread -> Time_ns.Span.t -> unit) Hashtbl.M(Int).t
   }
 
 type t = T : 'thread inner -> t
@@ -341,6 +342,7 @@ let create_expert
       ; annotate_inferred_start_times
       ; in_filtered_region = true
       ; transaction_events = Deque.create ()
+      ; pending_flows = Hashtbl.create (module Int)
       }
   in
   write_hits t hits;
@@ -964,35 +966,71 @@ and write_event' (T t) ?events_writer event =
        List.iter calls ~f:(fun location -> call t thread_info ~time ~location)
      | { Event.Ok.thread = _
        ; time = _
-       ; data = Trace { kind = _; trace_state_change = _; src = _; dst = _ }
+       ; data = Trace { kind; trace_state_change = _; src; dst }
        ; in_transaction = _
        } ->
        (* TODO Re-add the assertion from the old trace-writer on impossible [kind, trace_state_change] combinations *)
        Thread_info.add_event_to_trace_segment
          thread_info
          event_value.data
-         (time :> Time_ns.Span.t)
+         (time :> Time_ns.Span.t);
+       let #(segment, ~in_filtered_region:_) =
+         Nonempty_vec.last thread_info.trace_segments
+       in
+       (match kind with
+        | Some (Call | Jump | Async) ->
+          (match Symbol.display_name dst.symbol with
+           | "caml_runstack" | "caml_resume" -> Trace_segment.push_fiber_state segment
+           | _ -> ())
+        | Some (Return | Sysret | Iret) ->
+          (match Symbol.display_name src.symbol with
+           | "caml_runstack" | "caml_resume" | "caml_perform" ->
+             Trace_segment.pop_fiber_state segment
+           | _ -> ())
+        | _ -> ())
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _
        ; data = Ptwrite { location; data }
        ; in_transaction = _
        } ->
-       let args =
-         Tracing.Trace.Arg.(
-           List.concat
-             [ [ "timestamp", Int (Time_ns.Span.to_int_ns (time :> Time_ns.Span.t)) ]
-             ; [ "symbol", String (Symbol.display_name location.symbol) ]
-             ; [ "addr", Pointer location.instruction_pointer ]
-             ; [ "data", String data ]
-             ; Option.value_map
-                 (Event.thread outer_event).pid
-                 ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])
-                 ~default:[]
-             ; Option.value_map
-                 (Event.thread outer_event).tid
-                 ~f:(fun tid -> [ "tid", Int (Pid.to_int tid) ])
-                 ~default:[]
-             ])
-       in
-       write_duration_complete t ~thread ~args ~name:"PTWRITE" ~time ~time_end:time)
+       let symbol_name = Symbol.display_name location.symbol in
+       let is_perform = String.equal symbol_name "caml_perform" in
+       let is_resume = String.equal symbol_name "caml_resume" in
+       if is_perform || is_resume
+       then (
+         let fiber_id = Int64.to_int_trunc (Int64.of_string data) in
+         let name = if is_perform then "Perform Effect" else "Resume Continuation" in
+         let args = Tracing.Trace.Arg.[ "fiber", String (sprintf "0x%x" fiber_id) ] in
+         write_duration_complete t ~thread ~args ~name ~time ~time_end:time;
+         if is_perform
+         then (
+           let module T = (val t.trace) in
+           let flow = T.create_flow () in
+           T.write_flow_step flow ~thread ~time:(time :> Time_ns.Span.t);
+           Hashtbl.set t.pending_flows ~key:fiber_id ~data:(fun thread time ->
+             T.write_flow_step flow ~thread ~time;
+             T.finish_flow flow))
+         else (
+           match Hashtbl.find_and_remove t.pending_flows fiber_id with
+           | Some finish -> finish thread (time :> Time_ns.Span.t)
+           | None -> ()))
+       else (
+         let args =
+           Tracing.Trace.Arg.(
+             List.concat
+               [ [ "timestamp", Int (Time_ns.Span.to_int_ns (time :> Time_ns.Span.t)) ]
+               ; [ "symbol", String symbol_name ]
+               ; [ "addr", Pointer location.instruction_pointer ]
+               ; [ "data", String data ]
+               ; Option.value_map
+                   (Event.thread outer_event).pid
+                   ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])
+                   ~default:[]
+               ; Option.value_map
+                   (Event.thread outer_event).tid
+                   ~f:(fun tid -> [ "tid", Int (Pid.to_int tid) ])
+                   ~default:[]
+               ])
+         in
+         write_duration_complete t ~thread ~args ~name:"PTWRITE" ~time ~time_end:time))
 ;;
