@@ -896,7 +896,7 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | Jump | Tx_abort | Async -> handle_jump t time ~src ~dst)
    | Trace { kind = None; _ } -> ()
    (* All of the below events are handled in [new_trace_writer.ml]. *)
-   | Power _ | Stacktrace_sample _ | Event_sample _ -> ());
+   | Power _ | Stacktrace_sample _ | Event_sample _ | Ptwrite _ -> ());
   if debug
   then (
     Frame.For_testing.print_callstack (current_frame t);
