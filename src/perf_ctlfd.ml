@@ -9,10 +9,11 @@ end
 
 let ack_msg = Bytes.of_string "ack\n\000"
 
-(* If we send a command while perf is shutting down, [ack_rx] will become ready only after
-   perf exits, so this timeout must be at least as long as it takes perf to finish
-   shutting down. *)
-let ack_timeout = `After (Time_ns.Span.of_int_sec 8)
+(* Perf can take arbitrarily long to respond when
+   - writing large snapshots to disk.
+   - writing large binaries to the buildid cache during shutdown; the ack pipe becomes
+     ready only after perf exits. *)
+let ack_timeout = `Never
 
 type t =
   { mutable ctl_rx : Core_unix.File_descr.t option
