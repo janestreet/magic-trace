@@ -20,8 +20,13 @@
 
 #include "perf_utils.h"
 
-// See [lib/pmc/src/msr_stubs.c:187] for an explanation
+// Read memory barrier: on x86 a compiler barrier suffices (strong memory
+// ordering), on aarch64 we need a real barrier instruction.
+#if defined(__aarch64__)
+#define rmb() asm volatile("dmb ishld" ::: "memory")
+#else
 #define rmb() asm volatile("" ::: "memory")
+#endif
 
 struct breakpoint_state {
   int fd;

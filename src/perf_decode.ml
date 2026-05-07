@@ -21,7 +21,7 @@ let perf_callstack_entry_re = Re.Perl.re "^\t *([0-9a-f]+) (.*)$" |> Re.compile
 
 let perf_branches_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt(?: jmp)?|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt(?: jmp)?|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret|jmp|jcc)|jmp|jcc) +(\(x\) +)?([0-9a-f]+) (.*) => +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -55,8 +55,8 @@ let maybe_pid_of_string = function
 
 let parse_time ~time_hi ~time_lo =
   let time_lo =
-    (* In practice, [time_lo] seems to always be 9 decimal places, but it seems
-       good to guard against other possibilities. *)
+    (* In practice, [time_lo] seems to always be 9 decimal places, but it seems good to
+       guard against other possibilities. *)
     let num_decimal_places = String.length time_lo in
     match Ordering.of_int (Int.compare num_decimal_places 9) with
     | Less -> Int.of_string time_lo * Int.pow 10 (9 - num_decimal_places)
@@ -131,16 +131,16 @@ let parse_symbol_and_offset ?perf_maps pid str ~addr : Symbol.t * int =
      | None, _ | _, None ->
        (match Re.Group.all (Re.exec unknown_symbol_dso_re str) with
         | [| _; dso |] ->
-          (* CR-someday tbrindus: ideally, we would subtract the DSO base offset
-             from [offset] here. *)
+          (* CR-someday tbrindus: ideally, we would subtract the DSO base offset from
+             [offset] here. *)
           From_perf [%string "[unknown @ %{addr#Int64.Hex} (%{dso})]"], 0
         | _ | (exception _) -> failed)
      | Some perf_map, Some pid ->
        (match Perf_map.Table.symbol ~pid perf_map ~addr with
         | None -> failed
         | Some location ->
-          (* It's strange that perf isn't resolving these symbols. It says on the
-             tin that it supports perf map files! *)
+          (* It's strange that perf isn't resolving these symbols. It says on the tin that
+             it supports perf map files! *)
           let offset = saturating_sub_i64 addr location.start_addr in
           From_perf_map location, offset))
 ;;
@@ -253,10 +253,10 @@ let parse_perf_branches_event ?perf_maps (thread : Event.Thread.t) time line : E
       | true, false -> Some Start
       | false, true -> Some End
       | false, false
-      (* "tr strt tr end" happens when someone `go run`s ./demo/demo.go. But
-         that trace is pretty broken for other reasons, so it's hard to say if
-         this is truly necessary. Regardless, it's slightly more user friendly
-         to show a broken trace instead of crashing here. *)
+      (* "tr strt tr end" happens when someone `go run`s ./demo/demo.go. But that trace is
+         pretty broken for other reasons, so it's hard to say if this is truly necessary.
+         Regardless, it's slightly more user friendly to show a broken trace instead of
+         crashing here. *)
       | true, true -> None
     in
     (* record the flag indicating we're within a transaction *)
@@ -409,10 +409,10 @@ let split_line_pipe pipe : string list Pipe.Reader.t =
 
 let to_events ?perf_maps pipe =
   let pipe = split_line_pipe pipe in
-  (* Every route of filtering on streams in an async way seems to be deprecated,
-     including converting to pipes which says that the stream creation should be
-     switched to a pipe creation. Changing Async_shell is out-of-scope, and I also
-     can't see a reason why filter_map would lead to memory leaks. *)
+  (* Every route of filtering on streams in an async way seems to be deprecated, including
+     converting to pipes which says that the stream creation should be switched to a pipe
+     creation. Changing Async_shell is out-of-scope, and I also can't see a reason why
+     filter_map would lead to memory leaks. *)
   Pipe.map pipe ~f:(to_event ?perf_maps) |> Pipe.filter_map ~f:Fn.id
 ;;
 
@@ -606,8 +606,8 @@ module%test _ = struct
            (data (Power (freq 4606)))))) |}]
   ;;
 
-  (* Perf seems to change spacing when frequency is small and our regex was
-     crashing on this case. *)
+  (* Perf seems to change spacing when frequency is small and our regex was crashing on
+     this case. *)
   let%expect_test "cbr event with double spaces" =
     check
       "2420596/2420596 525062.244538101:          \
@@ -738,6 +738,18 @@ module%test _ = struct
           ((thread ((pid (25375)) (tid (25375)))) (time 52d4h33m11.343298468s)
            (data
             (Trace (trace_state_change End) (kind Async) (src 0x7f6fce0b71f4)
+             (dst 0x0)))))) |}]
+  ;;
+
+  let%expect_test "tr end  jcc (CoreSight ETM)" =
+    check
+      {|1540946/1540946 253318.380313216:          1 branches:uH:   tr end  jcc                ffff81fd9cb4 __GI___tunables_init+0xe4 (/usr/lib/ld-linux-aarch64.so.1) =>                0 [unknown] ([unknown])|};
+    [%expect
+      {|
+        ((Ok
+          ((thread ((pid (1540946)) (tid (1540946)))) (time 2d22h21m58.380313216s)
+           (data
+            (Trace (trace_state_change End) (kind Jump) (src 0xffff81fd9cb4)
              (dst 0x0)))))) |}]
   ;;
 end

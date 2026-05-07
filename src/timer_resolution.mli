@@ -14,7 +14,7 @@ type t =
       ; mtc_period : int option
       ; noretcomp : bool option
       ; psb_period : int option
-      } (** Used when running with Intel PT. *)
+      } (** Used when running with hardware trace (Intel PT / CoreSight ETM). *)
 [@@deriving sexp]
 
 val param : t Command.Param.t

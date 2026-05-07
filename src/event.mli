@@ -45,8 +45,9 @@ module Ok : sig
           ; kind : Kind.t option
           ; src : Location.t
           ; dst : Location.t
-          } (** Represents an event collected from Intel PT. *)
-      | Power of { freq : int } (** Power event collected by Intel PT. *)
+          }
+      (** Represents an event collected from hardware trace (Intel PT / CoreSight ETM). *)
+      | Power of { freq : int } (** Power event collected by hardware trace. *)
       | Stacktrace_sample of
           { callstack : Location.t list (** Oldest to most recent calls in order. *) }
       (** Represents cycles event collected through sampling. *)

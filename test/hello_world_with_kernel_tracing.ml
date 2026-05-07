@@ -4136,7 +4136,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482180389:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9718dbb brk+0xb (foo.so)
     -> 30.974us END   syscall_exit_to_user_mode
     -> 30.974us END   do_syscall_64
-    -> 30.974us END   __entry_text_start
     -> 30.974us BEGIN entry_SYSCALL_64_after_hwframe
     -> 30.994us END   entry_SYSCALL_64_after_hwframe
     -> 30.994us BEGIN syscall_return_via_sysret
@@ -4144,6 +4143,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482180389:                           1    branches:uH:   call                     7f9ac9712ebe _dl_sysdep_start+0x3ae (foo.so) =>     7f9ac970e870 _dl_x86_init_cpu_features+0x0 (foo.so)
     1348489/1348489 2420721.482180513:                           1    branches:uH:   jmp                      7f9ac970e880 _dl_x86_init_cpu_features+0x10 (foo.so) =>     7f9ac970d7c0 init_cpu_features.constprop.0+0x0 (foo.so)
     -> 31.015us END   syscall_return_via_sysret
+    -> 31.015us END   __entry_text_start
     -> 31.015us END   brk
     -> 31.015us BEGIN _dl_x86_init_cpu_features
     1348489/1348489 2420721.482180689:                           1    branches:uH:   call                     7f9ac970e49d init_cpu_features.constprop.0+0xcdd (foo.so) =>     7f9ac970ca00 get_common_indices.constprop.0+0x0 (foo.so)
@@ -4402,7 +4402,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 40.583us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482189984:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac970dccf init_cpu_features.constprop.0+0x50f (foo.so)
     -> 40.584us END   do_syscall_64
-    -> 40.584us END   __entry_text_start
     -> 40.584us BEGIN entry_SYSCALL_64_after_hwframe
     -> 40.597us END   entry_SYSCALL_64_after_hwframe
     -> 40.597us BEGIN syscall_return_via_sysret
@@ -4412,6 +4411,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482189984:                           1    branches:uH:   call                     7f9ac9712edd _dl_sysdep_start+0x3cd (foo.so) =>     7f9ac9718de0 __sbrk+0x0 (foo.so)
     1348489/1348489 2420721.482189992:                           1    branches:uH:   return                   7f9ac9718e24 __sbrk+0x44 (foo.so) =>     7f9ac9712ee2 _dl_sysdep_start+0x3d2 (foo.so)
     ->  40.61us END   syscall_return_via_sysret
+    ->  40.61us END   __entry_text_start
     ->  40.61us END   init_cpu_features.constprop.0
     ->  40.61us BEGIN strlen
     -> 40.614us END   strlen
@@ -6859,13 +6859,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482215112:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 65.707us END   syscall_exit_to_user_mode
     -> 65.707us END   do_syscall_64
-    -> 65.707us END   __entry_text_start
     -> 65.707us BEGIN entry_SYSCALL_64_after_hwframe
     -> 65.722us END   entry_SYSCALL_64_after_hwframe
     -> 65.722us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482215112:                           1    branches:uH:   return                   7f9ac9719edf mmap64+0x1f (foo.so) =>     7f9ac97022c1 __minimal_malloc+0xa1 (foo.so)
     1348489/1348489 2420721.482215118:                           1    branches:uH:   return                   7f9ac970227b __minimal_malloc+0x5b (foo.so) =>     7f9ac9711278 _dl_important_hwcaps+0x4b8 (foo.so)
     -> 65.738us END   syscall_return_via_sysret
+    -> 65.738us END   __entry_text_start
     -> 65.738us END   mmap64
     1348489/1348489 2420721.482215118:                           1    branches:uH:   call                     7f9ac97112b5 _dl_important_hwcaps+0x4f5 (foo.so) =>     7f9ac9710d20 copy_hwcaps+0x0 (foo.so)
     1348489/1348489 2420721.482215118:                           1    branches:uH:   call                     7f9ac9710da6 copy_hwcaps+0x86 (foo.so) =>     7f9ac9711930 _dl_hwcaps_split_masked+0x0 (foo.so)
@@ -8023,12 +8023,12 @@ let%expect_test "C hello world with kernel tracing" =
     -> 76.173us END   exit_to_user_mode_prepare
     -> 76.173us END   syscall_exit_to_user_mode
     -> 76.173us END   do_syscall_64
-    -> 76.173us END   __entry_text_start
     -> 76.173us BEGIN entry_SYSCALL_64_after_hwframe
     -> 76.187us END   entry_SYSCALL_64_after_hwframe
     -> 76.187us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482225577:                           1    branches:uH:   return                   7f9ac9719be5 __access+0x25 (foo.so) =>     7f9ac9716b84 dl_main+0x1d44 (foo.so)
     -> 76.202us END   syscall_return_via_sysret
+    -> 76.202us END   __entry_text_start
     1348489/1348489 2420721.482225577:                           1    branches:uH:   call                     7f9ac9716bad dl_main+0x1d6d (foo.so) =>     7f9ac970eef0 _dl_audit_objopen+0x0 (foo.so)
     1348489/1348489 2420721.482225582:                           1    branches:uH:   return                   7f9ac970eefe _dl_audit_objopen+0xe (foo.so) =>     7f9ac9716bb2 dl_main+0x1d72 (foo.so)
     -> 76.203us END   __access
@@ -8970,7 +8970,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 84.923us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482234327:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719d38 __open64_nocancel+0x38 (foo.so)
     -> 84.924us END   do_syscall_64
-    -> 84.924us END   __entry_text_start
     -> 84.924us BEGIN entry_SYSCALL_64_after_hwframe
     -> 84.938us END   entry_SYSCALL_64_after_hwframe
     -> 84.938us BEGIN syscall_return_via_sysret
@@ -8978,6 +8977,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482234327:                           1    branches:uH:   call                     7f9ac9702497 _dl_sysdep_read_whole_file+0x47 (foo.so) =>     7f9ac9719aa0 __fstat+0x0 (foo.so)
     1348489/1348489 2420721.482234434:                           1    branches:uH:   jmp                      7f9ac9719ab7 __fstat+0x17 (foo.so) =>     7f9ac9719af0 __GI___fstatat64+0x0 (foo.so)
     -> 84.953us END   syscall_return_via_sysret
+    -> 84.953us END   __entry_text_start
     -> 84.953us END   __open64_nocancel
     -> 84.953us BEGIN __fstat
     1348489/1348489 2420721.482234452:                           1    branches:uH:   syscall                  7f9ac9719afc __GI___fstatat64+0xc (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
@@ -9257,7 +9257,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 86.821us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482236222:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719afe __GI___fstatat64+0xe (foo.so)
     -> 86.822us END   do_syscall_64
-    -> 86.822us END   __entry_text_start
     -> 86.822us BEGIN entry_SYSCALL_64_after_hwframe
     -> 86.835us END   entry_SYSCALL_64_after_hwframe
     -> 86.835us BEGIN syscall_return_via_sysret
@@ -9265,6 +9264,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482236222:                           1    branches:uH:   call                     7f9ac97024d0 _dl_sysdep_read_whole_file+0x80 (foo.so) =>     7f9ac9719ec0 mmap64+0x0 (foo.so)
     1348489/1348489 2420721.482236230:                           1    branches:uH:   syscall                  7f9ac9719ed5 mmap64+0x15 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 86.848us END   syscall_return_via_sysret
+    -> 86.848us END   __entry_text_start
     -> 86.848us END   __GI___fstatat64
     -> 86.848us BEGIN mmap64
     1348489/1348489 2420721.482236230:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -9692,7 +9692,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 90.737us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482240141:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 90.738us END   do_syscall_64
-    -> 90.738us END   __entry_text_start
     -> 90.738us BEGIN entry_SYSCALL_64_after_hwframe
     -> 90.752us END   entry_SYSCALL_64_after_hwframe
     -> 90.752us BEGIN syscall_return_via_sysret
@@ -9700,6 +9699,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482240141:                           1    branches:uH:   call                     7f9ac97024b6 _dl_sysdep_read_whole_file+0x66 (foo.so) =>     7f9ac9719bf0 __GI___close_nocancel+0x0 (foo.so)
     1348489/1348489 2420721.482240154:                           1    branches:uH:   syscall                  7f9ac9719bf9 __GI___close_nocancel+0x9 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 90.767us END   syscall_return_via_sysret
+    -> 90.767us END   __entry_text_start
     -> 90.767us END   mmap64
     -> 90.767us BEGIN __GI___close_nocancel
     1348489/1348489 2420721.482240154:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -9791,7 +9791,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 91.384us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482240785:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719bfb __GI___close_nocancel+0xb (foo.so)
     -> 91.385us END   do_syscall_64
-    -> 91.385us END   __entry_text_start
     -> 91.385us BEGIN entry_SYSCALL_64_after_hwframe
     -> 91.398us END   entry_SYSCALL_64_after_hwframe
     -> 91.398us BEGIN syscall_return_via_sysret
@@ -9799,6 +9798,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482240785:                           1    branches:uH:   return                   7f9ac970248e _dl_sysdep_read_whole_file+0x3e (foo.so) =>     7f9ac970b7e4 _dl_load_cache_lookup+0x174 (foo.so)
     1348489/1348489 2420721.482241024:                           1    branches:uH:   hw int                   7f9ac970b808 _dl_load_cache_lookup+0x198 (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 91.411us END   syscall_return_via_sysret
+    -> 91.411us END   __entry_text_start
     -> 91.411us END   __GI___close_nocancel
     -> 91.411us END   _dl_sysdep_read_whole_file
     1348489/1348489 2420721.482241024:                           1    branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
@@ -12035,7 +12035,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 100.768us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482250171:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719d38 __open64_nocancel+0x38 (foo.so)
     -> 100.769us END   do_syscall_64
-    -> 100.769us END   __entry_text_start
     -> 100.769us BEGIN entry_SYSCALL_64_after_hwframe
     -> 100.783us END   entry_SYSCALL_64_after_hwframe
     -> 100.783us BEGIN syscall_return_via_sysret
@@ -12043,6 +12042,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482250171:                           1    branches:uH:   call                     7f9ac96fc30c open_verify.constprop.0+0x7c (foo.so) =>     7f9ac9719d80 __GI___read_nocancel+0x0 (foo.so)
     1348489/1348489 2420721.482250179:                           1    branches:uH:   syscall                  7f9ac9719d86 __GI___read_nocancel+0x6 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 100.797us END   syscall_return_via_sysret
+    -> 100.797us END   __entry_text_start
     -> 100.797us END   __open64_nocancel
     -> 100.797us BEGIN __GI___read_nocancel
     1348489/1348489 2420721.482250179:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -12230,13 +12230,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 103.199us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482252602:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719d88 __GI___read_nocancel+0x8 (foo.so)
     ->  103.2us END   do_syscall_64
-    ->  103.2us END   __entry_text_start
     ->  103.2us BEGIN entry_SYSCALL_64_after_hwframe
     -> 103.214us END   entry_SYSCALL_64_after_hwframe
     -> 103.214us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482252602:                           1    branches:uH:   return                   7f9ac9719d90 __GI___read_nocancel+0x10 (foo.so) =>     7f9ac96fc311 open_verify.constprop.0+0x81 (foo.so)
     1348489/1348489 2420721.482252610:                           1    branches:uH:   call                     7f9ac96fc68c open_verify.constprop.0+0x3fc (foo.so) =>     7f9ac9719db0 __pread64_nocancel+0x0 (foo.so)
     -> 103.228us END   syscall_return_via_sysret
+    -> 103.228us END   __entry_text_start
     -> 103.228us END   __GI___read_nocancel
     1348489/1348489 2420721.482252653:                           1    branches:uH:   syscall                  7f9ac9719dbc __pread64_nocancel+0xc (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 103.236us BEGIN __pread64_nocancel
@@ -12417,13 +12417,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482253000:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719dbe __pread64_nocancel+0xe (foo.so)
     ->  103.6us END   syscall_exit_to_user_mode
     ->  103.6us END   do_syscall_64
-    ->  103.6us END   __entry_text_start
     ->  103.6us BEGIN entry_SYSCALL_64_after_hwframe
     -> 103.613us END   entry_SYSCALL_64_after_hwframe
     -> 103.613us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482253000:                           1    branches:uH:   return                   7f9ac9719dc6 __pread64_nocancel+0x16 (foo.so) =>     7f9ac96fc691 open_verify.constprop.0+0x401 (foo.so)
     1348489/1348489 2420721.482253014:                           1    branches:uH:   call                     7f9ac96fc51c open_verify.constprop.0+0x28c (foo.so) =>     7f9ac9719db0 __pread64_nocancel+0x0 (foo.so)
     -> 103.626us END   syscall_return_via_sysret
+    -> 103.626us END   __entry_text_start
     -> 103.626us END   __pread64_nocancel
     1348489/1348489 2420721.482253035:                           1    branches:uH:   syscall                  7f9ac9719dbc __pread64_nocancel+0xc (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 103.64us BEGIN __pread64_nocancel
@@ -12604,13 +12604,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482253398:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719dbe __pread64_nocancel+0xe (foo.so)
     -> 103.998us END   syscall_exit_to_user_mode
     -> 103.998us END   do_syscall_64
-    -> 103.998us END   __entry_text_start
     -> 103.998us BEGIN entry_SYSCALL_64_after_hwframe
     -> 104.011us END   entry_SYSCALL_64_after_hwframe
     -> 104.011us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482253398:                           1    branches:uH:   return                   7f9ac9719dc6 __pread64_nocancel+0x16 (foo.so) =>     7f9ac96fc521 open_verify.constprop.0+0x291 (foo.so)
     1348489/1348489 2420721.482253415:                           1    branches:uH:   call                     7f9ac96fc51c open_verify.constprop.0+0x28c (foo.so) =>     7f9ac9719db0 __pread64_nocancel+0x0 (foo.so)
     -> 104.024us END   syscall_return_via_sysret
+    -> 104.024us END   __entry_text_start
     -> 104.024us END   __pread64_nocancel
     1348489/1348489 2420721.482253440:                           1    branches:uH:   syscall                  7f9ac9719dbc __pread64_nocancel+0xc (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 104.041us BEGIN __pread64_nocancel
@@ -12790,7 +12790,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482253643:                           1    branches:uH:   return               ffffffffae120a1e do_syscall_64+0x6e (foo.so) => ffffffffae20007c entry_SYSCALL_64_after_hwframe+0x44 (foo.so)
     -> 104.269us END   syscall_exit_to_user_mode
     -> 104.269us END   do_syscall_64
-    -> 104.269us END   __entry_text_start
     -> 104.269us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482253669:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719dbe __pread64_nocancel+0xe (foo.so)
     -> 104.27us END   entry_SYSCALL_64_after_hwframe
@@ -12798,6 +12797,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482253669:                           1    branches:uH:   return                   7f9ac9719dc6 __pread64_nocancel+0x16 (foo.so) =>     7f9ac96fc521 open_verify.constprop.0+0x291 (foo.so)
     1348489/1348489 2420721.482253689:                           1    branches:uH:   call                     7f9ac96fc3a5 open_verify.constprop.0+0x115 (foo.so) =>     7f9ac9702380 __minimal_free+0x0 (foo.so)
     -> 104.295us END   syscall_return_via_sysret
+    -> 104.295us END   __entry_text_start
     -> 104.295us END   __pread64_nocancel
     1348489/1348489 2420721.482253710:                           1    branches:uH:   return                   7f9ac9702390 __minimal_free+0x10 (foo.so) =>     7f9ac96fc3ab open_verify.constprop.0+0x11b (foo.so)
     -> 104.315us BEGIN __minimal_free
@@ -13090,13 +13090,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482254461:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719afe __GI___fstatat64+0xe (foo.so)
     -> 105.059us END   syscall_exit_to_user_mode
     -> 105.059us END   do_syscall_64
-    -> 105.059us END   __entry_text_start
     -> 105.059us BEGIN entry_SYSCALL_64_after_hwframe
     -> 105.073us END   entry_SYSCALL_64_after_hwframe
     -> 105.073us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482254461:                           1    branches:uH:   return                   7f9ac9719b07 __GI___fstatat64+0x17 (foo.so) =>     7f9ac96fe33a _dl_map_object_from_fd+0x51a (foo.so)
     1348489/1348489 2420721.482254487:                           1    branches:uH:   call                     7f9ac96fdece _dl_map_object_from_fd+0xae (foo.so) =>     7f9ac97027b0 _dl_new_object+0x0 (foo.so)
     -> 105.087us END   syscall_return_via_sysret
+    -> 105.087us END   __entry_text_start
     -> 105.087us END   __GI___fstatat64
     1348489/1348489 2420721.482254487:                           1    branches:uH:   call                     7f9ac97027f3 _dl_new_object+0x43 (foo.so) =>     7f9ac971dc60 strlen+0x0 (foo.so)
     1348489/1348489 2420721.482254508:                           1    branches:uH:   return                   7f9ac971dc9d strlen+0x3d (foo.so) =>     7f9ac97027f8 _dl_new_object+0x48 (foo.so)
@@ -13311,13 +13311,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482255182:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719dbe __pread64_nocancel+0xe (foo.so)
     -> 105.782us END   syscall_exit_to_user_mode
     -> 105.782us END   do_syscall_64
-    -> 105.782us END   __entry_text_start
     -> 105.782us BEGIN entry_SYSCALL_64_after_hwframe
     -> 105.795us END   entry_SYSCALL_64_after_hwframe
     -> 105.795us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482255182:                           1    branches:uH:   return                   7f9ac9719dc6 __pread64_nocancel+0x16 (foo.so) =>     7f9ac96fe4e4 _dl_map_object_from_fd+0x6c4 (foo.so)
     1348489/1348489 2420721.482255371:                           1    branches:uH:   call                     7f9ac96fe16a _dl_map_object_from_fd+0x34a (foo.so) =>     7f9ac9719ec0 mmap64+0x0 (foo.so)
     -> 105.808us END   syscall_return_via_sysret
+    -> 105.808us END   __entry_text_start
     -> 105.808us END   __pread64_nocancel
     1348489/1348489 2420721.482255391:                           1    branches:uH:   syscall                  7f9ac9719ed5 mmap64+0x15 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 105.997us BEGIN mmap64
@@ -13758,7 +13758,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 108.902us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482258304:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 108.903us END   do_syscall_64
-    -> 108.903us END   __entry_text_start
     -> 108.903us BEGIN entry_SYSCALL_64_after_hwframe
     -> 108.916us END   entry_SYSCALL_64_after_hwframe
     -> 108.916us BEGIN syscall_return_via_sysret
@@ -13766,6 +13765,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482258304:                           1    branches:uH:   call                     7f9ac96fe1e5 _dl_map_object_from_fd+0x3c5 (foo.so) =>     7f9ac9719f40 mprotect+0x0 (foo.so)
     1348489/1348489 2420721.482258321:                           1    branches:uH:   syscall                  7f9ac9719f49 mprotect+0x9 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 108.93us END   syscall_return_via_sysret
+    -> 108.93us END   __entry_text_start
     -> 108.93us END   mmap64
     -> 108.93us BEGIN mprotect
     1348489/1348489 2420721.482258321:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -14303,7 +14303,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 117.011us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482266413:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719f4b mprotect+0xb (foo.so)
     -> 117.012us END   do_syscall_64
-    -> 117.012us END   __entry_text_start
     -> 117.012us BEGIN entry_SYSCALL_64_after_hwframe
     -> 117.025us END   entry_SYSCALL_64_after_hwframe
     -> 117.025us BEGIN syscall_return_via_sysret
@@ -14311,6 +14310,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482266413:                           1    branches:uH:   call                     7f9ac96fe2f2 _dl_map_object_from_fd+0x4d2 (foo.so) =>     7f9ac9719ec0 mmap64+0x0 (foo.so)
     1348489/1348489 2420721.482266453:                           1    branches:uH:   syscall                  7f9ac9719ed5 mmap64+0x15 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 117.039us END   syscall_return_via_sysret
+    -> 117.039us END   __entry_text_start
     -> 117.039us END   mprotect
     -> 117.039us BEGIN mmap64
     1348489/1348489 2420721.482266453:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -15522,12 +15522,12 @@ let%expect_test "C hello world with kernel tracing" =
     -> 124.876us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482274280:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 124.877us END   do_syscall_64
-    -> 124.877us END   __entry_text_start
     -> 124.877us BEGIN entry_SYSCALL_64_after_hwframe
     -> 124.891us END   entry_SYSCALL_64_after_hwframe
     -> 124.891us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482274374:                           1    branches:uH:   return                   7f9ac9719edf mmap64+0x1f (foo.so) =>     7f9ac96fe2f7 _dl_map_object_from_fd+0x4d7 (foo.so)
     -> 124.906us END   syscall_return_via_sysret
+    -> 124.906us END   __entry_text_start
     1348489/1348489 2420721.482274381:                           1    branches:uH:   call                     7f9ac96fe2f2 _dl_map_object_from_fd+0x4d2 (foo.so) =>     7f9ac9719ec0 mmap64+0x0 (foo.so)
     ->    125us END   mmap64
     1348489/1348489 2420721.482274405:                           1    branches:uH:   syscall                  7f9ac9719ed5 mmap64+0x15 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
@@ -16286,7 +16286,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482276470:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 127.068us END   syscall_exit_to_user_mode
     -> 127.068us END   do_syscall_64
-    -> 127.068us END   __entry_text_start
     -> 127.068us BEGIN entry_SYSCALL_64_after_hwframe
     -> 127.082us END   entry_SYSCALL_64_after_hwframe
     -> 127.082us BEGIN syscall_return_via_sysret
@@ -16294,6 +16293,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482276470:                           1    branches:uH:   call                     7f9ac96fe2f2 _dl_map_object_from_fd+0x4d2 (foo.so) =>     7f9ac9719ec0 mmap64+0x0 (foo.so)
     1348489/1348489 2420721.482276488:                           1    branches:uH:   syscall                  7f9ac9719ed5 mmap64+0x15 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 127.096us END   syscall_return_via_sysret
+    -> 127.096us END   __entry_text_start
     -> 127.096us END   mmap64
     -> 127.096us BEGIN mmap64
     1348489/1348489 2420721.482276488:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -17065,13 +17065,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 129.729us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482279134:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 129.73us END   do_syscall_64
-    -> 129.73us END   __entry_text_start
     -> 129.73us BEGIN entry_SYSCALL_64_after_hwframe
     -> 129.745us END   entry_SYSCALL_64_after_hwframe
     -> 129.745us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482279134:                           1    branches:uH:   return                   7f9ac9719edf mmap64+0x1f (foo.so) =>     7f9ac96fe2f7 _dl_map_object_from_fd+0x4d7 (foo.so)
     1348489/1348489 2420721.482279145:                           1    branches:uH:   call                     7f9ac96fe288 _dl_map_object_from_fd+0x468 (foo.so) =>     7f9ac971e3c0 memset+0x0 (foo.so)
     -> 129.76us END   syscall_return_via_sysret
+    -> 129.76us END   __entry_text_start
     -> 129.76us END   mmap64
     1348489/1348489 2420721.482279324:                           1    branches:uH:   hw int                   7f9ac971e3fa memset+0x3a (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 129.771us BEGIN memset
@@ -18127,13 +18127,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 133.896us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482283298:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 133.897us END   do_syscall_64
-    -> 133.897us END   __entry_text_start
     -> 133.897us BEGIN entry_SYSCALL_64_after_hwframe
     -> 133.91us END   entry_SYSCALL_64_after_hwframe
     -> 133.91us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482283298:                           1    branches:uH:   return                   7f9ac9719edf mmap64+0x1f (foo.so) =>     7f9ac96fef14 _dl_map_object_from_fd+0x10f4 (foo.so)
     1348489/1348489 2420721.482283453:                           1    branches:uH:   hw int                   7f9ac96fe7d8 _dl_map_object_from_fd+0x9b8 (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 133.924us END   syscall_return_via_sysret
+    -> 133.924us END   __entry_text_start
     -> 133.924us END   mmap64
     1348489/1348489 2420721.482283453:                           1    branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
     1348489/1348489 2420721.482283461:                           1    branches:uH:   call                 ffffffffae20137a error_entry+0x6a (foo.so) => ffffffffae121a30 sync_regs+0x0 (foo.so)
@@ -20010,7 +20010,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482290955:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719bfb __GI___close_nocancel+0xb (foo.so)
     -> 141.556us END   syscall_exit_to_user_mode
     -> 141.556us END   do_syscall_64
-    -> 141.556us END   __entry_text_start
     -> 141.556us BEGIN entry_SYSCALL_64_after_hwframe
     -> 141.568us END   entry_SYSCALL_64_after_hwframe
     -> 141.568us BEGIN syscall_return_via_sysret
@@ -20018,6 +20017,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482290955:                           1    branches:uH:   call                     7f9ac96fec34 _dl_map_object_from_fd+0xe14 (foo.so) =>     7f9ac9708040 _dl_setup_hash+0x0 (foo.so)
     1348489/1348489 2420721.482291060:                           1    branches:uH:   return                   7f9ac97080ad _dl_setup_hash+0x6d (foo.so) =>     7f9ac96fec39 _dl_map_object_from_fd+0xe19 (foo.so)
     -> 141.581us END   syscall_return_via_sysret
+    -> 141.581us END   __entry_text_start
     -> 141.581us END   __GI___close_nocancel
     -> 141.581us BEGIN _dl_setup_hash
     1348489/1348489 2420721.482291061:                           1    branches:uH:   call                     7f9ac96ff0a8 _dl_map_object_from_fd+0x1288 (foo.so) =>     7f9ac971a440 strcmp+0x0 (foo.so)
@@ -21470,7 +21470,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482298544:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719ed7 mmap64+0x17 (foo.so)
     -> 149.139us END   syscall_exit_to_user_mode
     -> 149.139us END   do_syscall_64
-    -> 149.139us END   __entry_text_start
     -> 149.139us BEGIN entry_SYSCALL_64_after_hwframe
     -> 149.154us END   entry_SYSCALL_64_after_hwframe
     -> 149.154us BEGIN syscall_return_via_sysret
@@ -21478,6 +21477,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482298544:                           1    branches:uH:   return                   7f9ac970227b __minimal_malloc+0x5b (foo.so) =>     7f9ac9708f75 _dl_allocate_tls_storage+0x25 (foo.so)
     1348489/1348489 2420721.482298685:                           1    branches:uH:   hw int                   7f9ac9708fa0 _dl_allocate_tls_storage+0x50 (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 149.17us END   syscall_return_via_sysret
+    -> 149.17us END   __entry_text_start
     -> 149.17us END   mmap64
     -> 149.17us END   __minimal_malloc
     1348489/1348489 2420721.482298685:                           1    branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
@@ -22330,13 +22330,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 151.984us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482301386:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac971433b init_tls+0xeb (foo.so)
     -> 151.985us END   do_syscall_64
-    -> 151.985us END   __entry_text_start
     -> 151.985us BEGIN entry_SYSCALL_64_after_hwframe
     -> 151.998us END   entry_SYSCALL_64_after_hwframe
     -> 151.998us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482301386:                           1    branches:uH:   call                     7f9ac971433f init_tls+0xef (foo.so) =>     7f9ac9709990 __tls_init_tp+0x0 (foo.so)
     1348489/1348489 2420721.482301393:                           1    branches:uH:   syscall                  7f9ac97099dc __tls_init_tp+0x4c (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 152.012us END   syscall_return_via_sysret
+    -> 152.012us END   __entry_text_start
     -> 152.012us BEGIN __tls_init_tp
     1348489/1348489 2420721.482301393:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
     1348489/1348489 2420721.482301393:                           1    branches:uH:   call                 ffffffffae1209e2 do_syscall_64+0x32 (foo.so) => ffffffffae124b80 syscall_enter_from_user_mode+0x0 (foo.so)
@@ -22404,13 +22404,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482301690:                           1    branches:uH:   return               ffffffffae120a1e do_syscall_64+0x6e (foo.so) => ffffffffae20007c entry_SYSCALL_64_after_hwframe+0x44 (foo.so)
     -> 152.316us END   syscall_exit_to_user_mode
     -> 152.316us END   do_syscall_64
-    -> 152.316us END   __entry_text_start
     -> 152.316us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482301716:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac97099de __tls_init_tp+0x4e (foo.so)
     -> 152.317us END   entry_SYSCALL_64_after_hwframe
     -> 152.317us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482301718:                           1    branches:uH:   syscall                  7f9ac9709a36 __tls_init_tp+0xa6 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 152.342us END   syscall_return_via_sysret
+    -> 152.342us END   __entry_text_start
     1348489/1348489 2420721.482301718:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
     1348489/1348489 2420721.482301718:                           1    branches:uH:   call                 ffffffffae1209e2 do_syscall_64+0x32 (foo.so) => ffffffffae124b80 syscall_enter_from_user_mode+0x0 (foo.so)
     1348489/1348489 2420721.482301728:                           1    branches:uH:   jmp                  ffffffffae124ba1 syscall_enter_from_user_mode+0x21 (foo.so) => ffffffffad7218e0 syscall_trace_enter.constprop.0+0x0 (foo.so)
@@ -22469,7 +22469,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482301895:                           1    branches:uH:   return               ffffffffae120a1e do_syscall_64+0x6e (foo.so) => ffffffffae20007c entry_SYSCALL_64_after_hwframe+0x44 (foo.so)
     -> 152.521us END   syscall_exit_to_user_mode
     -> 152.521us END   do_syscall_64
-    -> 152.521us END   __entry_text_start
     -> 152.521us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482301921:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9709a38 __tls_init_tp+0xa8 (foo.so)
     -> 152.522us END   entry_SYSCALL_64_after_hwframe
@@ -22477,6 +22476,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482301921:                           1    branches:uH:   call                     7f9ac9709a4b __tls_init_tp+0xbb (foo.so) =>     7f9ac970c230 __tunable_get_val+0x0 (foo.so)
     1348489/1348489 2420721.482301924:                           1    branches:uH:   return                   7f9ac970c290 __tunable_get_val+0x60 (foo.so) =>     7f9ac9709a50 __tls_init_tp+0xc0 (foo.so)
     -> 152.547us END   syscall_return_via_sysret
+    -> 152.547us END   __entry_text_start
     -> 152.547us BEGIN __tunable_get_val
     1348489/1348489 2420721.482301935:                           1    branches:uH:   syscall                  7f9ac9709a6d __tls_init_tp+0xdd (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 152.55us END   __tunable_get_val
@@ -22559,13 +22559,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482302465:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9709a6f __tls_init_tp+0xdf (foo.so)
     -> 152.956us END   syscall_exit_to_user_mode
     -> 152.956us END   do_syscall_64
-    -> 152.956us END   __entry_text_start
     -> 152.956us BEGIN entry_SYSCALL_64_after_hwframe
     -> 153.023us END   entry_SYSCALL_64_after_hwframe
     -> 153.023us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482302465:                           1    branches:uH:   return                   7f9ac9709abc __tls_init_tp+0x12c (foo.so) =>     7f9ac9714344 init_tls+0xf4 (foo.so)
     1348489/1348489 2420721.482302472:                           1    branches:uH:   return                   7f9ac9714355 init_tls+0x105 (foo.so) =>     7f9ac9717afb dl_main+0x2cbb (foo.so)
     -> 153.091us END   syscall_return_via_sysret
+    -> 153.091us END   __entry_text_start
     -> 153.091us END   __tls_init_tp
     1348489/1348489 2420721.482302541:                           1    branches:uH:   call                     7f9ac971701b dl_main+0x21db (foo.so) =>     7f9ac970ed40 _dl_cet_check+0x0 (foo.so)
     -> 153.098us END   init_tls
@@ -29885,7 +29885,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 202.008us END   exit_to_user_mode_prepare
     -> 202.008us END   syscall_exit_to_user_mode
     -> 202.008us END   do_syscall_64
-    -> 202.008us END   __entry_text_start
     -> 202.008us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482351429:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719f4b mprotect+0xb (foo.so)
     -> 202.022us END   entry_SYSCALL_64_after_hwframe
@@ -29893,6 +29892,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482351429:                           1    branches:uH:   return                   7f9ac9719f53 mprotect+0x13 (foo.so) =>     7f9ac97057e5 _dl_protect_relro+0x45 (foo.so)
     1348489/1348489 2420721.482351434:                           1    branches:uH:   return                   7f9ac97057d2 _dl_protect_relro+0x32 (foo.so) =>     7f9ac9706918 _dl_relocate_object+0x1038 (foo.so)
     -> 202.055us END   syscall_return_via_sysret
+    -> 202.055us END   __entry_text_start
     -> 202.055us END   mprotect
     1348489/1348489 2420721.482351439:                           1    branches:uH:   return                   7f9ac9706926 _dl_relocate_object+0x1046 (foo.so) =>     7f9ac97171d3 dl_main+0x2393 (foo.so)
     -> 202.06us END   _dl_protect_relro
@@ -30478,7 +30478,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 205.094us END   exit_to_user_mode_prepare
     -> 205.094us END   syscall_exit_to_user_mode
     -> 205.095us END   do_syscall_64
-    -> 205.095us END   __entry_text_start
     -> 205.095us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482354514:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719f4b mprotect+0xb (foo.so)
     -> 205.107us END   entry_SYSCALL_64_after_hwframe
@@ -30488,6 +30487,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482354514:                           1    branches:uH:   return                   7f9ac9706926 _dl_relocate_object+0x1046 (foo.so) =>     7f9ac97171d3 dl_main+0x2393 (foo.so)
     1348489/1348489 2420721.482354535:                           1    branches:uH:   call                     7f9ac9717251 dl_main+0x2411 (foo.so) =>     7f9ac9709020 _dl_allocate_tls_init+0x0 (foo.so)
     -> 205.14us END   syscall_return_via_sysret
+    -> 205.14us END   __entry_text_start
     -> 205.14us END   mprotect
     -> 205.14us END   _dl_protect_relro
     -> 205.14us END   _dl_relocate_object
@@ -31345,7 +31345,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 212.343us END   exit_to_user_mode_prepare
     -> 212.343us END   syscall_exit_to_user_mode
     -> 212.344us END   do_syscall_64
-    -> 212.344us END   __entry_text_start
     -> 212.344us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482361764:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719f4b mprotect+0xb (foo.so)
     -> 212.357us END   entry_SYSCALL_64_after_hwframe
@@ -31354,6 +31353,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482361764:                           1    branches:uH:   return                   7f9ac97057d2 _dl_protect_relro+0x32 (foo.so) =>     7f9ac9706918 _dl_relocate_object+0x1038 (foo.so)
     1348489/1348489 2420721.482361765:                           1    branches:uH:   return                   7f9ac9706926 _dl_relocate_object+0x1046 (foo.so) =>     7f9ac971775d dl_main+0x291d (foo.so)
     -> 212.39us END   syscall_return_via_sysret
+    -> 212.39us END   __entry_text_start
     -> 212.39us END   mprotect
     -> 212.39us END   _dl_protect_relro
     1348489/1348489 2420721.482361765:                           1    branches:uH:   call                     7f9ac971777c dl_main+0x293c (foo.so) =>     7f9ac96f8000 _dl_call_libc_early_init+0x0 (foo.so)
@@ -34056,13 +34056,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 222.566us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482371967:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac95de8b4 getrlimit+0x14 (foo.so)
     -> 222.567us END   do_syscall_64
-    -> 222.567us END   __entry_text_start
     -> 222.567us BEGIN entry_SYSCALL_64_after_hwframe
     -> 222.58us END   entry_SYSCALL_64_after_hwframe
     -> 222.58us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482371967:                           1    branches:uH:   return                   7f9ac95de8bc getrlimit+0x1c (foo.so) =>     7f9ac9632b3c __libc_early_init+0x3c (foo.so)
     1348489/1348489 2420721.482372118:                           1    branches:uH:   hw int                   7f9ac9632b7e __libc_early_init+0x7e (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 222.593us END   syscall_return_via_sysret
+    -> 222.593us END   __entry_text_start
     -> 222.593us END   getrlimit
     1348489/1348489 2420721.482372118:                           1    branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
     1348489/1348489 2420721.482372230:                           1    branches:uH:   call                 ffffffffae20137a error_entry+0x6a (foo.so) => ffffffffae121a30 sync_regs+0x0 (foo.so)
@@ -37539,7 +37539,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 233.964us END   exit_to_user_mode_prepare
     -> 233.964us END   syscall_exit_to_user_mode
     -> 233.965us END   do_syscall_64
-    -> 233.965us END   __entry_text_start
     -> 233.965us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482383386:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac9719f1b __munmap+0xb (foo.so)
     -> 233.978us END   entry_SYSCALL_64_after_hwframe
@@ -37548,6 +37547,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482383386:                           1    branches:uH:   return                   7f9ac970ba49 _dl_unload_cache+0x49 (foo.so) =>     7f9ac97177ab dl_main+0x296b (foo.so)
     1348489/1348489 2420721.482383394:                           1    branches:uH:   return                   7f9ac97177b9 dl_main+0x2979 (foo.so) =>     7f9ac9712f0c _dl_sysdep_start+0x3fc (foo.so)
     -> 234.012us END   syscall_return_via_sysret
+    -> 234.012us END   __entry_text_start
     -> 234.012us END   __munmap
     -> 234.012us END   _dl_unload_cache
     1348489/1348489 2420721.482383416:                           1    branches:uH:   return                   7f9ac9712f1f _dl_sysdep_start+0x40f (foo.so) =>     7f9ac9714b91 _dl_start+0x541 (foo.so)
@@ -37557,7 +37557,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482383459:                           1    branches:uH:   call                     7f9ac9713965 _dl_start_user+0x2d (foo.so) =>     7f9ac96fbf50 _dl_init+0x0 (foo.so)
     1348489/1348489 2420721.482383733:                           1    branches:uH:   call                     7f9ac96fbfc7 _dl_init+0x77 (foo.so) =>     7f9ac96fbe20 call_init+0x0 (foo.so)
     -> 234.085us END   _dl_start
-    -> 234.085us END   _start
     -> 234.085us BEGIN _dl_start_user
     -> 234.222us BEGIN _dl_init
     1348489/1348489 2420721.482383854:                           1    branches:uH:   return                   7f9ac96fbeee call_init+0xce (foo.so) =>     7f9ac96fbfcc _dl_init+0x7c (foo.so)
@@ -39629,7 +39628,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 241.003us END   _dl_init
     1348489/1348489 2420721.482390589:                           1    branches:uH:   hw int                   561dde805040 _start+0x0 (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     -> 241.005us END   _dl_start_user
-    -> 241.005us BEGIN _start
     1348489/1348489 2420721.482390589:                           1    branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
     1348489/1348489 2420721.482390608:                           1    branches:uH:   call                 ffffffffae20137a error_entry+0x6a (foo.so) => ffffffffae121a30 sync_regs+0x0 (foo.so)
     -> 241.215us BEGIN asm_exc_page_fault
@@ -43107,7 +43105,6 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482404395:                           1    branches:uH:   return               ffffffffae120a1e do_syscall_64+0x6e (foo.so) => ffffffffae20007c entry_SYSCALL_64_after_hwframe+0x44 (foo.so)
     -> 255.021us END   syscall_exit_to_user_mode
     -> 255.021us END   do_syscall_64
-    -> 255.021us END   __entry_text_start
     -> 255.021us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482404425:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac95d871e fstatat64+0xe (foo.so)
     -> 255.022us END   entry_SYSCALL_64_after_hwframe
@@ -43115,6 +43112,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482404425:                           1    branches:uH:   return                   7f9ac95d8727 fstatat64+0x17 (foo.so) =>     7f9ac9550443 _IO_file_doallocate+0x63 (foo.so)
     1348489/1348489 2420721.482404444:                           1    branches:uH:   call                     7f9ac955046b _IO_file_doallocate+0x8b (foo.so) =>     7f9ac9574590 __libc_malloc+0x0 (foo.so)
     -> 255.051us END   syscall_return_via_sysret
+    -> 255.051us END   __entry_text_start
     -> 255.051us END   fstatat64
     1348489/1348489 2420721.482404481:                           1    branches:uH:   call                     7f9ac95747c0 __libc_malloc+0x230 (foo.so) =>     7f9ac9570fa0 ptmalloc_init.part.0+0x0 (foo.so)
     -> 255.07us BEGIN __libc_malloc
@@ -43233,13 +43231,13 @@ let%expect_test "C hello world with kernel tracing" =
     -> 257.408us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482406814:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac951d207 getrandom+0x17 (foo.so)
     -> 257.409us END   do_syscall_64
-    -> 257.409us END   __entry_text_start
     -> 257.409us BEGIN entry_SYSCALL_64_after_hwframe
     -> 257.424us END   entry_SYSCALL_64_after_hwframe
     -> 257.424us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482406814:                           1    branches:uH:   return                   7f9ac951d20f getrandom+0x1f (foo.so) =>     7f9ac9570fd6 ptmalloc_init.part.0+0x36 (foo.so)
     1348489/1348489 2420721.482406879:                           1    branches:uH:   call                     7f9ac957109c ptmalloc_init.part.0+0xfc (foo.so) =>     7f9ac970c230 __tunable_get_val+0x0 (foo.so)
     -> 257.44us END   syscall_return_via_sysret
+    -> 257.44us END   __entry_text_start
     -> 257.44us END   getrandom
     1348489/1348489 2420721.482406907:                           1    branches:uH:   return                   7f9ac970c290 __tunable_get_val+0x60 (foo.so) =>     7f9ac95710a2 ptmalloc_init.part.0+0x102 (foo.so)
     -> 257.505us BEGIN __tunable_get_val
@@ -43373,7 +43371,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 258.696us END   syscall_exit_to_user_mode
     1348489/1348489 2420721.482408098:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac95ded4b brk+0xb (foo.so)
     -> 258.697us END   do_syscall_64
-    -> 258.697us END   __entry_text_start
     -> 258.697us BEGIN entry_SYSCALL_64_after_hwframe
     -> 258.71us END   entry_SYSCALL_64_after_hwframe
     -> 258.71us BEGIN syscall_return_via_sysret
@@ -43381,6 +43378,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482408098:                           1    branches:uH:   call                     7f9ac95dee0f __sbrk+0x8f (foo.so) =>     7f9ac95ded40 brk+0x0 (foo.so)
     1348489/1348489 2420721.482408115:                           1    branches:uH:   syscall                  7f9ac95ded49 brk+0x9 (foo.so) => ffffffffae200000 __entry_text_start+0x0 (foo.so)
     -> 258.724us END   syscall_return_via_sysret
+    -> 258.724us END   __entry_text_start
     -> 258.724us END   brk
     -> 258.724us BEGIN brk
     1348489/1348489 2420721.482408115:                           1    branches:uH:   call                 ffffffffae200077 entry_SYSCALL_64_after_hwframe+0x3f (foo.so) => ffffffffae1209b0 do_syscall_64+0x0 (foo.so)
@@ -43628,7 +43626,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 259.663us END   exit_to_user_mode_prepare
     -> 259.663us END   syscall_exit_to_user_mode
     -> 259.663us END   do_syscall_64
-    -> 259.663us END   __entry_text_start
     -> 259.663us BEGIN entry_SYSCALL_64_after_hwframe
     1348489/1348489 2420721.482409063:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac95ded4b brk+0xb (foo.so)
     -> 259.664us END   entry_SYSCALL_64_after_hwframe
@@ -43637,6 +43634,7 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482409063:                           1    branches:uH:   return                   7f9ac95dedba __sbrk+0x3a (foo.so) =>     7f9ac9571b86 __default_morecore+0x16 (foo.so)
     1348489/1348489 2420721.482409066:                           1    branches:uH:   return                   7f9ac9571b90 __default_morecore+0x20 (foo.so) =>     7f9ac9572bb2 sysmalloc+0x532 (foo.so)
     -> 259.689us END   syscall_return_via_sysret
+    -> 259.689us END   __entry_text_start
     -> 259.689us END   brk
     -> 259.689us END   __sbrk
     1348489/1348489 2420721.482409092:                           1    branches:uH:   call                     7f9ac9572cd1 sysmalloc+0x651 (foo.so) =>     7f9ac9571b70 __default_morecore+0x0 (foo.so)
@@ -44821,13 +44819,13 @@ let%expect_test "C hello world with kernel tracing" =
     1348489/1348489 2420721.482418908:                           1    branches:uH:   sysret               ffffffffae200158 syscall_return_via_sysret+0x72 (foo.so) =>     7f9ac95d9257 __write+0x17 (foo.so)
     -> 269.505us END   syscall_exit_to_user_mode
     -> 269.505us END   do_syscall_64
-    -> 269.505us END   __entry_text_start
     -> 269.505us BEGIN entry_SYSCALL_64_after_hwframe
     -> 269.519us END   entry_SYSCALL_64_after_hwframe
     -> 269.519us BEGIN syscall_return_via_sysret
     1348489/1348489 2420721.482418908:                           1    branches:uH:   return                   7f9ac95d925f __write+0x1f (foo.so) =>     7f9ac955c05d _IO_file_write+0x2d (foo.so)
     1348489/1348489 2420721.482418934:                           1    branches:uH:   return                   7f9ac955c0bb _IO_file_write+0x8b (foo.so) =>     7f9ac955b3d6 new_do_write+0x66 (foo.so)
     -> 269.534us END   syscall_return_via_sysret
+    -> 269.534us END   __entry_text_start
     -> 269.534us END   __write
     1348489/1348489 2420721.482418960:                           1    branches:uH:   return                   7f9ac955b429 new_do_write+0xb9 (foo.so) =>     7f9ac955d119 _IO_do_write+0x19 (foo.so)
     -> 269.56us END   _IO_file_write
@@ -63615,5 +63613,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 313.199us END   exit
     -> 313.199us END   __libc_start_call_main
     -> 313.199us END   __libc_start_main
-    -> 313.199us END   _start |}]
+    -> 313.199us END   _start
+    |}]
 ;;
