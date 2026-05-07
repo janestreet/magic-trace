@@ -707,8 +707,7 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   match Vec.last t.exception_handlers with
   | This dst_frame ->
     Vec.pop_back_unit_exn t.exception_handlers;
-    if not (Symbol.equal dst_frame.location.symbol dst.symbol)
-    then log_unexpected_case [%message (dst_frame : Frame.t) (dst : Location.t)];
+    assert (Symbol.equal dst_frame.location.symbol dst.symbol);
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
