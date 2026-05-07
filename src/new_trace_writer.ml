@@ -966,28 +966,14 @@ and write_event' (T t) ?events_writer event =
        List.iter calls ~f:(fun location -> call t thread_info ~time ~location)
      | { Event.Ok.thread = _
        ; time = _
-       ; data = Trace { kind; trace_state_change = _; src; dst }
+       ; data = Trace { kind = _; trace_state_change = _; src = _; dst = _ }
        ; in_transaction = _
        } ->
        (* TODO Re-add the assertion from the old trace-writer on impossible [kind, trace_state_change] combinations *)
        Thread_info.add_event_to_trace_segment
          thread_info
          event_value.data
-         (time :> Time_ns.Span.t);
-       let #(segment, ~in_filtered_region:_) =
-         Nonempty_vec.last thread_info.trace_segments
-       in
-       (match kind with
-        | Some (Call | Jump | Async) ->
-          (match Symbol.display_name dst.symbol with
-           | "caml_runstack" | "caml_resume" -> Trace_segment.push_fiber_state segment
-           | _ -> ())
-        | Some (Return | Sysret | Iret) ->
-          (match Symbol.display_name src.symbol with
-           | "caml_runstack" | "caml_resume" | "caml_perform" ->
-             Trace_segment.pop_fiber_state segment
-           | _ -> ())
-        | _ -> ())
+         (time :> Time_ns.Span.t)
      | { Event.Ok.thread = _ (* Already used this to look up thread info. *)
        ; time = _
        ; data = Ptwrite { location; data }

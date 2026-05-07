@@ -333,7 +333,7 @@ type t =
          frames, starting from the [leaf] of the callstack immediately preceding it. *)
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
-  ; mutable exception_handlers : Frame.t Vec.t
+  ; exception_handlers : Frame.t Vec.t
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -342,17 +342,8 @@ type t =
       later examination — [exception_handlers] represents the state **as of the event we
       are currently processing**, and as such is only used during the "ingestion" phase
       (i.e. while calls are still being made to [add_event]). *)
-  ; saved_fiber_state : (Frame.t Vec.t * Location.t) Stack.t
   ; mutable last_known_location : Location.t
   }
-
-let unknown_location : Location.t =
-  { symbol = Unknown
-  ; symbol_offset = 0
-  ; instruction_pointer = Int64.max_value
-  ; dso = Interned_string.empty
-  }
-;;
 
 let create ocaml_exception_info =
   let root = Frame.Sentinel.create () in
@@ -367,9 +358,13 @@ let create ocaml_exception_info =
          : Callstack.t)
   ; symbolizer = Symbolizer.create ()
   ; exception_handlers = Vec.create ()
-  ; saved_fiber_state = Stack.create ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
-  ; last_known_location = unknown_location
+  ; last_known_location : Location.t =
+      { symbol = Unknown
+      ; symbol_offset = 0
+      ; instruction_pointer = Int64.max_value
+      ; dso = Interned_string.empty
+      }
   }
 ;;
 
@@ -381,20 +376,6 @@ let create_continuing_from existing =
         (#{ last_callstack with control_flow = Return { distance = 0 } } : Callstack.t)
   ; exception_handlers = Vec.copy existing.exception_handlers
   }
-;;
-
-let push_fiber_state t =
-  Stack.push t.saved_fiber_state (t.exception_handlers, t.last_known_location);
-  t.exception_handlers <- Vec.create ();
-  t.last_known_location <- unknown_location
-;;
-
-let pop_fiber_state t =
-  match Stack.pop t.saved_fiber_state with
-  | Some (saved_handlers, saved_location) ->
-    t.exception_handlers <- saved_handlers;
-    t.last_known_location <- saved_location
-  | None -> ()
 ;;
 
 let[@inline always] current_frame t = (Nonempty_vec.last t.callstacks).#leaf
@@ -665,9 +646,12 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        (* Our [parent_frame] is the sentinel. *)
        return_to_unseen t time ~dst ~distance:(distance + distance_to_parent_frame)
      | #(Null, ~physical_distance:_, ..) ->
-       (* This case is reachable after resuming a fiber that was detached from its parent.
-          Treating it like a tail-call gets us to agree with the event stream that the
-          current frame is [dst]. *)
+       log_unexpected_case
+         [%message "return [dst] does not match known trace state." (dst : Location.t)];
+       (* Something is probably wrong if we ever make it to this case, where the state
+          we're maintaining and the event we are processing seem to completely disagree.
+          Treating it like a tail-call seems like the least bad option, and at the very
+          least gets us to agree with the event stream that the current frame is [dst]. *)
        Nonempty_vec.push_back
          t.callstacks
          #{ time
@@ -782,14 +766,11 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
               [Call], because discovered roots are handled separately. *)
          ~physical_frame_is_new:false
      | #(This dst_frame, ~distance, ~leaf_of_inlined_stack, ..) ->
-       (* This case is reachable after entering a fiber, which redirects all exceptions through a dynamic handler. *)
-       if Stack.is_empty t.saved_fiber_state
-       then
-         log_unexpected_case
-           [%message
-             "[exception_handlers] appears to be out-of-sync with [callstacks]; there is \
-              no active exception handler, but a frame with a matching symbol was found."
-               (dst : Location.t)];
+       log_unexpected_case
+         [%message
+           "[exception_handlers] appears to be out-of-sync with [callstacks]; there is \
+            no active exception handler, but a frame with a matching symbol was found."
+             (dst : Location.t)];
        (match leaf_of_inlined_stack with
         | #(Null, _) ->
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer;

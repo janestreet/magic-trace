@@ -11,8 +11,6 @@ val create : Ocaml_exception_info.t option -> t
 val create_continuing_from : t -> t
 
 val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit
-val push_fiber_state : t -> unit
-val pop_fiber_state : t -> unit
 
 val write_trace
   :  t
