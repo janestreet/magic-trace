@@ -826,13 +826,8 @@ let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
     while Vec.length t.exception_handlers > exn_depth do
       Vec.pop_back_unit_exn t.exception_handlers
     done;
-    if not (Symbol.equal dst_frame.location.symbol dst.symbol)
-    then
-      log_unexpected_case
-        [%message
-          "Mismatched handler and dst"
-            (dst_frame.location.symbol : Symbol.t)
-            (dst.symbol : Symbol.t)];
+    (* CR mslater: we should preserve the handler frame *)
+    (* We expect the handler and dst to be different symbols. *)
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
