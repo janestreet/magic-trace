@@ -334,7 +334,7 @@ type t =
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
-  ; effect_handlers : Frame.t Vec.t
+  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -744,7 +744,13 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   match Vec.last t.exception_handlers with
   | This dst_frame ->
     Vec.pop_back_unit_exn t.exception_handlers;
-    assert (Symbol.equal dst_frame.location.symbol dst.symbol);
+    if not (Symbol.equal dst_frame.location.symbol dst.symbol)
+    then
+      log_unexpected_case
+        [%message
+          "Mismatched handler and destination:"
+            (dst_frame.location.symbol : Symbol.t)
+            (dst.symbol : Symbol.t)];
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
@@ -875,14 +881,18 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | This ocaml_exception_info ->
         (match Symbol.display_name src.symbol, src.symbol_offset with
          | "caml_runstack", 0xa9 ->
-           Vec.push_back t.effect_handlers current_physical_frame;
+           Vec.push_back
+             t.effect_handlers
+             (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
            Vec.push_back t.exception_handlers current_physical_frame
          | "caml_runstack", 0x13b ->
            Vec.pop_back_unit_exn t.effect_handlers;
            Vec.pop_back_unit_exn t.exception_handlers
          | "caml_perform", 0xb5 ->
-           (* CR mslater: deal with exn handlers *)
-           let handler = Vec.pop_back_exn t.effect_handlers in
+           let handler, ~exn_depth = Vec.pop_back_exn t.effect_handlers in
+           while Vec.length t.exception_handlers > exn_depth do
+             Vec.pop_back_unit_exn t.exception_handlers
+           done;
            (match Frame.find_ancestor (current_frame t) ~ancestor:handler with
             | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
               print_s [%message "found" (distance : int)];
