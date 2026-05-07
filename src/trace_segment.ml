@@ -695,14 +695,20 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
   match t.ocaml_exception_info with
   | Null -> false
   | This ocaml_exception_info ->
-    Ocaml_exception_info.is_entertrap ocaml_exception_info ~addr:dst.instruction_pointer
+    (match Symbol.display_name dst.symbol, dst.symbol_offset with
+     | "caml_runstack", 0x13d -> true
+     | _ ->
+       Ocaml_exception_info.is_entertrap
+         ocaml_exception_info
+         ~addr:dst.instruction_pointer)
 ;;
 
 let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   match Vec.last t.exception_handlers with
   | This dst_frame ->
     Vec.pop_back_unit_exn t.exception_handlers;
-    assert (Symbol.equal dst_frame.location.symbol dst.symbol);
+    if not (Symbol.equal dst_frame.location.symbol dst.symbol)
+    then log_unexpected_case [%message (dst_frame : Frame.t) (dst : Location.t)];
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
@@ -855,6 +861,10 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
      (match t.ocaml_exception_info with
       | Null -> ()
       | This ocaml_exception_info ->
+        (match Symbol.display_name src.symbol, src.symbol_offset with
+         | "caml_runstack", 0xa9 ->
+           Vec.push_back t.exception_handlers current_physical_frame
+         | _ -> ());
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
           ~from:t.last_known_location.instruction_pointer
