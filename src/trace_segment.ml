@@ -653,7 +653,10 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        return_to_unseen t time ~dst ~distance:(distance + distance_to_parent_frame)
      | #(Null, ~physical_distance:_, ..) ->
        log_unexpected_case
-         [%message "return [dst] does not match known trace state." (dst : Location.t)];
+         [%message
+           "return [dst] does not match known trace state."
+             (dst : Location.t)
+             (dst.symbol : Symbol.t)];
        (* Something is probably wrong if we ever make it to this case, where the state
           we're maintaining and the event we are processing seem to completely disagree.
           Treating it like a tail-call seems like the least bad option, and at the very
@@ -992,6 +995,12 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
            Vec.pop_back_unit_exn t.effect_handlers;
            Vec.pop_back_unit_exn t.exception_handlers
          | "caml_perform", 0xb5 -> handle_ocaml_effect t time ~dst
+         | "caml_resume", 0xda ->
+           Vec.push_back
+             t.effect_handlers
+             (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
+           (* CR mslater: wrong *)
+           Vec.push_back t.exception_handlers current_physical_frame
          | _ -> ());
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
