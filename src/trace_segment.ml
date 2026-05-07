@@ -863,6 +863,7 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
         (match Symbol.display_name src.symbol, src.symbol_offset with
          | "caml_runstack", 0xa9 ->
            Vec.push_back t.exception_handlers current_physical_frame
+         | "caml_runstack", 0x13b -> Vec.pop_back_unit_exn t.exception_handlers
          | _ -> ());
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
