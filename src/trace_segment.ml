@@ -334,6 +334,7 @@ type t =
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
+  ; effect_handlers : Frame.t Vec.t
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -344,6 +345,14 @@ type t =
       (i.e. while calls are still being made to [add_event]). *)
   ; mutable last_known_location : Location.t
   }
+
+let unknown_location : Location.t =
+  { symbol = Unknown
+  ; symbol_offset = 0
+  ; instruction_pointer = Int64.max_value
+  ; dso = Interned_string.empty
+  }
+;;
 
 let create ocaml_exception_info =
   let root = Frame.Sentinel.create () in
@@ -358,13 +367,9 @@ let create ocaml_exception_info =
          : Callstack.t)
   ; symbolizer = Symbolizer.create ()
   ; exception_handlers = Vec.create ()
+  ; effect_handlers = Vec.create ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
-  ; last_known_location : Location.t =
-      { symbol = Unknown
-      ; symbol_offset = 0
-      ; instruction_pointer = Int64.max_value
-      ; dso = Interned_string.empty
-      }
+  ; last_known_location = unknown_location
   }
 ;;
 
@@ -375,6 +380,7 @@ let create_continuing_from existing =
       Nonempty_vec.create
         (#{ last_callstack with control_flow = Return { distance = 0 } } : Callstack.t)
   ; exception_handlers = Vec.copy existing.exception_handlers
+  ; effect_handlers = Vec.copy existing.effect_handlers
   }
 ;;
 
@@ -703,6 +709,37 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
          ~addr:dst.instruction_pointer)
 ;;
 
+let return_to_handler
+  t
+  time
+  ~(dst : Location.t)
+  ~dst_frame
+  ~distance
+  ~leaf_of_inlined_stack
+  =
+  match leaf_of_inlined_stack with
+  | #(Null, _) ->
+    Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = dst_frame; control_flow = Return { distance } };
+    append_inlined_frames t time ~physical_frame:dst_frame ~physical_frame_is_new:false
+  | #(This inlined_leaf, inlined_leaf_distance) ->
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time
+       ; leaf = inlined_leaf
+       ; control_flow = Return { distance = inlined_leaf_distance }
+       };
+    diff_inlined_frames
+      t
+      time
+      ~dso:dst.dso
+      ~before:dst_frame.instruction_pointer
+      ~after:dst.instruction_pointer;
+    Frame.set_instruction_pointer dst_frame dst.instruction_pointer
+;;
+
 let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   match Vec.last t.exception_handlers with
   | This dst_frame ->
@@ -711,31 +748,7 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
-       (match leaf_of_inlined_stack with
-        | #(Null, _) ->
-          Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
-          Nonempty_vec.push_back
-            t.callstacks
-            #{ time; leaf = dst_frame; control_flow = Return { distance } };
-          append_inlined_frames
-            t
-            time
-            ~physical_frame:dst_frame
-            ~physical_frame_is_new:false
-        | #(This inlined_leaf, inlined_leaf_distance) ->
-          Nonempty_vec.push_back
-            t.callstacks
-            #{ time
-             ; leaf = inlined_leaf
-             ; control_flow = Return { distance = inlined_leaf_distance }
-             };
-          diff_inlined_frames
-            t
-            time
-            ~dso:dst.dso
-            ~before:dst_frame.instruction_pointer
-            ~after:dst.instruction_pointer;
-          Frame.set_instruction_pointer dst_frame dst.instruction_pointer)
+       return_to_handler t time ~dst ~dst_frame ~distance ~leaf_of_inlined_stack
      | #(~distance:Null, ..) ->
        let message =
          match Frame.find (current_frame t) dst.symbol with
@@ -862,8 +875,25 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | This ocaml_exception_info ->
         (match Symbol.display_name src.symbol, src.symbol_offset with
          | "caml_runstack", 0xa9 ->
+           Vec.push_back t.effect_handlers current_physical_frame;
            Vec.push_back t.exception_handlers current_physical_frame
-         | "caml_runstack", 0x13b -> Vec.pop_back_unit_exn t.exception_handlers
+         | "caml_runstack", 0x13b ->
+           Vec.pop_back_unit_exn t.effect_handlers;
+           Vec.pop_back_unit_exn t.exception_handlers
+         | "caml_perform", 0xb5 ->
+           (* CR mslater: deal with exn handlers *)
+           let handler = Vec.pop_back_exn t.effect_handlers in
+           (match Frame.find_ancestor (current_frame t) ~ancestor:handler with
+            | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
+              print_s [%message "found" (distance : int)];
+              return_to_handler
+                t
+                time
+                ~dst
+                ~dst_frame:handler
+                ~distance
+                ~leaf_of_inlined_stack
+            | _ -> assert false)
          | _ -> ());
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
