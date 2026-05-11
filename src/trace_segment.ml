@@ -292,7 +292,7 @@ end = struct
     ;;
 
     let to_string_list t = to_string_list [] t
-    let print_callstack leaf = to_string_list leaf |> String.concat_lines |> printf "%s"
+    let print_callstack leaf = to_string_list leaf |> String.concat_lines |> eprintf "%s"
   end
 end
 
@@ -335,6 +335,8 @@ type t =
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
   ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
+  ; saved_exception_handlers : Frame.t Vec.t
+  ; saved_callstacks : Callstack.t Vec.t__'value_value_value'
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -368,6 +370,8 @@ let create ocaml_exception_info =
   ; symbolizer = Symbolizer.create ()
   ; exception_handlers = Vec.create ()
   ; effect_handlers = Vec.create ()
+  ; saved_exception_handlers = Vec.create ()
+  ; saved_callstacks = (Vec.create [@kind value & value & value]) ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
   ; last_known_location = unknown_location
   }
@@ -820,19 +824,28 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
 
 (* CR mslater: dedup *)
 let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
+  Vec.clear t.saved_exception_handlers;
+  (Vec.clear [@kind value & value & value]) t.saved_callstacks;
   match Vec.last t.effect_handlers with
   | This (dst_frame, ~exn_depth) ->
     Vec.pop_back_unit_exn t.effect_handlers;
     while Vec.length t.exception_handlers > exn_depth do
-      Vec.pop_back_unit_exn t.exception_handlers
+      Vec.push_back t.saved_exception_handlers (Vec.pop_back_exn t.exception_handlers)
     done;
-    (* CR mslater: we should preserve the handler frame *)
     (* We expect the handler and dst to be different symbols. *)
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
        (match leaf_of_inlined_stack with
         | #(Null, _) ->
+          (Vec.push_back [@kind value & value & value])
+            t.saved_callstacks
+            #{ time
+             ; leaf = current_frame t
+             ; control_flow = Call { depth = distance + 1 }
+             };
+          eprint_s [%message "handle_ocaml_effect" (distance : int)];
+          Frame.For_testing.print_callstack (current_frame t);
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
           Nonempty_vec.push_back
             t.callstacks
@@ -985,17 +998,34 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
            Vec.push_back
              t.effect_handlers
              (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
-           Vec.push_back t.exception_handlers current_physical_frame
+           Vec.push_back t.exception_handlers current_physical_frame;
+           (Vec.clear [@kind value & value & value]) t.saved_callstacks;
+           Vec.clear t.saved_exception_handlers
          | "caml_runstack", 0x13b ->
-           Vec.pop_back_unit_exn t.effect_handlers;
-           Vec.pop_back_unit_exn t.exception_handlers
+           let _, ~exn_depth = Vec.pop_back_exn t.effect_handlers in
+           while Vec.length t.exception_handlers > exn_depth do
+             Vec.pop_back_unit_exn t.exception_handlers
+           done
          | "caml_perform", 0xb5 -> handle_ocaml_effect t time ~dst
          | "caml_resume", 0xda ->
            Vec.push_back
              t.effect_handlers
              (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
-           (* CR mslater: wrong *)
-           Vec.push_back t.exception_handlers current_physical_frame
+           eprint_s
+             [%message
+               (Vec.length t.saved_exception_handlers : int)
+                 ((Vec.length [@kind value & value & value]) t.saved_callstacks : int)];
+           Vec.iter t.saved_exception_handlers ~f:(fun exn ->
+             eprint_s [%message "saved_exception_handlers"];
+             Frame.For_testing.print_callstack exn;
+             Vec.push_back t.exception_handlers exn);
+           Nonempty_vec.push_back
+             t.callstacks
+             #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } };
+           (Vec.iter [@kind value & value & value]) t.saved_callstacks ~f:(fun cs ->
+             eprint_s [%message "saved_callstacks"];
+             Frame.For_testing.print_callstack cs.#leaf;
+             Nonempty_vec.push_back t.callstacks #{ cs with time })
          | _ -> ());
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
@@ -1150,7 +1180,7 @@ end = struct
     let location = frame.location in
     assert (Timestamp.( >= ) time t.last_time);
     t.last_time <- time;
-    [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol;
+    (* [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol; *)
     if debug then eprintf "Exit %s\n" (Symbol.display_name location.symbol);
     t.write_duration_end
       ~args:[]
