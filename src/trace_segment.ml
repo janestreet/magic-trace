@@ -1019,9 +1019,11 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
              eprint_s [%message "saved_exception_handlers"];
              Frame.For_testing.print_callstack exn;
              Vec.push_back t.exception_handlers exn);
-           Nonempty_vec.push_back
-             t.callstacks
-             #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } };
+           if (Vec.length [@kind value & value & value]) t.saved_callstacks > 0
+           then
+             Nonempty_vec.push_back
+               t.callstacks
+               #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } };
            (Vec.iter [@kind value & value & value]) t.saved_callstacks ~f:(fun cs ->
              eprint_s [%message "saved_callstacks"];
              Frame.For_testing.print_callstack cs.#leaf;
