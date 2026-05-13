@@ -136,13 +136,23 @@ module Thread_info = struct
     Trace_segment.add_event trace_segment event_data (Timestamp.create time)
   ;;
 
+  let set_fiber_id t fiber_id =
+    let #(trace_segment, ~in_filtered_region:_) = Nonempty_vec.last t.trace_segments in
+    Trace_segment.set_fiber_id trace_segment fiber_id
+  ;;
+
   module New_trace_segment_kind = struct
     type t =
       | Independent
       | Continuing_from_current
   end
 
-  let start_new_trace_segment t ~in_filtered_region ~(kind : New_trace_segment_kind.t) =
+  let start_new_trace_segment
+    t
+    ~in_filtered_region
+    ~(kind : New_trace_segment_kind.t)
+    ~fiber_stacks
+    =
     let new_trace_segment =
       match kind with
       | Independent ->
@@ -151,7 +161,7 @@ module Thread_info = struct
           | Without_exception_info _ -> None
           | With_exception_info { ocaml_exception_info; _ } -> Some ocaml_exception_info
         in
-        Trace_segment.create ocaml_exception_info
+        Trace_segment.create ocaml_exception_info fiber_stacks
       | Continuing_from_current ->
         let #(current, ~in_filtered_region:_) = Nonempty_vec.last t.trace_segments in
         Trace_segment.create_continuing_from current
@@ -173,6 +183,7 @@ type 'thread inner =
   ; mutable in_filtered_region : bool
   ; mutable transaction_events : Event.With_write_info.t Deque.t
   ; pending_flows : ('thread -> Time_ns.Span.t -> unit) Hashtbl.M(Int).t
+  ; fiber_stacks : Trace_segment.Fiber.t Hashtbl.M(Int).t
   }
 
 type t = T : 'thread inner -> t
@@ -343,6 +354,7 @@ let create_expert
       ; in_filtered_region = true
       ; transaction_events = Deque.create ()
       ; pending_flows = Hashtbl.create (module Int)
+      ; fiber_stacks = Hashtbl.create (module Int)
       }
   in
   write_hits t hits;
@@ -577,7 +589,7 @@ let create_thread t event =
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
   ; trace_segments =
       Nonempty_vec.create
-        #( Trace_segment.create t.ocaml_exception_info
+        #( Trace_segment.create t.ocaml_exception_info t.fiber_stacks
          , ~in_filtered_region:t.in_filtered_region )
   }
 ;;
@@ -778,7 +790,8 @@ let maybe_start_filtered_region t ~should_write ~time =
       Thread_info.start_new_trace_segment
         thread_info
         ~in_filtered_region:true
-        ~kind:Continuing_from_current);
+        ~kind:Continuing_from_current
+        ~fiber_stacks:t.fiber_stacks);
     t.in_filtered_region <- true;
     Hashtbl.iter t.thread_info ~f:(fun thread_info ->
       rewrite_all_callstacks t ~thread_info ~time))
@@ -793,7 +806,8 @@ let maybe_stop_filtered_region t ~should_write =
       Thread_info.start_new_trace_segment
         thread_info
         ~in_filtered_region:false
-        ~kind:Continuing_from_current))
+        ~kind:Continuing_from_current
+        ~fiber_stacks:t.fiber_stacks))
 ;;
 
 let write_event_and_callstack
@@ -901,6 +915,7 @@ and write_event' (T t) ?events_writer event =
       thread_info
       ~in_filtered_region:t.in_filtered_region
       ~kind:Independent
+      ~fiber_stacks:t.fiber_stacks
   | Ok event_value ->
     if should_write
     then
@@ -985,6 +1000,7 @@ and write_event' (T t) ?events_writer event =
        if is_perform || is_resume
        then (
          let fiber_id = Int64.to_int_trunc (Int64.of_string data) in
+         Thread_info.set_fiber_id thread_info fiber_id;
          let name = if is_perform then "Perform Effect" else "Resume Continuation" in
          let args = Tracing.Trace.Arg.[ "fiber", String (sprintf "0x%x" fiber_id) ] in
          write_duration_complete t ~thread ~args ~name ~time ~time_end:time;

@@ -15,7 +15,7 @@ module Frame : sig
   end
 
   (* The [location], [parent], and [kind] fields are actually **immutable** except for on [Sentinel.t] instances. *)
-  type t = private
+  type t =
     { mutable location : Event.Location.t
     ; mutable parent : t or_null
     ; mutable kind : Kind.t
@@ -315,6 +315,21 @@ module Callstack = struct
      }
 end
 
+module Fiber = struct
+  module Last_event = struct
+    type t =
+      | Perform
+      | Resume
+  end
+
+  type t =
+    { mutable last_event : Last_event.t
+    ; mutable handler : Frame.t
+    ; mutable callstack : Callstack.t
+    ; exception_handlers : Frame.t Vec.t
+    }
+end
+
 type t =
   { mutable root : Frame.Sentinel.t
   ; mutable last_event_time : Timestamp.t
@@ -335,8 +350,8 @@ type t =
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
   ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
-  ; saved_exception_handlers : Frame.t Vec.t
-  ; saved_callstacks : Callstack.t Vec.t__'value_value_value'
+  ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
+  ; mutable last_known_fiber_id : int or_null
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -356,7 +371,7 @@ let unknown_location : Location.t =
   }
 ;;
 
-let create ocaml_exception_info =
+let create ocaml_exception_info fiber_stacks =
   let root = Frame.Sentinel.create () in
   { root
   ; last_event_time = Timestamp.zero
@@ -368,11 +383,11 @@ let create ocaml_exception_info =
           }
          : Callstack.t)
   ; symbolizer = Symbolizer.create ()
+  ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
   ; exception_handlers = Vec.create ()
   ; effect_handlers = Vec.create ()
-  ; saved_exception_handlers = Vec.create ()
-  ; saved_callstacks = (Vec.create [@kind value & value & value]) ()
-  ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
+  ; fiber_stacks
+  ; last_known_fiber_id = Null
   ; last_known_location = unknown_location
   }
 ;;
@@ -726,6 +741,7 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
         [%message
           "Mismatched handler and dst"
             (dst_frame.location.symbol : Symbol.t)
+            (dst.instruction_pointer : Int64.Hex.t)
             (dst.symbol : Symbol.t)];
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
@@ -794,7 +810,8 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
          [%message
            "[exception_handlers] appears to be out-of-sync with [callstacks]; there is \
             no active exception handler, but a frame with a matching symbol was found."
-             (dst : Location.t)];
+             (dst : Location.t)
+             (dst.symbol : Symbol.t)];
        (match leaf_of_inlined_stack with
         | #(Null, _) ->
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
@@ -822,15 +839,40 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer))
 ;;
 
+let set_fiber_id (t : t) fiber_id =
+  eprint_s [%message "set" (fiber_id : int)];
+  t.last_known_fiber_id <- This fiber_id
+;;
+
+let current_fiber (t : t) ~time =
+  let fiber_id = Or_null.value ~default:0 t.last_known_fiber_id in
+  eprint_s [%message "get" (fiber_id : int)];
+  Hashtbl.find_or_add t.fiber_stacks fiber_id ~default:(fun () ->
+    { last_event = Resume
+    ; handler = current_frame t
+    ; callstack =
+        #{ time; leaf = current_frame t; control_flow = Return { distance = 0 } }
+    ; exception_handlers = Vec.create ()
+    })
+;;
+
 (* CR mslater: dedup *)
-let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
-  Vec.clear t.saved_exception_handlers;
-  (Vec.clear [@kind value & value & value]) t.saved_callstacks;
+let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
+  (* CR mslater: test without ptwrites *)
+  let fiber = current_fiber t ~time in
+  fiber.last_event <- Perform;
+  (* eprint_s [%message "perform" (t.last_known_fiber_id : int or_null)]; *)
   match Vec.last t.effect_handlers with
   | This (dst_frame, ~exn_depth) ->
-    Vec.pop_back_unit_exn t.effect_handlers;
+    fiber.handler <- dst_frame;
+    eprint_s
+      [%message
+        "ashdjgklahdfjkglhadfjkghajkdflgadfg"
+          (exn_depth : int)
+          (Vec.length t.exception_handlers : int)];
+    Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers);
     while Vec.length t.exception_handlers > exn_depth do
-      Vec.push_back t.saved_exception_handlers (Vec.pop_back_exn t.exception_handlers)
+      Vec.push_back fiber.exception_handlers (Vec.pop_back_exn t.exception_handlers)
     done;
     (* We expect the handler and dst to be different symbols. *)
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
@@ -838,13 +880,10 @@ let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        (* This is the happy case where our exception handler tracking is working as expected. *)
        (match leaf_of_inlined_stack with
         | #(Null, _) ->
-          (Vec.push_back [@kind value & value & value])
-            t.saved_callstacks
-            #{ time
-             ; leaf = current_frame t
-             ; control_flow = Call { depth = distance + 1 }
-             };
-          eprint_s [%message "handle_ocaml_effect" (distance : int)];
+          (* CR mslater: other cases *)
+          fiber.callstack
+          <- #{ time; leaf = current_frame t; control_flow = Call { depth = distance } };
+          eprint_s [%message "handle_ocaml_perform" (distance : int)];
           Frame.For_testing.print_callstack (current_frame t);
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
           Nonempty_vec.push_back
@@ -881,14 +920,14 @@ let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
          [%message
            [%string
              "[effect_handlers] appears to be out-of-sync with [callstacks]; active \
-              exception handler was not found in [callstacks]. %{message}"]
+              effect handler was not found in [callstacks]. %{message}"]
              (dst : Location.t)];
        (* TODO Decide if maybe we should just raise in this case? The trace is probably going to be pretty broken if we make it here. *)
        handle_return t time ~dst)
   | Null ->
     (match Frame.find (current_frame t) dst.symbol with
      | #(Null, ~distance, ..) ->
-       (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
+       (* We are probably raising into an effect handler much further up the stack that we never saw the entrance into. *)
        let dst_frame = replace_root t dst ~kind:Physical in
        Nonempty_vec.push_back
          t.callstacks
@@ -907,7 +946,7 @@ let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        log_unexpected_case
          [%message
            "[effect_handlers] appears to be out-of-sync with [callstacks]; there is no \
-            active exception handler, but a frame with a matching symbol was found."
+            active effect handler, but a frame with a matching symbol was found."
              (dst : Location.t)];
        (match leaf_of_inlined_stack with
         | #(Null, _) ->
@@ -934,6 +973,70 @@ let handle_ocaml_effect (t : t) (time : Timestamp.t) ~(dst : Location.t) =
             ~before:dst_frame.instruction_pointer
             ~after:dst.instruction_pointer;
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer))
+;;
+
+let handle_ocaml_resume t time =
+  let fiber = current_fiber t ~time in
+  (* let last_event = fiber.last_event in *)
+  fiber.last_event <- Resume;
+  eprint_s [%message "resume" (t.last_known_fiber_id : int or_null)];
+  Vec.push_back
+    t.effect_handlers
+    (fiber.handler, ~exn_depth:(Vec.length t.exception_handlers));
+  eprint_s
+    [%message
+      "before RESUME"
+        (Vec.length t.exception_handlers : int)
+        (Vec.length fiber.exception_handlers : int)];
+  Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers);
+  while Vec.length fiber.exception_handlers > 0 do
+    eprint_s [%message "saved_exception_handlers"];
+    Vec.push_back t.exception_handlers (Vec.pop_back_exn fiber.exception_handlers)
+  done;
+  (* (match last_event with
+   | Perform ->
+     Nonempty_vec.push_back
+       t.callstacks
+       #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } }
+   | Resume -> ()); *)
+  Nonempty_vec.push_back
+    t.callstacks
+    #{ time
+     ; leaf = Or_null.value_exn (current_frame t).parent
+     ; control_flow = Return { distance = 1 }
+     };
+  let distance =
+    match Frame.find fiber.callstack.#leaf fiber.handler.location.symbol with
+    | #(This frame, ~distance, ~physical_distance:_, ~leaf_of_inlined_stack:_) ->
+      frame.parent <- This (current_frame t);
+      distance
+    | _ -> 0
+  in
+  (* Nonempty_vec.push_back
+    t.callstacks
+    #{ time; leaf = fiber.handler; control_flow = Call { depth = 1 } }; *)
+  fiber.callstack
+  <- #{ fiber.callstack with time; control_flow = Call { depth = distance + 1 } };
+  eprint_s [%message "new callstack"];
+  Frame.For_testing.print_callstack fiber.callstack.#leaf;
+  Nonempty_vec.push_back t.callstacks fiber.callstack
+;;
+
+let handle_ocaml_enter_runstack t ~current_physical_frame =
+  eprint_s [%message "enter runstack" (Vec.length t.exception_handlers : int)];
+  Vec.push_back
+    t.effect_handlers
+    (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
+  Vec.push_back t.exception_handlers current_physical_frame
+;;
+
+let handle_ocaml_exit_runstack t =
+  let _, ~exn_depth = Vec.pop_back_exn t.effect_handlers in
+  eprint_s [%message "exit runstack" (Vec.length t.exception_handlers : int)];
+  while Vec.length t.exception_handlers > exn_depth do
+    Vec.pop_back_unit_exn t.exception_handlers
+  done;
+  Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers)
 ;;
 
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
@@ -993,50 +1096,36 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
      (match t.ocaml_exception_info with
       | Null -> ()
       | This ocaml_exception_info ->
-        (match Symbol.display_name src.symbol, src.symbol_offset with
-         | "caml_runstack", 0xa9 ->
-           Vec.push_back
-             t.effect_handlers
-             (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
-           Vec.push_back t.exception_handlers current_physical_frame;
-           (Vec.clear [@kind value & value & value]) t.saved_callstacks;
-           Vec.clear t.saved_exception_handlers
-         | "caml_runstack", 0x13b ->
-           let _, ~exn_depth = Vec.pop_back_exn t.effect_handlers in
-           while Vec.length t.exception_handlers > exn_depth do
-             Vec.pop_back_unit_exn t.exception_handlers
-           done
-         | "caml_perform", 0xb5 -> handle_ocaml_effect t time ~dst
-         | "caml_resume", 0xda ->
-           Vec.push_back
-             t.effect_handlers
-             (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
-           eprint_s
-             [%message
-               (Vec.length t.saved_exception_handlers : int)
-                 ((Vec.length [@kind value & value & value]) t.saved_callstacks : int)];
-           Vec.iter t.saved_exception_handlers ~f:(fun exn ->
-             eprint_s [%message "saved_exception_handlers"];
-             Frame.For_testing.print_callstack exn;
-             Vec.push_back t.exception_handlers exn);
-           if (Vec.length [@kind value & value & value]) t.saved_callstacks > 0
-           then
-             Nonempty_vec.push_back
-               t.callstacks
-               #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } };
-           (Vec.iter [@kind value & value & value]) t.saved_callstacks ~f:(fun cs ->
-             eprint_s [%message "saved_callstacks"];
-             Frame.For_testing.print_callstack cs.#leaf;
-             Nonempty_vec.push_back t.callstacks #{ cs with time })
-         | _ -> ());
+        let i = ref 0 in
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
           ~from:t.last_known_location.instruction_pointer
           ~to_:src.instruction_pointer
-          ~f:(stack_ fun (_address, kind) ->
+          ~f:(stack_ fun (address, kind) ->
+            Int.incr i;
+            eprint_s [%message "ITERTRAP" (!i : int)];
             match kind with
-            | Pushtrap -> Vec.push_back t.exception_handlers current_physical_frame
+            | Pushtrap ->
+              (match address with
+               | 0x4555b8L ->
+                 eprint_s
+                   [%message
+                     "PUSHTRAP"
+                       (t.last_known_location.instruction_pointer : Int64.Hex.t)
+                       (src.instruction_pointer : Int64.Hex.t)
+                       (dst.instruction_pointer : Int64.Hex.t)]
+               | _ -> ());
+              Vec.push_back t.exception_handlers current_physical_frame
             | Poptrap ->
+              (match address with
+               | 0x455615L ->
+                 eprint_s
+                   [%message
+                     "POPTRAP"
+                       (t.last_known_location.instruction_pointer : Int64.Hex.t)
+                       (src.instruction_pointer : Int64.Hex.t)
+                       (dst.instruction_pointer : Int64.Hex.t)]
+               | _ -> ());
               (match Vec.last t.exception_handlers with
                | This current_exception_handler
                  when phys_equal current_exception_handler current_physical_frame ->
@@ -1053,7 +1142,17 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
                        ~current_exception_handler:
                          (current_exception_handler.location : Location.t)
                        ~current_physical_frame:
-                         (current_physical_frame.location : Location.t)])));
+                         (current_physical_frame.location : Location.t)]));
+        (match Symbol.display_name src.symbol, src.symbol_offset with
+         | "caml_runstack", 0xa9 -> handle_ocaml_enter_runstack t ~current_physical_frame
+         | "caml_runstack", 0x13b -> handle_ocaml_exit_runstack t
+         | "caml_perform", 0xb5 -> handle_ocaml_perform t time ~dst
+         | "caml_resume", 0xda -> handle_ocaml_resume t time
+         | _ -> ()));
+     (* eprint_s
+       [%message
+         (t.last_known_location.instruction_pointer : Int64.Hex.t)
+           (dst.instruction_pointer : Int64.Hex.t)]; *)
      t.last_known_location <- dst
    | _ -> ());
   (match event with
@@ -1069,6 +1168,15 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | Return | Sysret | Iret -> handle_return t time ~dst
       | Jump | Tx_abort | Async -> handle_jump t time ~src ~dst)
    | Trace { kind = None; _ } -> ()
+   (* | Ptwrite { location; data } ->
+     let symbol_name = Symbol.display_name location.symbol in
+     eprint_s [%message (symbol_name : string)];
+     (match symbol_name with
+      | "caml_perform" | "caml_resume" ->
+        let id = Int64.to_int_trunc (Int64.of_string data) in
+        eprint_s [%message (id : int)];
+        t.last_known_fiber_id <- This id
+      | _ -> ()) *)
    (* All of the below events are handled in [new_trace_writer.ml]. *)
    | Power _ | Stacktrace_sample _ | Event_sample _ | Ptwrite _ -> ());
   if debug
@@ -1475,7 +1583,7 @@ module%test _ = struct
   end
 
   let setup_test () =
-    let t = create None in
+    let t = create None (Hashtbl.create (module Int)) in
     let ip = ref (-1) in
     let time = ref Time_ns.Span.zero in
     let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in

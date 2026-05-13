@@ -14,12 +14,12 @@ int filter_event_early(void *data, const struct perf_dlfilter_sample *sample,
   const struct perf_dlfilter_al *resolved_addr =
       perf_dlfilter_fns.resolve_addr(ctx);
 
-  // Only filter out events we for sure don't want. It's better to be less aggressive than
-  // too aggressive, as being too aggressive will lead to broken traces, while being not
-  // aggressive enough just makes things slower.
+  // Only filter out events we for sure don't want. It's better to be less
+  // aggressive than too aggressive, as being too aggressive will lead to broken
+  // traces, while being not aggressive enough just makes things slower.
   if (resolved_ip && resolved_ip->sym && resolved_addr && resolved_addr->sym &&
       strcmp(resolved_ip->sym, resolved_addr->sym) == 0) {
-    return 1;
+    return 0;
   }
 
   return 0;
