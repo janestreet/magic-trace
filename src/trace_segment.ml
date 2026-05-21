@@ -839,14 +839,10 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer))
 ;;
 
-let set_fiber_id (t : t) fiber_id =
-  eprint_s [%message "set" (fiber_id : int)];
-  t.last_known_fiber_id <- This fiber_id
-;;
+let set_fiber_id (t : t) fiber_id = t.last_known_fiber_id <- This fiber_id
 
 let current_fiber (t : t) ~time =
   let fiber_id = Or_null.value ~default:0 t.last_known_fiber_id in
-  eprint_s [%message "get" (fiber_id : int)];
   Hashtbl.find_or_add t.fiber_stacks fiber_id ~default:(fun () ->
     { last_event = Resume
     ; handler = current_frame t
@@ -861,16 +857,9 @@ let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   (* CR mslater: test without ptwrites *)
   let fiber = current_fiber t ~time in
   fiber.last_event <- Perform;
-  (* eprint_s [%message "perform" (t.last_known_fiber_id : int or_null)]; *)
   match Vec.last t.effect_handlers with
   | This (dst_frame, ~exn_depth) ->
     fiber.handler <- dst_frame;
-    eprint_s
-      [%message
-        "ashdjgklahdfjkglhadfjkghajkdflgadfg"
-          (exn_depth : int)
-          (Vec.length t.exception_handlers : int)];
-    Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers);
     while Vec.length t.exception_handlers > exn_depth do
       Vec.push_back fiber.exception_handlers (Vec.pop_back_exn t.exception_handlers)
     done;
@@ -883,8 +872,6 @@ let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
           (* CR mslater: other cases *)
           fiber.callstack
           <- #{ time; leaf = current_frame t; control_flow = Call { depth = distance } };
-          eprint_s [%message "handle_ocaml_perform" (distance : int)];
-          Frame.For_testing.print_callstack (current_frame t);
           Frame.set_instruction_pointer dst_frame dst.instruction_pointer;
           Nonempty_vec.push_back
             t.callstacks
@@ -977,28 +964,13 @@ let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
 
 let handle_ocaml_resume t time =
   let fiber = current_fiber t ~time in
-  (* let last_event = fiber.last_event in *)
   fiber.last_event <- Resume;
-  eprint_s [%message "resume" (t.last_known_fiber_id : int or_null)];
   Vec.push_back
     t.effect_handlers
     (fiber.handler, ~exn_depth:(Vec.length t.exception_handlers));
-  eprint_s
-    [%message
-      "before RESUME"
-        (Vec.length t.exception_handlers : int)
-        (Vec.length fiber.exception_handlers : int)];
-  Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers);
   while Vec.length fiber.exception_handlers > 0 do
-    eprint_s [%message "saved_exception_handlers"];
     Vec.push_back t.exception_handlers (Vec.pop_back_exn fiber.exception_handlers)
   done;
-  (* (match last_event with
-   | Perform ->
-     Nonempty_vec.push_back
-       t.callstacks
-       #{ time; leaf = current_frame t; control_flow = Return { distance = 1 } }
-   | Resume -> ()); *)
   Nonempty_vec.push_back
     t.callstacks
     #{ time
@@ -1012,18 +984,12 @@ let handle_ocaml_resume t time =
       distance
     | _ -> 0
   in
-  (* Nonempty_vec.push_back
-    t.callstacks
-    #{ time; leaf = fiber.handler; control_flow = Call { depth = 1 } }; *)
   fiber.callstack
   <- #{ fiber.callstack with time; control_flow = Call { depth = distance + 1 } };
-  eprint_s [%message "new callstack"];
-  Frame.For_testing.print_callstack fiber.callstack.#leaf;
   Nonempty_vec.push_back t.callstacks fiber.callstack
 ;;
 
 let handle_ocaml_enter_runstack t ~current_physical_frame =
-  eprint_s [%message "enter runstack" (Vec.length t.exception_handlers : int)];
   Vec.push_back
     t.effect_handlers
     (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
@@ -1032,11 +998,9 @@ let handle_ocaml_enter_runstack t ~current_physical_frame =
 
 let handle_ocaml_exit_runstack t =
   let _, ~exn_depth = Vec.pop_back_exn t.effect_handlers in
-  eprint_s [%message "exit runstack" (Vec.length t.exception_handlers : int)];
   while Vec.length t.exception_handlers > exn_depth do
     Vec.pop_back_unit_exn t.exception_handlers
-  done;
-  Frame.For_testing.print_callstack (Vec.peek_back_exn t.exception_handlers)
+  done
 ;;
 
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
@@ -1096,36 +1060,14 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
      (match t.ocaml_exception_info with
       | Null -> ()
       | This ocaml_exception_info ->
-        let i = ref 0 in
         Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range
           ocaml_exception_info
           ~from:t.last_known_location.instruction_pointer
           ~to_:src.instruction_pointer
-          ~f:(stack_ fun (address, kind) ->
-            Int.incr i;
-            eprint_s [%message "ITERTRAP" (!i : int)];
+          ~f:(stack_ fun (_, kind) ->
             match kind with
-            | Pushtrap ->
-              (match address with
-               | 0x4555b8L ->
-                 eprint_s
-                   [%message
-                     "PUSHTRAP"
-                       (t.last_known_location.instruction_pointer : Int64.Hex.t)
-                       (src.instruction_pointer : Int64.Hex.t)
-                       (dst.instruction_pointer : Int64.Hex.t)]
-               | _ -> ());
-              Vec.push_back t.exception_handlers current_physical_frame
+            | Pushtrap -> Vec.push_back t.exception_handlers current_physical_frame
             | Poptrap ->
-              (match address with
-               | 0x455615L ->
-                 eprint_s
-                   [%message
-                     "POPTRAP"
-                       (t.last_known_location.instruction_pointer : Int64.Hex.t)
-                       (src.instruction_pointer : Int64.Hex.t)
-                       (dst.instruction_pointer : Int64.Hex.t)]
-               | _ -> ());
               (match Vec.last t.exception_handlers with
                | This current_exception_handler
                  when phys_equal current_exception_handler current_physical_frame ->
@@ -1144,15 +1086,12 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
                        ~current_physical_frame:
                          (current_physical_frame.location : Location.t)]));
         (match Symbol.display_name src.symbol, src.symbol_offset with
+         (* CR mslater: export these from the compiler *)
          | "caml_runstack", 0xa9 -> handle_ocaml_enter_runstack t ~current_physical_frame
          | "caml_runstack", 0x13b -> handle_ocaml_exit_runstack t
          | "caml_perform", 0xb5 -> handle_ocaml_perform t time ~dst
          | "caml_resume", 0xda -> handle_ocaml_resume t time
          | _ -> ()));
-     (* eprint_s
-       [%message
-         (t.last_known_location.instruction_pointer : Int64.Hex.t)
-           (dst.instruction_pointer : Int64.Hex.t)]; *)
      t.last_known_location <- dst
    | _ -> ());
   (match event with
@@ -1168,15 +1107,6 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
       | Return | Sysret | Iret -> handle_return t time ~dst
       | Jump | Tx_abort | Async -> handle_jump t time ~src ~dst)
    | Trace { kind = None; _ } -> ()
-   (* | Ptwrite { location; data } ->
-     let symbol_name = Symbol.display_name location.symbol in
-     eprint_s [%message (symbol_name : string)];
-     (match symbol_name with
-      | "caml_perform" | "caml_resume" ->
-        let id = Int64.to_int_trunc (Int64.of_string data) in
-        eprint_s [%message (id : int)];
-        t.last_known_fiber_id <- This id
-      | _ -> ()) *)
    (* All of the below events are handled in [new_trace_writer.ml]. *)
    | Power _ | Stacktrace_sample _ | Event_sample _ | Ptwrite _ -> ());
   if debug
