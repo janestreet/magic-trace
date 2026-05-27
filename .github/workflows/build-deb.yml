@@ -14,10 +14,11 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install opam ocaml-dune debhelper devscripts
+          sudo apt-get install opam ocaml-dune debhelper devscripts llvm-20 llvm-20-dev lld
 
       - name: Build packages
         run: |
+          export PATH="/usr/lib/llvm-20/bin:$PATH"
           DEBFULLNAME="Jane Street" DEBEMAIL=opensource-contacts@janestreet.com dch -b --newversion "$(git describe --tags | sed 's/^v//')+deb$(grep VERSION_ID /etc/os-release | cut -d'"' -f2)" -D unstable 'Building latest upstream'
           dpkg-buildpackage -us -uc -b -j$(nproc)
           # Because actions/upload-artifact will refuse to upload relative paths...
