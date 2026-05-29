@@ -15,7 +15,7 @@
  (action
   (progn
    (bash
-    "clang++ -std=c++20 -Wall -Wextra -Werror -Wno-unused-parameter -DCAML_NAME_SPACE -I %{ocaml_where} $(llvm-config --cxxflags) -O3 -march=broadwell -mtune=skylake -ffunction-sections -c llvm_symbolizer_stubs.cpp")
+    "clang++ -Wall -Wextra -Werror -Wno-unused-parameter -DCAML_NAME_SPACE -I %{ocaml_where} $(llvm-config --cxxflags) -std=c++20 -O3 -march=broadwell -mtune=skylake -ffunction-sections -c llvm_symbolizer_stubs.cpp")
    (bash
     "ld.lld llvm_symbolizer_stubs.o --gc-sections -static -r -plugin-opt=mcpu=broadwell -plugin-opt=O3 --hash-style=gnu --build-id --start-lib $(llvm-config --link-static --libfiles Symbolize) --end-lib -o libLLVM.o")
    (run llvm-strip --strip-debug libLLVM.o)
