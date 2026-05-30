@@ -747,7 +747,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
               trigger can be passed currently. *)
            let executable =
              List.hd_exn pids
-             |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
+             |> fun pid -> [%string "/proc/%{pid#Pid}/exe"]
            in
            record_opt_fn ~executable ~f:(fun opts ->
              let { Record_opts.executable; when_to_snapshot; collection_mode; _ } =
