@@ -96,7 +96,7 @@ let parse_event_header line =
         | "branches" -> `Branches
         | "cbr" -> `Cbr
         | "psb" -> `Psb
-        | "cycles" -> `Cycles
+        | "cycles" | "cpu-clock" -> `Cycles
         | "branch-misses" -> `Branch_misses
         | "cache-misses" -> `Cache_misses
         | _ ->
@@ -687,6 +687,17 @@ module%test _ = struct
                0x7f9bd46ae1e8 0x7f9bd48c9d0c 0x7f9bd44521a2 0x7f9bd48c9ac2
                0x7f9bd44521a2 0x7f9bd48ca184 0x7f9bd48bf6b0 0x7f9bd48bd18f
                0x7f9bd48c1d80 -0x68dfef00))))))) |}]
+  ;;
+
+  let%expect_test "sampled cpu-clock callstack" =
+    check
+      "647317/647317 529215.810279538:     100000 cpu-clock:uH:\n\
+       \t687bd57 check_action_pending+0x7 (redacted)";
+    [%expect
+      {|
+        ((Ok
+          ((thread ((pid (647317)) (tid (647317)))) (time 6d3h15.810279538s)
+           (data (Stacktrace_sample (callstack (0x687bd57))))))) |}]
   ;;
 
   let%expect_test "cache-misses event with ipt" =
