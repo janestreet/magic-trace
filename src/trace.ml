@@ -529,6 +529,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
     in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
+    don't_wait_for
+      (let%map () = Backend.Recording.finished attachment.recording in
+       Ivar.fill_if_empty done_ivar ());
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
       Core.eprintf "[ Got signal, detaching... ]\n%!";
       Ivar.fill_if_empty done_ivar ());
