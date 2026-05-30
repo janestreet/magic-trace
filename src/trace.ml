@@ -572,6 +572,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
     and backend_opts = Backend.Record_opts.param
     and collection_mode = Collection_mode.param in
     fun ~executable ~f ->
+      let cleanup_record_dir record_dir =
+        match%map Monitor.try_with (fun () ->
+          Shell.rm ~r:() ~f:() record_dir;
+          Deferred.unit)
+        with
+        | Ok () -> ()
+        | Error exn ->
+          eprintf
+            "[ Warning: failed to remove temporary working directory %s: %s ]\n%!"
+            record_dir
+            (Exn.to_string exn)
+      in
       let record_dir, cleanup =
         match record_dir with
         | Some dir ->
@@ -581,8 +593,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       in
       Monitor.protect
         ~finally:(fun () ->
-          if cleanup then Shell.rm ~r:() ~f:() record_dir;
-          Deferred.unit)
+          if cleanup then cleanup_record_dir record_dir else Deferred.unit)
         (fun () ->
           f
             { Record_opts.backend_opts
