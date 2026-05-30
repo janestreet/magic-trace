@@ -119,8 +119,8 @@ module Recording = struct
        sends SIGINT to magic-trace.
 
        In run mode, it is guaranteed via waitpid that the tracee exits before backend
-       snapshotting logic runs. In attach mode, magic-trace doesn't get any notification when
-       the tracee exits. So, when we enter [maybe_take_snapshot] any of these could have
+       snapshotting logic runs. In attach mode, perf exiting notifies magic-trace when the
+       tracee exits. So, when we enter [maybe_take_snapshot] any of these could have
        happened:
        1. tracee died, perf has exited (and took a snapshot if snapshot-on-exit)
        2. tracee died, perf is snapshotting due to snapshot-on-exit
@@ -202,16 +202,21 @@ module Recording = struct
       | Ok () | Error `Perf_exited -> ()
     ;;
 
+    let send_signal signal pid =
+      try Signal_unix.send_i signal (`Pid pid) with
+      | Core_unix.Unix_error (Core_unix.Error.ESRCH, _, _) -> ()
+    ;;
+
     let take_snapshot t pid =
       match t with
-      | Signals { snapshot; _ } -> Signal_unix.send_i snapshot (`Pid pid)
+      | Signals { snapshot; _ } -> send_signal snapshot pid
       | Ctlfd { ctlfd; snapshot; _ } ->
         Perf_ctlfd.dispatch_and_block_for_ack ctlfd snapshot |> ignore_perf_exit
     ;;
 
     let shutdown t pid =
       match t with
-      | Signals { shutdown; _ } -> Signal_unix.send_i shutdown (`Pid pid)
+      | Signals { shutdown; _ } -> send_signal shutdown pid
       | Ctlfd { ctlfd; shutdown; _ } ->
         Perf_ctlfd.dispatch_and_block_for_ack ctlfd shutdown |> ignore_perf_exit
     ;;
@@ -221,6 +226,7 @@ module Recording = struct
     { pid : Pid.t
     ; snapshot_when : Snapshot_when.t
     ; control : Control.t
+    ; finished : (Core_unix.Exit_or_signal.t, exn) Result.t Deferred.t
     }
 
   let perf_selector_of_trace_scope : Trace_scope.t -> string = function
@@ -536,7 +542,8 @@ module Recording = struct
       | Some (_, exit) -> perf_exit_to_or_error exit
       | _ -> Ok ()
     in
-    ( { pid = perf_pid; snapshot_when; control }
+    let finished = Monitor.try_with (fun () -> Async_unix.Unix.waitpid perf_pid) in
+    ( { pid = perf_pid; snapshot_when; control; finished }
     , { Data.callgraph_mode = selected_callgraph_mode } )
   ;;
 
@@ -556,13 +563,14 @@ module Recording = struct
     | At_exit, `ctrl_c -> Control.take_snapshot t.control t.pid
   ;;
 
+  let finished t = Deferred.map t.finished ~f:(fun _ -> ())
+  ;;
+
   let finish_recording t =
     Control.shutdown t.control t.pid;
     (* This should usually be a signal exit, but we don't really care, if it didn't
-       produce a good perf.data file the next step will fail.
-
-       [Monitor.try_with] because [waitpid] raises if perf exited before we get here. *)
-    match%map.Deferred Monitor.try_with (fun () -> Async_unix.Unix.waitpid t.pid) with
+       produce a good perf.data file the next step will fail. *)
+    match%map.Deferred t.finished with
     | Ok res -> perf_exit_to_or_error res
     | Error _exn -> Ok ()
   ;;
