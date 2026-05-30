@@ -302,7 +302,14 @@ let all_file_selections t symbol =
 ;;
 
 let selection_stop_info t pid selection =
-  let filename = Filename_unix.realpath t.filename in
+  (* Keep procfs executable symlinks openable across mount namespaces, but compare
+     against the target path exposed in [/proc/$pid/maps]. *)
+  let filename =
+    if String.is_prefix t.filename ~prefix:"/proc/"
+       && String.is_suffix t.filename ~suffix:"/exe"
+    then Core_unix.readlink t.filename
+    else Filename_unix.realpath t.filename
+  in
   let compute_addr addr =
     if t.statically_mappable
     then addr
