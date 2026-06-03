@@ -560,12 +560,6 @@ let create_thread t event =
   }
 ;;
 
-let call t thread_info ~time ~location =
-  let ev = Pending_event.create_call location ~from_untraced:false in
-  add_event t thread_info time ev;
-  Callstack.push thread_info.callstack location
-;;
-
 let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some { symbol; _ } -> add_event t thread_info time { symbol; kind = Ret }
@@ -610,6 +604,66 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
   flush t ~to_time thread_info;
   thread_info.last_decode_error_time <- time;
   Thread_info.set_callstack thread_info ~is_kernel_address ~time
+;;
+
+(* OpenCilk's runtime cheetah (https://github.com/OpenCilk/cheetah) uses longjmp to switch
+   between user and runtime stacks.
+
+   To deal with this stack switching, when jumping into the runtime, we need to clear the
+   user's stack frames. The inactive_callstacks mechanism is perfect for keeping track of
+   this stack data. *)
+module OpenCilk_hacks : sig
+  val call_handle_stack_switch
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> location:Event.Location.t
+    -> unit
+end = struct
+  let ret = ret_without_checking_for_go_hacks
+
+  let switch_to_user_code t (thread_info : _ Thread_info.t) ~time =
+    (* Pop the sysdep_longjmp_to_sf frame *)
+    ret t thread_info ~time;
+    (* The next stack frame is either __cilkrts_sync or longjmp_to_user_code. In either
+       case, we want to pop this frame as well. *)
+    match Callstack.top thread_info.callstack with
+    | Some { symbol = From_perf symbol; _ } ->
+      (match symbol with
+       | "longjmp_to_user_code(__cilkrts_worker*, Closure*)" ->
+         ret t thread_info ~time;
+         Stack.push thread_info.inactive_callstacks thread_info.callstack;
+         thread_info.callstack <- Callstack.create ~create_time:time
+       | "__cilkrts_sync" -> ret t thread_info ~time
+       | _ -> Printf.printf "OpenCilk_hacks: Unexpected symbol %s\n" symbol)
+    | _ -> Printf.printf "OpenCilk_hacks: Unexpected symbol [unknown]"
+  ;;
+
+  let switch_to_runtime t (thread_info : _ Thread_info.t) ~time =
+    (* Even though we want to pop the longjmp_to_runtime frame, we're clearing the entire
+       user stack anyways, so no point in manually popping. *)
+    clear_callstack t thread_info ~time;
+    match Stack.pop thread_info.inactive_callstacks with
+    | Some callstack -> thread_info.callstack <- callstack
+    | None -> thread_info.callstack <- Callstack.create ~create_time:time
+  ;;
+
+  let call_handle_stack_switch t thread_info ~time ~location =
+    let call_symbol = Event.Location.symbol location in
+    match call_symbol with
+    | From_perf "sysdep_longjmp_to_sf(__cilkrts_stack_frame*)" ->
+      switch_to_user_code t thread_info ~time
+    | From_perf "longjmp_to_runtime(__cilkrts_worker*)" ->
+      switch_to_runtime t thread_info ~time
+    | _ -> ()
+  ;;
+end
+
+let call t thread_info ~time ~location =
+  let ev = Pending_event.create_call location ~from_untraced:false in
+  add_event t thread_info time ev;
+  Callstack.push thread_info.callstack location;
+  OpenCilk_hacks.call_handle_stack_switch t thread_info ~time ~location
 ;;
 
 (* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
