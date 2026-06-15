@@ -401,17 +401,6 @@ type t =
   ; mutable last_known_location : Location.t
   }
 
-let unknown_location : Location.t =
-  { symbol = Unknown
-  ; symbol_offset = 0
-  ; (* [Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range] does binary search
-           under-the-hood; initializing this to [Int64.max_value] intentionally makes the first
-           call terminate immediately. *)
-    instruction_pointer = Int64.max_value
-  ; dso = Null
-  }
-;;
-
 let create ocaml_exception_info fiber_stacks =
   let root = Frame.Sentinel.create () in
   { root
@@ -429,7 +418,15 @@ let create ocaml_exception_info fiber_stacks =
   ; effect_handlers = Vec.create ()
   ; fiber_stacks
   ; last_known_fiber_id = Null
-  ; last_known_location = unknown_location
+  ; last_known_location : Location.t =
+      { symbol = Unknown
+      ; symbol_offset = 0
+      ; (* [Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range] does binary search
+           under-the-hood; initializing this to [Int64.max_value] intentionally makes the first
+           call terminate immediately. *)
+        instruction_pointer = Int64.max_value
+      ; dso = Null
+      }
   }
 ;;
 
