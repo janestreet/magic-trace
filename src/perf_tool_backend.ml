@@ -249,7 +249,6 @@ module Recording = struct
     let ptw =
       if Perf_capabilities.(do_intersect capabilities ptwrite) then "ptw" else ""
     in
-    (* If ptwrite is not supported, we don't need to add it to the config string. *)
     let config =
       match timer_resolution with
       | Low -> Or_error.return ""
@@ -275,6 +274,7 @@ module Recording = struct
         |> String.concat ~sep:","
         |> Or_error.return
     in
+    (* If ptwrite is not supported, we don't need to add it to the config string. *)
     match config with
     | Ok config when not (String.is_empty ptw) ->
       if String.is_empty config
