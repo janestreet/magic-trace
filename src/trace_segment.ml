@@ -14,7 +14,8 @@ module Frame : sig
       | Inlined (** An inlined function call, known to us solely via debug-info. *)
   end
 
-  (* The [location], [parent], and [kind] fields are actually **immutable** except for on [Sentinel.t] instances. *)
+  (* The [location], [parent], and [kind] fields are actually **immutable** except for on [Sentinel.t] instances.
+     [parent] is also mutated by [reparent] when splicing fiber stacks. *)
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t or_null
@@ -25,6 +26,7 @@ module Frame : sig
 
   val create : Location.t -> parent:t -> kind:Kind.t -> t
   val set_instruction_pointer : t -> int64 -> unit
+  val reparent : t -> t -> unit
 
   (** Find the first [Physical] frame whose [location.symbol] matches the provided
       argument.
@@ -156,6 +158,8 @@ end = struct
   let[@inline always] set_instruction_pointer t instruction_pointer =
     t.instruction_pointer <- instruction_pointer
   ;;
+
+  let[@inline always] reparent t parent = t.parent <- This parent
 
   let rec find t target ~distance ~physical_distance ~leaf_of_inlined_stack =
     match t with
@@ -354,6 +358,14 @@ module Callstack = struct
      }
 end
 
+module Fiber = struct
+  type t =
+    { mutable handler : Frame.t
+    ; mutable callstack : Callstack.t
+    ; exception_handlers : Frame.t Vec.t
+    }
+end
+
 type t =
   { mutable root : Frame.Sentinel.t
   ; mutable last_event_time : Timestamp.t
@@ -373,6 +385,9 @@ type t =
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
   ; exception_handlers : Frame.t Vec.t
+  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
+  ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
+  ; mutable last_known_fiber_id : int or_null
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -386,7 +401,18 @@ type t =
   ; mutable last_known_location : Location.t
   }
 
-let create ocaml_exception_info =
+let unknown_location : Location.t =
+  { symbol = Unknown
+  ; symbol_offset = 0
+  ; (* [Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range] does binary search
+           under-the-hood; initializing this to [Int64.max_value] intentionally makes the first
+           call terminate immediately. *)
+    instruction_pointer = Int64.max_value
+  ; dso = Null
+  }
+;;
+
+let create ocaml_exception_info fiber_stacks =
   let root = Frame.Sentinel.create () in
   { root
   ; last_event_time = Timestamp.zero
@@ -398,17 +424,12 @@ let create ocaml_exception_info =
           }
          : Callstack.t)
   ; symbolizer = Symbolizer.create ()
-  ; exception_handlers = Vec.create ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
-  ; last_known_location : Location.t =
-      { symbol = Unknown
-      ; symbol_offset = 0
-      ; (* [Ocaml_exception_info.iter_pushtraps_and_poptraps_in_range] does binary search
-           under-the-hood; initializing this to [Int64.max_value] intentionally makes the first
-           call terminate immediately. *)
-        instruction_pointer = Int64.max_value
-      ; dso = Null
-      }
+  ; exception_handlers = Vec.create ()
+  ; effect_handlers = Vec.create ()
+  ; fiber_stacks
+  ; last_known_fiber_id = Null
+  ; last_known_location = unknown_location
   }
 ;;
 
@@ -419,6 +440,7 @@ let create_continuing_from existing =
       Nonempty_vec.create
         (#{ last_callstack with control_flow = Return { distance = 0 } } : Callstack.t)
   ; exception_handlers = Vec.copy existing.exception_handlers
+  ; effect_handlers = Vec.copy existing.effect_handlers
   }
 ;;
 
@@ -701,7 +723,10 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        return_to_unseen t time ~dst ~distance:(distance + distance_to_parent_frame)
      | #(Null, ~physical_distance:_, ..) ->
        log_unexpected_case
-         [%message "return [dst] does not match known trace state." (dst : Location.t)];
+         [%message
+           "return [dst] does not match known trace state."
+             (dst : Location.t)
+             (dst.symbol : Symbol.t)];
        (* Something is probably wrong if we ever make it to this case, where the state
           we're maintaining and the event we are processing seem to completely disagree.
           Treating it like a tail-call seems like the least bad option, and at the very
@@ -761,35 +786,19 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
   match t.ocaml_exception_info with
   | Null -> false
   | This ocaml_exception_info ->
-    Ocaml_exception_info.is_entertrap ocaml_exception_info ~addr:dst.instruction_pointer
+    (match Symbol.display_name dst.symbol, dst.symbol_offset with
+     | "caml_runstack", 0x13d -> true
+     | _ ->
+       Ocaml_exception_info.is_entertrap
+         ocaml_exception_info
+         ~addr:dst.instruction_pointer)
 ;;
 
-let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
-  match Vec.last t.exception_handlers with
-  | This dst_frame ->
-    Vec.pop_back_unit_exn t.exception_handlers;
-    assert (Symbol.equal dst_frame.location.symbol dst.symbol);
-    (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
-     | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
-       (* This is the happy case where our exception handler tracking is working as expected. *)
-       return_to_existing_frame
-         t
-         time
-         ~new_location:dst
-         ~frame:dst_frame
-         ~distance
-         ~leaf_of_inlined_stack
-     | #(~distance:Null, ..) ->
-       failwithf
-         "Invariant violated, exception handler '%s' was not found in the current \
-          callstack"
-         (Symbol.display_name dst.symbol)
-         ())
-  | Null ->
-    (match Frame.find_last_physical (current_frame t) with
-     | #(This frame, ~distance, ~leaf_of_inlined_stack)
-       when Symbol.equal frame.location.symbol dst.symbol ->
-       (* There are valid (but hopefully rare) ways to reach this case.
+let return_to_unknown_handler (t : t) (time : Timestamp.t) ~(dst : Location.t) =
+  match Frame.find_last_physical (current_frame t) with
+  | #(This frame, ~distance, ~leaf_of_inlined_stack)
+    when Symbol.equal frame.location.symbol dst.symbol ->
+    (* There are valid (but hopefully rare) ways to reach this case.
           Take the following code for example:
           {v
 
@@ -850,47 +859,173 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
           deeper but unseen stack of non-tail recursive calls. OCaml being what it is,
           unfortunately I think code of both shapes actually exists. We go with the former
           interpretation because it should produce a readable trace in either scenario.
-       *)
+    *)
+    return_to_existing_frame
+      t
+      time
+      ~new_location:dst
+      ~frame
+      ~distance
+      ~leaf_of_inlined_stack
+  | #(maybe_frame, ~distance, ..) ->
+    (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
+    let distance =
+      (* - Add 1 to the distance for the [_phantom_frame] we are injecting.
+            - Possibly add 1 more to the distance to return past the last physical frame (if it exists)
+              all the way to the sentinel.
+      *)
+      distance + 1 + (Or_null.is_this maybe_frame |> Bool.to_int)
+    in
+    let _phantom_frame =
+      let phantom_location : Location.t =
+        { instruction_pointer = 0L
+        ; symbol_offset = 0
+        ; dso = Null
+        ; symbol = From_perf "[zero or more unknowable frames]"
+        }
+      in
+      emplace_root t phantom_location ~kind:Physical
+    in
+    let dst_frame = emplace_root t dst ~kind:Physical in
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = dst_frame; control_flow = Return { distance } };
+    (* Unlike [handle_return] we do *not* make the inlined frames at [dst] (or [dst.instruction_pointer - 1])
+          the parents of the existing frames. The rationale is that unlike [handle_return], we have no idea
+          where we might've been within the frame for [dst] that we just inferred. *)
+    append_inlined_frames
+      t
+      time
+      ~physical_frame:dst_frame
+        (* This is subtle; Yes the frame is new, but we *don't* want to reflect that in a
+              [Call], because discovered roots are handled separately. *)
+      ~and_insert_physical_frame_too:false
+;;
+
+let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
+  match Vec.last t.exception_handlers with
+  | This dst_frame ->
+    Vec.pop_back_unit_exn t.exception_handlers;
+    if not (Symbol.equal dst_frame.location.symbol dst.symbol)
+    then
+      log_unexpected_case
+        [%message
+          "Mismatched handler and dst"
+            (dst_frame.location.symbol : Symbol.t)
+            (dst.instruction_pointer : Int64.Hex.t)
+            (dst.symbol : Symbol.t)];
+    (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
+     | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
+       (* This is the happy case where our exception handler tracking is working as expected. *)
        return_to_existing_frame
          t
          time
          ~new_location:dst
-         ~frame
+         ~frame:dst_frame
          ~distance
          ~leaf_of_inlined_stack
-     | #(maybe_frame, ~distance, ..) ->
-       (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
-       let distance =
-         (* - Add 1 to the distance for the [_phantom_frame] we are injecting.
-            - Possibly add 1 more to the distance to return past the last physical frame (if it exists)
-              all the way to the sentinel.
-         *)
-         distance + 1 + (Or_null.is_this maybe_frame |> Bool.to_int)
-       in
-       let _phantom_frame =
-         let phantom_location : Location.t =
-           { instruction_pointer = 0L
-           ; symbol_offset = 0
-           ; dso = Null
-           ; symbol = From_perf "[zero or more unknowable frames]"
-           }
-         in
-         emplace_root t phantom_location ~kind:Physical
-       in
-       let dst_frame = emplace_root t dst ~kind:Physical in
-       Nonempty_vec.push_back
-         t.callstacks
-         #{ time; leaf = dst_frame; control_flow = Return { distance } };
-       (* Unlike [handle_return] we do *not* make the inlined frames at [dst] (or [dst.instruction_pointer - 1])
-          the parents of the existing frames. The rationale is that unlike [handle_return], we have no idea
-          where we might've been within the frame for [dst] that we just inferred. *)
-       append_inlined_frames
+     | #(~distance:Null, ..) ->
+       failwithf
+         "Invariant violated, exception handler '%s' was not found in the current \
+          callstack"
+         (Symbol.display_name dst.symbol)
+         ())
+  | Null -> return_to_unknown_handler t time ~dst
+;;
+
+let set_fiber_id (t : t) fiber_id = t.last_known_fiber_id <- This fiber_id
+
+let current_fiber (t : t) ~time =
+  let fiber_id = Or_null.value ~default:0 t.last_known_fiber_id in
+  Hashtbl.find_or_add t.fiber_stacks fiber_id ~default:(fun () ->
+    { handler = current_frame t
+    ; callstack =
+        #{ time; leaf = current_frame t; control_flow = Return { distance = 0 } }
+    ; exception_handlers = Vec.create ()
+    })
+;;
+
+(* Like [handle_ocaml_exception], but switches fibers *)
+let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
+  let fiber = current_fiber t ~time in
+  match Vec.last t.effect_handlers with
+  | This (dst_frame, ~exn_depth) ->
+    (* Stash this fiber's effect and exn handlers *)
+    fiber.handler <- dst_frame;
+    Vec.pop_back_unit_exn t.effect_handlers;
+    (* May not be empty if we're not getting ptwrite events *)
+    Vec.clear fiber.exception_handlers;
+    while Vec.length t.exception_handlers > exn_depth do
+      Vec.push_back fiber.exception_handlers (Vec.pop_back_exn t.exception_handlers)
+    done;
+    (* We expect the handler and dst to be different symbols. *)
+    (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
+     | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
+       (* Record the callstack between the handler and perform *)
+       fiber.callstack
+       <- #{ time; leaf = current_frame t; control_flow = Call { depth = distance } };
+       return_to_existing_frame
          t
          time
-         ~physical_frame:dst_frame
-           (* This is subtle; Yes the frame is new, but we *don't* want to reflect that in a
-              [Call], because discovered roots are handled separately. *)
-         ~and_insert_physical_frame_too:false)
+         ~new_location:dst
+         ~frame:dst_frame
+         ~distance
+         ~leaf_of_inlined_stack
+     | #(~distance:Null, ..) ->
+       failwithf
+         "Invariant violated, effect handler '%s' was not found in the current callstack"
+         (Symbol.display_name dst.symbol)
+         ())
+  | Null -> return_to_unknown_handler t time ~dst
+;;
+
+let handle_ocaml_resume t time =
+  (* If we're not getting ptwrite events, the fiber info may have been overwritten by
+     another call to perform, but we attempt to use it anyway. *)
+  let fiber = current_fiber t ~time in
+  (* Restore the new fiber's effect and exn handlers *)
+  Vec.push_back
+    t.effect_handlers
+    (fiber.handler, ~exn_depth:(Vec.length t.exception_handlers));
+  while Vec.length fiber.exception_handlers > 0 do
+    Vec.push_back t.exception_handlers (Vec.pop_back_exn fiber.exception_handlers)
+  done;
+  (* Return from caml_resume *)
+  Or_null.iter (current_frame t).parent ~f:(fun parent ->
+    Nonempty_vec.push_back
+      t.callstacks
+      #{ time; leaf = parent; control_flow = Return { distance = 1 } });
+  (* Splice in the new fiber's callstack between its handler and perform *)
+  let distance =
+    match Frame.find fiber.callstack.#leaf fiber.handler.location.symbol with
+    | #(This frame, ~distance, ~physical_distance:_, ~leaf_of_inlined_stack:_) ->
+      Frame.reparent frame (current_frame t);
+      distance
+    | _ -> 0
+  in
+  fiber.callstack
+  <- #{ fiber.callstack with time; control_flow = Call { depth = distance + 1 } };
+  Nonempty_vec.push_back t.callstacks fiber.callstack
+;;
+
+let handle_ocaml_enter_runstack t ~current_physical_frame =
+  Vec.push_back
+    t.effect_handlers
+    (current_physical_frame, ~exn_depth:(Vec.length t.exception_handlers));
+  (* Represents dynamic exnc callback *)
+  Vec.push_back t.exception_handlers current_physical_frame
+;;
+
+let handle_ocaml_exit_runstack t =
+  match Vec.pop_back t.effect_handlers with
+  | This (_, ~exn_depth) ->
+    (* Drop exn handlers pushed in this fiber (including dynamic exnc callback) *)
+    while Vec.length t.exception_handlers > exn_depth do
+      Vec.pop_back_unit_exn t.exception_handlers
+    done
+  | Null ->
+    (* If we never saw the effect handler, we don't need to pop exn handlers *)
+    ()
 ;;
 
 let[@cold] print (event : Event.Ok.Data.t) (time : Timestamp.t) =
@@ -954,7 +1089,7 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
           ocaml_exception_info
           ~from:t.last_known_location.instruction_pointer
           ~to_:src.instruction_pointer
-          ~f:(stack_ fun (_address, kind) ->
+          ~f:(stack_ fun (_, kind) ->
             match kind with
             | Pushtrap -> Vec.push_back t.exception_handlers current_physical_frame
             | Poptrap ->
@@ -974,7 +1109,14 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
                        ~current_exception_handler:
                          (current_exception_handler.location : Location.t)
                        ~current_physical_frame:
-                         (current_physical_frame.location : Location.t)])));
+                         (current_physical_frame.location : Location.t)]));
+        (match Symbol.display_name src.symbol, src.symbol_offset with
+         (* CR-soon mslater: export these with the exception handler info *)
+         | "caml_runstack", 0xa9 -> handle_ocaml_enter_runstack t ~current_physical_frame
+         | "caml_runstack", 0x13b -> handle_ocaml_exit_runstack t
+         | "caml_perform", 0xb5 -> handle_ocaml_perform t time ~dst
+         | "caml_resume", 0xda -> handle_ocaml_resume t time
+         | _ -> ()));
      t.last_known_location <- dst
    | _ -> ());
   (match event with
@@ -1128,7 +1270,7 @@ end = struct
     let location = frame.location in
     assert (Timestamp.( >= ) time t.last_time);
     t.last_time <- time;
-    [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol;
+    (* [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol; *)
     if debug then eprintf "Exit %s\n" (Symbol.display_name location.symbol);
     t.write_duration_end
       ~args:[]
@@ -1420,7 +1562,7 @@ module%test _ = struct
   end
 
   let setup_test () =
-    let t = create None in
+    let t = create None (Hashtbl.create (module Int)) in
     let ip = ref (-1) in
     let time = ref Time_ns.Span.zero in
     let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in

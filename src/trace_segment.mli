@@ -4,13 +4,18 @@ open! Core
     thread. *)
 type t
 
-val create : Ocaml_exception_info.t option -> t
+module Fiber : sig
+  type t
+end
+
+val create : Ocaml_exception_info.t option -> Fiber.t Hashtbl.M(Int).t -> t
 
 (** Create a new trace segment that continues from the state of an existing segment,
     taking the existing segment's last callstack as the new segment's first callstack. *)
 val create_continuing_from : t -> t
 
 val add_event : t -> Event.Ok.Data.t -> Timestamp.t -> unit
+val set_fiber_id : t -> int -> unit
 
 val write_trace
   :  t

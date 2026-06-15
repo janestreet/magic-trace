@@ -31,7 +31,7 @@ let perf_cbr_event_re =
 
 let perf_ptwrite_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +(0x[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
+    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +((?:0x)?[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -837,7 +837,19 @@ module%test _ = struct
       {|
       ((Ok
         ((thread ((pid (3285832)) (tid (3286108)))) (time 30d11h51m6.172476558s)
-         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000)))))) |}]
+         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000))))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event zero payload" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   jcc                    IP: 0 payload: 0                 0     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0))))))
+      |}]
   ;;
 end
 

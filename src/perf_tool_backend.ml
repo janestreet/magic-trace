@@ -276,11 +276,11 @@ module Recording = struct
         |> Or_error.return
     in
     match config with
-    | Ok config ->
+    | Ok config when not (String.is_empty ptw) ->
       if String.is_empty config
       then Or_error.return [%string "%{ptw}"]
       else Or_error.return [%string "%{config},%{ptw}"]
-    | Error _ as e -> e
+    | Ok _ | Error _ -> config
   ;;
 
   let perf_cycles_config_of_timer_resolution (timer_resolution : Timer_resolution.t) =
