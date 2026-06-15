@@ -720,10 +720,7 @@ let handle_return (t : t) (time : Timestamp.t) ~(dst : Location.t) =
        return_to_unseen t time ~dst ~distance:(distance + distance_to_parent_frame)
      | #(Null, ~physical_distance:_, ..) ->
        log_unexpected_case
-         [%message
-           "return [dst] does not match known trace state."
-             (dst : Location.t)
-             (dst.symbol : Symbol.t)];
+         [%message "return [dst] does not match known trace state." (dst : Location.t)];
        (* Something is probably wrong if we ever make it to this case, where the state
           we're maintaining and the event we are processing seem to completely disagree.
           Treating it like a tail-call seems like the least bad option, and at the very
@@ -784,6 +781,7 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
   | Null -> false
   | This ocaml_exception_info ->
     (match Symbol.display_name dst.symbol, dst.symbol_offset with
+     (* CR-soon mslater: export this with the exception handler info *)
      | "caml_runstack", 0x13d -> true
      | _ ->
        Ocaml_exception_info.is_entertrap
@@ -1086,7 +1084,7 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
           ocaml_exception_info
           ~from:t.last_known_location.instruction_pointer
           ~to_:src.instruction_pointer
-          ~f:(stack_ fun (_, kind) ->
+          ~f:(stack_ fun (_address, kind) ->
             match kind with
             | Pushtrap -> Vec.push_back t.exception_handlers current_physical_frame
             | Poptrap ->
@@ -1267,7 +1265,7 @@ end = struct
     let location = frame.location in
     assert (Timestamp.( >= ) time t.last_time);
     t.last_time <- time;
-    (* [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol; *)
+    [%test_result: Symbol.t] ~expect:(Vec.pop_back_exn t.active_frames) location.symbol;
     if debug then eprintf "Exit %s\n" (Symbol.display_name location.symbol);
     t.write_duration_end
       ~args:[]
