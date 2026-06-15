@@ -1,10 +1,10 @@
-(** The magic-trace tool can work with any binary, but using these functions
-    allows you to easily mark places in your code to take a snapshot, and enables
-    additional features like passing a value and marking the start of a duration. *)
+(** The magic-trace tool can work with any binary, but using these functions allows you to
+    easily mark places in your code to take a snapshot, and enables additional features
+    like passing a value and marking the start of a duration. *)
 
-(** This is the default symbol that the magic-trace command will attach to and use to
-    take a snapshot. Use it if you want to take a snapshot based on custom logic, and it
-    will save you the step of selecting the symbol you want to stop on.
+(** This is the default symbol that the magic-trace command will attach to and use to take
+    a snapshot. Use it if you want to take a snapshot based on custom logic, and it will
+    save you the step of selecting the symbol you want to stop on.
 
     It's an external C function that does nothing and should be very fast to call. It's
     only a C function to ensure it has a stable and exact symbol. *)
@@ -31,11 +31,11 @@ val mark_start : unit -> unit
       ;;
     ]}
 
-    which allows capturing only unusually long executions without adding the
-    ~10us breakpoint overhead on every run while magic-trace is attached.
+    which allows capturing only unusually long executions without adding the ~10us
+    breakpoint overhead on every run while magic-trace is attached.
 
-    See also the [-duration-thresh] flag for use in combination with this or
-    instead of it if you can tolerate a 10us pause on every call. *)
+    See also the [-duration-thresh] flag for use in combination with this or instead of it
+    if you can tolerate a 10us pause on every call. *)
 module Min_duration : sig
   type t
 

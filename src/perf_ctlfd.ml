@@ -8,7 +8,12 @@ module Command = struct
 end
 
 let ack_msg = Bytes.of_string "ack\n\000"
-let ack_timeout = `After (Time_ns.Span.of_int_sec 1)
+
+(* Perf can take arbitrarily long to respond when
+   - writing large snapshots to disk.
+   - writing large binaries to the buildid cache during shutdown; the ack pipe becomes
+     ready only after perf exits. *)
+let ack_timeout = `Never
 
 type t =
   { mutable ctl_rx : Core_unix.File_descr.t option
@@ -32,9 +37,9 @@ let create () =
 ;;
 
 let close_perf_side_fds t =
-  Option.iter t.ctl_rx ~f:(Core_unix.close ~restart:true);
+  Option.iter t.ctl_rx ~f:Core_unix.close;
   t.ctl_rx <- None;
-  Option.iter t.ack_tx ~f:(Core_unix.close ~restart:true);
+  Option.iter t.ack_tx ~f:Core_unix.close;
   t.ack_tx <- None
 ;;
 
@@ -56,7 +61,7 @@ let block_read_ack t =
         ~timeout:ack_timeout
         ()
     with
-    | { read = []; _ } -> failwith "Perf didn't ack snapshot within timeout"
+    | { read = []; _ } -> failwith "Perf didn't ack command within timeout"
     | { read = [ _fd ]; _ } ->
       let bytes_read =
         Core_unix.read ~restart:true t.ack_rx ~buf:t.ack_buf ~pos:total_bytes_read

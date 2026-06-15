@@ -26,43 +26,41 @@ let intable_of_hex_string
 let int64_of_hex_string = intable_of_hex_string (module Int64)
 let int_trunc_of_hex_string = intable_of_hex_string (module Int)
 
-let%test_module _ =
-  (module struct
-    open Core
+module%test _ = struct
+  open Core
 
-    let check ?remove_hex_prefix str =
-      print_s
-        [%message
-          ""
-            ~int64:(int64_of_hex_string ?remove_hex_prefix str |> sprintf "0x%Lx")
-            ~int:(int_trunc_of_hex_string ?remove_hex_prefix str |> sprintf "0x%x")]
-    ;;
+  let check ?remove_hex_prefix str =
+    print_s
+      [%message
+        ""
+          ~int64:(int64_of_hex_string ?remove_hex_prefix str |> sprintf "0x%Lx")
+          ~int:(int_trunc_of_hex_string ?remove_hex_prefix str |> sprintf "0x%x")]
+  ;;
 
-    let%expect_test "int64 hex parsing" =
-      check ~remove_hex_prefix:true "0x7f9db48c1d80";
-      [%expect {|
+  let%expect_test "int64 hex parsing" =
+    check ~remove_hex_prefix:true "0x7f9db48c1d80";
+    [%expect {|
         ((int64 0x7f9db48c1d80) (int 0x7f9db48c1d80)) |}];
-      check "7f9db48c1d80";
-      [%expect {|
+    check "7f9db48c1d80";
+    [%expect {|
         ((int64 0x7f9db48c1d80) (int 0x7f9db48c1d80)) |}];
-      check "fF";
-      [%expect {|
+    check "fF";
+    [%expect {|
         ((int64 0xff) (int 0xff)) |}];
-      check "f0f";
-      [%expect {|
+    check "f0f";
+    [%expect {|
         ((int64 0xf0f) (int 0xf0f)) |}];
-      check "fA0f";
-      [%expect {|
+    check "fA0f";
+    [%expect {|
           ((int64 0xfa0f) (int 0xfa0f)) |}];
-      check "0";
-      [%expect {|
+    check "0";
+    [%expect {|
         ((int64 0x0) (int 0x0)) |}];
-      (* Test a value that doesn't fit in a 63-bit int. *)
-      check "0xffffffffff22f000";
-      [%expect {| ((int64 0xffffffffff22f000) (int 0x7fffffffff22f000)) |}]
-    ;;
-  end)
-;;
+    (* Test a value that doesn't fit in a 63-bit int. *)
+    check "0xffffffffff22f000";
+    [%expect {| ((int64 0xffffffffff22f000) (int 0x7fffffffff22f000)) |}]
+  ;;
+end
 
 let experimental_flag ~default flag =
   if Env_vars.experimental then flag else Command.Param.return default

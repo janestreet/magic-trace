@@ -9,89 +9,66 @@ jobs:
     strategy:
       matrix:
         os:
-          - ubuntu-latest
+          - ubuntu_x64_8_cores
         ocaml-version:
-          - 4.14.0
+          - '5.2.0+ox'
+        oxcaml-opam-commit:
+          - '231c88c2e564fdca40e15e750aacad5fb0887435'
 
     runs-on: ${{ matrix.os }}
+    container:
+      image: alpine:latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      # This has to come first because the `actions/*` GitHub Actions require `node`,
+      # which isn't installed by default on this container image.
+      - name: "Install apk packages"
+        run: |
+          apk add autoconf bash bubblewrap build-base clang coreutils git libstdc++ \
+            libstdc++-dev libunwind-static linux-headers lld llvm20 llvm20-dev llvm20-static \
+            nodejs opam rsync upx zlib-static zstd-static
+          echo "PATH=/usr/lib/llvm20/bin:$PATH" >> "$GITHUB_ENV"
 
-      - uses: actions/cache@v4
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      # This is necessary to avoid an error of the form 'fatal: detected dubious ownership in repository ...'
+      - run: git config --global --add safe.directory $(pwd)
+
+      - uses: actions/cache@v5
         with:
           path: ~/.opam
-          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-flambda-musl-v6
-
-      - name: Install musl-compatible kernel headers
-        run: |
-          mkdir musl-kernel
-          curl -L https://github.com/sabotage-linux/kernel-headers/archive/refs/tags/v4.19.88-1.tar.gz | \
-            tar -xz -C musl-kernel --strip-components=1
-          echo "C_INCLUDE_PATH=$(pwd)/musl-kernel/x86/include" >> "$GITHUB_ENV"
-
-      - name: "Install apt packages"
-        run: |
-          sudo apt-get update
-          sudo apt-get install bubblewrap musl-tools libucl1
-
-      - name: Install upx
-        run: |
-          # The version that comes with focal is broken for musl binaries, so we have to download
-          # from another location.
-          wget http://ftp.debian.org/debian/pool/main/u/upx-ucl/upx-ucl_3.96-2_amd64.deb
-          sudo dpkg -i upx-ucl_3.96-2_amd64.deb
-
-      - name: Build zlib with musl
-        run: |
-          mkdir musl-zlib
-          curl -L https://zlib.net/zlib-1.3.1.tar.gz | tar -xz -C musl-zlib --strip-components=1
-          cd musl-zlib
-          CC=musl-gcc ./configure --libdir=/usr/lib/x86_64-linux-musl --includedir=/usr/include/x86_64-linux-musl
-          make -j$(nproc)
-          sudo make install
-      
-      - name: Build zstd with musl
-        run: |
-          mkdir musl-zstd
-          curl -L https://github.com/facebook/zstd/releases/download/v1.5.5/zstd-1.5.5.tar.gz | \
-            tar -xz -C musl-zstd --strip-components=1
-          cd musl-zstd
-          CC=musl-gcc make -j$(nproc)
-          sudo make INCLUDEDIR=/usr/include/x86_64-linux-musl LIBDIR=/usr/lib/x86_64-linux-musl install
+          key: ${{ matrix.os }}-opam-${{ matrix.ocaml-version }}-${{ matrix.oxcaml-opam-commit }}-2
 
       - name: Use OCaml ${{ matrix.ocaml-version }}
         run: |
-          sudo wget -O /usr/local/bin/opam https://github.com/ocaml/opam/releases/download/2.1.2/opam-2.1.2-x86_64-linux
-          sudo chmod a+x /usr/local/bin/opam
-
           export OPAMYES=1
           export OPAMJOBS=$(($(nproc) + 2))
+          export OPAMROOTISOK=1
           echo "OPAMYES=1" >> "$GITHUB_ENV"
           echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
+          echo "OPAMROOTISOK=$OPAMROOTISOK" >> "$GITHUB_ENV"
 
           opam init --bare -yav https://github.com/ocaml/opam-repository.git
-          opam switch set ${{ matrix.ocaml-version }}-flambda-musl 2>/dev/null || \
-            opam switch create ${{ matrix.ocaml-version }}-flambda-musl \
-              --packages=ocaml-variants.${{ matrix.ocaml-version }}+options,ocaml-option-flambda,ocaml-option-musl
+          opam switch set ${{ matrix.ocaml-version }} 2>/dev/null || \
+            opam switch create ${{ matrix.ocaml-version }} --repos "ox=git+https://github.com/oxcaml/opam-repository.git#${{ matrix.oxcaml-opam-commit }},default"
 
-      - run: opam install ./magic-trace.opam --deps-only
+      - run: opam install . --deps-only --locked --with-test
 
-      - run: opam install ocamlformat.0.26.2
       - run: opam exec -- dune build @fmt
 
       - run: opam exec -- make PROFILE=static
 
-      - run: opam exec -- dune runtest
+      - run: opam exec -- dune runtest --profile=static
 
       - name: Compress magic-trace executable
         run: |
           cp _build/install/default/bin/magic-trace .
+          chmod u+w magic-trace
           ls -l magic-trace
           strip magic-trace
           upx -9 magic-trace
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: magic-trace
           path: magic-trace

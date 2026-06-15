@@ -57,7 +57,7 @@ end
 module Arg_types = Header_template
 
 type t =
-  { mutable buf : (read_write, Iobuf.seek) Iobuf.t
+  { mutable buf : (read_write, Iobuf.seek, Iobuf.global) Iobuf.t
   ; mutable notified_lo : int
   ; destination : (module Destination)
   ; mutable next_thread_id : int

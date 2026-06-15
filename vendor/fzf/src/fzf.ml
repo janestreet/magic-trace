@@ -372,7 +372,7 @@ module Blocking = struct
          Unix.close stdin_wr
        | `Streaming pipe -> shuttle_pipe_strings_to_fd_then_close pipe stdin_wr
        | `Command_output (_ : string) -> Unix.close stdin_wr);
-      Option.iter pid_ivar ~f:(fun ivar -> Async.Ivar.fill ivar pid);
+      Option.iter pid_ivar ~f:(fun ivar -> Async.Ivar.fill_exn ivar pid);
       let (_ : Unix.Exit_or_signal.t) = Unix.waitpid pid in
       Unix.close stdout_wr;
       let buf = Bytes.create buffer_size in

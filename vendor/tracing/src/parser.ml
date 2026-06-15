@@ -62,8 +62,8 @@ module Record = struct
 end
 
 type t =
-  { iobuf : (read, Iobuf.seek) Iobuf.t
-  ; cur_record : (read, Iobuf.seek) Iobuf.t
+  { iobuf : (read, Iobuf.seek, Iobuf.global) Iobuf.t
+  ; cur_record : (read, Iobuf.seek, Iobuf.global) Iobuf.t
   ; mutable current_provider : int option
   ; provider_name_by_id : string Int.Table.t
   ; mutable ticks_per_second : int

@@ -11,6 +11,8 @@ build: [
 ]
 depends: [
   "ocaml"        {>= "4.14"}
+  "ocamlformat"  {with-test}
+  "ocaml_intrinsics"
   "async"
   "camlzip"
   "cohttp"
@@ -25,6 +27,7 @@ depends: [
   "owee"         {>= "0.8"}
   "re"           {>= "1.8.0"}
   "zstandard"
+  "vec"
 ]
 synopsis: "Collects and displays high-resolution traces of what a process is doing"
 description: "https://github.com/janestreet/magic-trace"

@@ -2,5 +2,13 @@ _build
 *.install
 *.merlin
 _opam
+perf.data
+perf.data.old
 .vscode/*
 !.vscode/tasks.json
+*.fxt
+*.fxt.old
+*.fxt.gz
+*.fxt.gz.old
+*.fxt.zst
+*.fxt.zst.old

@@ -1,0 +1,19 @@
+commit 16d35743d6b52bc0b38702a459025ba82bd8811f
+Author: Fake Name <fake@gmail.com>
+Date:   Thu Dec 11 03:26:20 2025 +0000
+
+    Fix bug where `sem_close` was being called on an unnamed semaphore
+
+diff --git a/src/blocking_mutex.h b/src/blocking_mutex.h
+index b1d01df..c4658e3 100644
+--- a/src/blocking_mutex.h
++++ b/src/blocking_mutex.h
+@@ -106,7 +106,7 @@ Caml_inline int blocking_mutex_destroy(blocking_mutex mut) {
+   caml_stat_free(mut);
+   return MUTEX_SUCCESS;
+ #else
+-  if (sem_close(&mut->sem) == MUTEX_SUCCESS) {
++  if (sem_destroy(&mut->sem) == MUTEX_SUCCESS) {
+     caml_stat_free(mut);
+     return MUTEX_SUCCESS;
+   }

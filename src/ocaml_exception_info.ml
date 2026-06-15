@@ -32,7 +32,7 @@ let iter_pushtraps_and_poptraps_in_range =
     let addr, _ = t.(i) in
     addr
   in
-  let first_index_greater_than_or_equal_to t x =
+  let first_index_greater_than_or_equal_to t x = exclave_
     Binary_search.binary_search
       t.pushtrap_and_poptrap_addresses
       ~length:Array.length
@@ -41,7 +41,7 @@ let iter_pushtraps_and_poptraps_in_range =
       `First_greater_than_or_equal_to
       x
   in
-  let last_index_less_than_or_equal_to t x =
+  let last_index_less_than_or_equal_to t x = exclave_
     Binary_search.binary_search
       t.pushtrap_and_poptrap_addresses
       ~length:Array.length
@@ -63,41 +63,39 @@ let iter_pushtraps_and_poptraps_in_range =
 
 let is_entertrap t ~addr = Set.mem t.entertrap_addresses addr
 
-let%test_module _ =
-  (module struct
-    open Core
+module%test _ = struct
+  open Core
 
-    let iter_and_print ~from ~to_ t =
-      let range = ref [] in
-      iter_pushtraps_and_poptraps_in_range ~from ~to_ ~f:(fun r -> range := r :: !range) t;
-      let range = !range |> List.rev in
-      Core.print_s
-        [%message "" (from : int64) (to_ : int64) (range : (int64 * Kind.t) list)]
-    ;;
+  let iter_and_print ~from ~to_ t =
+    let range = ref [] in
+    iter_pushtraps_and_poptraps_in_range ~from ~to_ ~f:(fun r -> range := r :: !range) t;
+    let range = !range |> List.rev in
+    Core.print_s
+      [%message "" (from : int64) (to_ : int64) (range : (int64 * Kind.t) list)]
+  ;;
 
-    let%expect_test "basic range classification tests" =
-      let t =
-        create ~pushtraps:[| 0L; 5L; 10L |] ~poptraps:[| 2L; 100L |] ~entertraps:[| 50L |]
-      in
-      iter_and_print ~from:0L ~to_:1L t;
-      [%expect {|
+  let%expect_test "basic range classification tests" =
+    let t =
+      create ~pushtraps:[| 0L; 5L; 10L |] ~poptraps:[| 2L; 100L |] ~entertraps:[| 50L |]
+    in
+    iter_and_print ~from:0L ~to_:1L t;
+    [%expect {|
           ((from 0) (to_ 1) (range ((0 Pushtrap)))) |}];
-      iter_and_print ~from:0L ~to_:4L t;
-      [%expect {|
+    iter_and_print ~from:0L ~to_:4L t;
+    [%expect {|
           ((from 0) (to_ 4) (range ((0 Pushtrap) (2 Poptrap)))) |}];
-      iter_and_print ~from:3L ~to_:7L t;
-      [%expect {|
+    iter_and_print ~from:3L ~to_:7L t;
+    [%expect {|
           ((from 3) (to_ 7) (range ((5 Pushtrap)))) |}];
-      iter_and_print ~from:49L ~to_:100L t;
-      [%expect {|
+    iter_and_print ~from:49L ~to_:100L t;
+    [%expect {|
           ((from 49) (to_ 100) (range ((100 Poptrap)))) |}];
-      iter_and_print ~from:75L ~to_:101L t;
-      [%expect {|
+    iter_and_print ~from:75L ~to_:101L t;
+    [%expect {|
           ((from 75) (to_ 101) (range ((100 Poptrap)))) |}];
-      iter_and_print ~from:75L ~to_:80L t;
-      [%expect {| ((from 75) (to_ 80) (range ())) |}];
-      iter_and_print ~from:150L ~to_:200L t;
-      [%expect {| ((from 150) (to_ 200) (range ())) |}]
-    ;;
-  end)
-;;
+    iter_and_print ~from:75L ~to_:80L t;
+    [%expect {| ((from 75) (to_ 80) (range ())) |}];
+    iter_and_print ~from:150L ~to_:200L t;
+    [%expect {| ((from 150) (to_ 200) (range ())) |}]
+  ;;
+end

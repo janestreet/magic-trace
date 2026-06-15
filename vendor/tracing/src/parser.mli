@@ -86,7 +86,7 @@ end
 
 type t
 
-val create : (read, Iobuf.seek) Iobuf.t -> t
+val create : (read, Iobuf.seek, Iobuf.global) Iobuf.t -> t
 
 (** Advance through the trace until we find a Fuchsia record matching one of the record
     types defined above.

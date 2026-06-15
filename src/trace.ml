@@ -79,8 +79,8 @@ module Null_writer : Trace_writer_intf.S_trace = struct
 
   let allocate_pid ~name:_ = 0
   let allocate_thread ~pid:_ ~name:_ = ()
-  let write_duration_begin ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
-  let write_duration_end ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_begin ?category:_ () ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+  let write_duration_end ?category:_ () ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ : unit = ()
   let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
@@ -96,6 +96,7 @@ let write_trace_from_events
   ~hits
   ~events
   ~close_result
+  ~(collection_mode : Collection_mode.t)
   ()
   =
   (* Normalize to earliest event = 0 to avoid Perfetto rounding issues *)
@@ -116,11 +117,20 @@ let write_trace_from_events
     else events
   in
   let trace =
-    let%map.Option writer = writer in
+    let%map.Option writer in
     let base_time =
       Time_ns.add (Boot_time.time_ns_of_boot_in_perf_time ()) earliest_time
     in
     Tracing.Trace.Expert.create ~base_time:(Some base_time) writer
+  in
+  let (module Trace_writer : Trace_writer_implementation_intf.S) =
+    match collection_mode with
+    (* TODO Add support for [Stacktrace_sampling] to [New_trace_writer]. *)
+    | Stacktrace_sampling _ -> (module Trace_writer)
+    | Intel_processor_trace _ ->
+      if Env_vars.use_new_trace_writer
+      then (module New_trace_writer)
+      else (module Trace_writer)
   in
   let writer =
     match trace with
@@ -183,7 +193,7 @@ let write_trace_from_events
   (match events_writer with
    | Some Tracing_tool_output.{ format = Sexp; writer = w; _ } -> Writer.write_line w "))"
    | _ -> ());
-  Trace_writer.end_of_trace writer;
+  Trace_writer.finalize writer;
   Option.iter trace ~f:(fun trace -> Tracing.Trace.close trace);
   close_result
 ;;
@@ -223,7 +233,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     ~trace_scope
     ~debug_print_perf_commands
     ~record_dir
-    ~collection_mode
+    ~(collection_mode : Collection_mode.t)
     { Decode_opts.output_config; decode_opts; print_events }
     =
     Core.eprintf "[ Decoding, this takes a while... ]\n%!";
@@ -237,6 +247,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
       | Sys_error _ -> None
     in
     let decode_events ?filter_same_symbol_jumps () =
+      let filter_same_symbol_jumps =
+        match collection_mode, Env_vars.use_new_trace_writer with
+        | Intel_processor_trace _, true -> Some false
+        | _, _ -> filter_same_symbol_jumps
+      in
       Backend.decode_events
         ?perf_maps
         ?filter_same_symbol_jumps
@@ -260,12 +275,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
             Option.bind elf ~f:(fun elf -> Option.try_with (fun () -> Elf.addr_table elf))
           with
           | None ->
-            eprintf
-              "Warning: Debug info is unavailable, so filenames and line numbers will \
-               not be available in the trace.\n\
-               See \
-               https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
-               for more info.\n";
+            (* The new trace-writer uses LLVM to process debug-info. While it's true right now
+               that we still use the Owee-provided symbol table for resolving the [-trigger ...]
+               symbol, I think printing out this warning under the new trace-writer is more
+               confusing than helpful. *)
+            if not Env_vars.use_new_trace_writer
+            then
+              eprintf
+                "Warning: Debug info is unavailable, so filenames and line numbers will \
+                 not be available in the trace.\n\
+                 See \
+                 https://github.com/janestreet/magic-trace/wiki/Compiling-code-for-maximum-compatibility-with-magic-trace \
+                 for more info.\n";
             None
           | Some _ as x -> x
         in
@@ -288,6 +309,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ~hits
             ~events
             ~close_result
+            ~collection_mode
             ()
         in
         return ())
@@ -398,7 +420,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
            you can accidentally incur an ~8us interrupt on every call until perf disables
            your breakpoint for exceeding the hit rate limit. *)
         let single_hit = not opts.multi_snapshot in
-        let bp = Breakpoint.breakpoint_fd head_pid ~addr ~single_hit in
+        let bp = Breakpoint.breakpoint_fd head_pid ~addr in
         let bp = Or_error.ok_exn bp in
         let fd =
           Async_unix.Fd.create
@@ -414,7 +436,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
           | None -> ()
         in
         let interrupt = Ivar.read done_ivar in
-        let%map.Deferred res =
+        let monitoring =
           Async_unix.Fd.interruptible_every_ready_to
             fd
             `Read
@@ -422,6 +444,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
             (fun () -> read_evs true)
             ()
         in
+        (* Yield to let the scheduler register the fd with [epoll], then enable
+           the breakpoint. This avoids a race where a single-hit breakpoint
+           fires and disables itself before [epoll] starts monitoring the fd. *)
+        let%bind.Deferred () = Scheduler.yield () in
+        Breakpoint.enable bp ~single_hit |> Or_error.ok_exn;
+        let%map.Deferred res = monitoring in
         (match res with
          | `Interrupted -> Breakpoint.destroy bp
          | `Bad_fd | `Closed | `Unsupported -> failwith "failed to wait on breakpoint")
@@ -481,13 +509,13 @@ module Make_commands (Backend : Backend_intf.S) = struct
            %!"
          error);
     (* This is still a little racey, but it's the best we can do without pidfds. *)
-    Ivar.fill exited_ivar ();
+    Ivar.fill_exn exited_ivar ();
     (* CR-someday tbrindus: [~stop] doesn't make [Async_unix.Signal.handle] restore signal
        handlers to their default state, so the decoding step won't be ^C-able. Restore
        SIGINT's handler here. Ideally we'd restore all [terminating] handlers to their
        default behavior, but I'm not convinced that doesn't break Async and SIGINT is all
        we really need. *)
-    Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int `Default);
+    Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int Default);
     let%bind () = detach attachment in
     return pid
   ;;
@@ -507,7 +535,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
       Core.eprintf "[ Got signal, detaching... ]\n%!";
       Ivar.fill_if_empty done_ivar ());
-    Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int `Default);
+    Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int Default);
     Core.eprintf "[ Attached. Press Ctrl-C to stop recording. ]\n%!";
     let%bind () = stop in
     detach attachment
@@ -595,7 +623,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace run -full-execution ./program\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_perf_commands
        and argv =
          let%map_open.Command command = anon (maybe ("COMMAND" %: string))
          and more_command =
@@ -670,7 +698,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
         Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
       in
       let pid =
-        let%bind.Option sel_line = sel_line in
+        let%bind.Option sel_line in
         let sel_line = String.lstrip sel_line in
         let%map.Option first_part = String.split ~on:' ' sel_line |> List.hd in
         Pid.of_string first_part
@@ -697,7 +725,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace attach -trigger ?\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
-       and debug_print_perf_commands = debug_print_perf_commands
+       and debug_print_perf_commands
        and pids =
          flag
            "-pid"
@@ -730,6 +758,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
              in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind range_symbols =
+               (* TODO Use LLVM to load the symbol table, because Owee can't handle executables that use DWARF5. *)
                evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
              in
              let%bind () =
@@ -769,7 +798,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
            (optional (Arg_type.comma_separated Filename_unix.arg_type))
            ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
        and collection_mode = Collection_mode.param
-       and debug_print_perf_commands = debug_print_perf_commands in
+       and debug_print_perf_commands
+       and trace_filter = Trace_filter.param in
        fun () ->
          (* Doesn't use create_elf because there's no need to check that the binary has symbols if
             we're trying to snapshot it. *)
@@ -780,8 +810,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
            | Some files ->
              Perf_map.Table.load_by_files files |> Deferred.map ~f:Option.some
          in
+         let%bind.Deferred.Or_error range_symbols =
+           evaluate_trace_filter ~trace_filter ~elf
+         in
          decode_to_trace
            ?perf_maps
+           ?range_symbols
            ~elf
            ~trace_scope
            ~debug_print_perf_commands
