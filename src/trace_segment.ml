@@ -1108,7 +1108,7 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
           | This Runstack_enter -> handle_ocaml_enter_runstack t ~current_physical_frame
           | This Runstack_exit -> handle_ocaml_exit_runstack t
           | This Perform_enter -> handle_ocaml_perform t time ~dst
-          | This Resume_enter -> handle_ocaml_resume t time
+          | This (Resume_enter | Resume_premepted) -> handle_ocaml_resume t time
           | _ -> ()));
      t.last_known_location <- dst
    | _ -> ());
