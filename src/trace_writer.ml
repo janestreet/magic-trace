@@ -304,6 +304,7 @@ let create_expert
   ~trace_scope
   ~debug_info
   ~ocaml_exception_info
+  ~ocaml_effect_info:_
   ~earliest_time
   ~hits
   ~annotate_inferred_start_times
@@ -335,6 +336,7 @@ let create
   ~trace_scope
   ~debug_info
   ~ocaml_exception_info
+  ~ocaml_effect_info
   ~earliest_time
   ~hits
   ~annotate_inferred_start_times
@@ -344,6 +346,7 @@ let create
     ~trace_scope
     ~debug_info
     ~ocaml_exception_info
+    ~ocaml_effect_info
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times

@@ -45,6 +45,7 @@ module Thread_info = struct
     { thread : ('thread[@sexp.opaque])
     ; mutable last_decode_error_time : Mapped_time.t
     ; ocaml_exception_info : (Ocaml_exception_info.t[@sexp.opaque]) option
+    ; ocaml_effect_info : (Ocaml_effect_info.t[@sexp.opaque]) option
         (* When the last event arrived. Used to give timestamps to events lacking them. *)
     ; mutable last_event_time : Mapped_time.t
     ; track_group_id : int
@@ -78,7 +79,8 @@ module Thread_info = struct
     =
     let new_trace_segment =
       match kind with
-      | Independent -> Trace_segment.create t.ocaml_exception_info fiber_stacks
+      | Independent ->
+        Trace_segment.create t.ocaml_exception_info t.ocaml_effect_info fiber_stacks
       | Continuing_from_current ->
         let #(current, ~in_filtered_region:_) = Nonempty_vec.last t.trace_segments in
         Trace_segment.create_continuing_from current
@@ -92,6 +94,7 @@ module type Trace = Trace_writer_intf.S_trace
 type 'thread inner =
   { debug_info : Elf.Addr_table.t
   ; ocaml_exception_info : Ocaml_exception_info.t option
+  ; ocaml_effect_info : Ocaml_effect_info.t option
   ; thread_info : 'thread Thread_info.t Hashtbl.M(Event.Thread).t
   ; base_time : Time_ns.Span.t
   ; trace_scope : Trace_scope.t
@@ -222,6 +225,7 @@ let create_expert
   ~trace_scope
   ~debug_info
   ~ocaml_exception_info
+  ~ocaml_effect_info
   ~earliest_time
   ~hits
   ~annotate_inferred_start_times
@@ -235,6 +239,7 @@ let create_expert
     T
       { debug_info = Option.value debug_info ~default:(Int.Table.create ())
       ; ocaml_exception_info
+      ; ocaml_effect_info
       ; thread_info = Hashtbl.create (module Event.Thread)
       ; base_time
       ; trace_scope
@@ -254,6 +259,7 @@ let create
   ~trace_scope
   ~debug_info
   ~ocaml_exception_info
+  ~ocaml_effect_info
   ~earliest_time
   ~hits
   ~annotate_inferred_start_times
@@ -263,6 +269,7 @@ let create
     ~trace_scope
     ~debug_info
     ~ocaml_exception_info
+    ~ocaml_effect_info
     ~earliest_time
     ~hits
     ~annotate_inferred_start_times
@@ -345,12 +352,13 @@ let create_thread t event =
   { Thread_info.thread
   ; last_decode_error_time = effective_time
   ; ocaml_exception_info = t.ocaml_exception_info
+  ; ocaml_effect_info = t.ocaml_effect_info
   ; last_event_time = effective_time
   ; track_group_id
   ; extra_event_tracks = Hashtbl.create (module Collection_mode.Event.Name)
   ; trace_segments =
       Nonempty_vec.create
-        #( Trace_segment.create t.ocaml_exception_info t.fiber_stacks
+        #( Trace_segment.create t.ocaml_exception_info t.ocaml_effect_info t.fiber_stacks
          , ~in_filtered_region:t.in_filtered_region )
   }
 ;;

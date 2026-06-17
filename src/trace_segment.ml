@@ -384,6 +384,7 @@ type t =
          frames, starting from the [leaf] of the callstack immediately preceding it. *)
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
+  ; ocaml_effect_info : Ocaml_effect_info.t or_null
   ; exception_handlers : Frame.t Vec.t
   ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
   ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
@@ -401,7 +402,7 @@ type t =
   ; mutable last_known_location : Location.t
   }
 
-let create ocaml_exception_info fiber_stacks =
+let create ocaml_exception_info ocaml_effect_info fiber_stacks =
   let root = Frame.Sentinel.create () in
   { root
   ; last_event_time = Timestamp.zero
@@ -414,6 +415,7 @@ let create ocaml_exception_info fiber_stacks =
          : Callstack.t)
   ; symbolizer = Symbolizer.create ()
   ; ocaml_exception_info = Or_null.of_option ocaml_exception_info
+  ; ocaml_effect_info = Or_null.of_option ocaml_effect_info
   ; exception_handlers = Vec.create ()
   ; effect_handlers = Vec.create ()
   ; fiber_stacks
@@ -780,13 +782,9 @@ let is_ocaml_exception_handler t ~(dst : Location.t) =
   match t.ocaml_exception_info with
   | Null -> false
   | This ocaml_exception_info ->
-    (match Symbol.display_name dst.symbol, dst.symbol_offset with
-     (* CR-soon mslater: export this with the exception handler info *)
-     | "caml_runstack", 0x13d -> true
-     | _ ->
-       Ocaml_exception_info.is_entertrap
-         ocaml_exception_info
-         ~addr:dst.instruction_pointer)
+    Ocaml_exception_info.is_entertrap ocaml_exception_info ~addr:dst.instruction_pointer
+    || Or_null.value_map t.ocaml_effect_info ~default:false ~f:(fun info ->
+      Ocaml_effect_info.is_exn_handler info dst)
 ;;
 
 let return_to_unknown_handler (t : t) (time : Timestamp.t) ~(dst : Location.t) =
@@ -1105,13 +1103,13 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
                          (current_exception_handler.location : Location.t)
                        ~current_physical_frame:
                          (current_physical_frame.location : Location.t)]));
-        (match Symbol.display_name src.symbol, src.symbol_offset with
-         (* CR-soon mslater: export these with the exception handler info *)
-         | "caml_runstack", 0xa9 -> handle_ocaml_enter_runstack t ~current_physical_frame
-         | "caml_runstack", 0x13b -> handle_ocaml_exit_runstack t
-         | "caml_perform", 0xb5 -> handle_ocaml_perform t time ~dst
-         | "caml_resume", 0xda -> handle_ocaml_resume t time
-         | _ -> ()));
+        Or_null.iter t.ocaml_effect_info ~f:(fun ocaml_effect_info ->
+          match Ocaml_effect_info.categorize ocaml_effect_info src with
+          | This Runstack_enter -> handle_ocaml_enter_runstack t ~current_physical_frame
+          | This Runstack_exit -> handle_ocaml_exit_runstack t
+          | This Perform_enter -> handle_ocaml_perform t time ~dst
+          | This Resume_enter -> handle_ocaml_resume t time
+          | _ -> ()));
      t.last_known_location <- dst
    | _ -> ());
   (match event with
@@ -1557,7 +1555,7 @@ module%test _ = struct
   end
 
   let setup_test () =
-    let t = create None (Hashtbl.create (module Int)) in
+    let t = create None None (Hashtbl.create (module Int)) in
     let ip = ref (-1) in
     let time = ref Time_ns.Span.zero in
     let incr_time () = time := Time_ns.Span.(!time + of_int_ns 1) in

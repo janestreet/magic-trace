@@ -15,6 +15,7 @@ val selection_stop_info : t -> Pid.t -> Selection.t -> Stop_info.t
 
 val addr_table : t -> Addr_table.t
 val ocaml_exception_info : t -> Ocaml_exception_info.t option
+val ocaml_effect_info : t -> Ocaml_effect_info.t option
 
 (** Find function symbols matching a regex and return a map from symbol name to symbol
     suitable for asking the user to disambiguate. *)

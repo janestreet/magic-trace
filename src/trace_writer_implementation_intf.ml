@@ -14,6 +14,7 @@ module type S = sig
     :  trace_scope:Trace_scope.t
     -> debug_info:Elf.Addr_table.t option
     -> ocaml_exception_info:Ocaml_exception_info.t option
+    -> ocaml_effect_info:Ocaml_effect_info.t option
     -> earliest_time:Time_ns.Span.t
     -> hits:(string * Breakpoint.Hit.t) list
     -> annotate_inferred_start_times:bool
@@ -46,6 +47,7 @@ module type S = sig
     :  trace_scope:Trace_scope.t
     -> debug_info:Elf.Addr_table.t option
     -> ocaml_exception_info:Ocaml_exception_info.t option
+    -> ocaml_effect_info:Ocaml_effect_info.t option
     -> earliest_time:Time_ns.Span.t
     -> hits:(string * Breakpoint.Hit.t) list
     -> annotate_inferred_start_times:bool
