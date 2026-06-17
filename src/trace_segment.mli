@@ -8,7 +8,11 @@ module Fiber : sig
   type t
 end
 
-val create : Ocaml_exception_info.t option -> Fiber.t Hashtbl.M(Int).t -> t
+val create
+  :  Ocaml_exception_info.t option
+  -> Ocaml_effect_info.t option
+  -> Fiber.t Hashtbl.M(Int).t
+  -> t
 
 (** Create a new trace segment that continues from the state of an existing segment,
     taking the existing segment's last callstack as the new segment's first callstack. *)

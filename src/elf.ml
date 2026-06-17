@@ -9,12 +9,14 @@ type t =
   ; programs : Owee_elf.program array
   ; debug : Owee_buf.t option
   ; ocaml_exception_info : Ocaml_exception_info.t option
+  ; ocaml_effect_info : Ocaml_effect_info.t option
   ; base_offset : int
   ; filename : string
   ; statically_mappable : bool
   }
 
 let ocaml_exception_info t = t.ocaml_exception_info
+let ocaml_effect_info t = t.ocaml_effect_info
 
 (** Elf files tend to have a "base offset" between where their sections end up in memory
     and where they are in the file, this function figures out that offset. *)
@@ -31,6 +33,25 @@ let is_non_pie_executable (header : Owee_elf.header) =
   | 2 (* ET_EXEC 2 Executable file *) -> true
   | 3 (* ET_DYN 3 Shared object file *) -> false
   | _e_type -> false
+;;
+
+let find_ocaml_effect_info buffer sections =
+  try
+    let ocaml_eff = Owee_elf_notes.find_notes_section sections ".note.ocaml_eff" in
+    let body = Owee_elf.section_body buffer ocaml_eff in
+    let cursor = Owee_buf.cursor body in
+    let descsz =
+      Owee_elf_notes.read_desc_size ~expected_owner:"OCaml" ~expected_type:2 cursor
+    in
+    if descsz < 8 * 7
+    then Owee_buf.invalid_format (Printf.sprintf "Too small size of note %d\n" descsz);
+    let rec read_offsets acc =
+      let addr = Owee_buf.Read.u64 cursor in
+      if Int64.equal addr 0L then Array.of_list_rev acc else read_offsets (addr :: acc)
+    in
+    Some (Ocaml_effect_info.create ~offsets:(read_offsets []))
+  with
+  | Owee_elf_notes.Section_not_found _ -> None
 ;;
 
 let find_ocaml_exception_info buffer sections =
@@ -102,6 +123,7 @@ let create filename =
         Owee_elf.find_section_body buffer sections ~section_name:".debug_line"
       in
       let ocaml_exception_info = find_ocaml_exception_info buffer sections in
+      let ocaml_effect_info = find_ocaml_effect_info buffer sections in
       Some
         { string
         ; symbol
@@ -113,6 +135,7 @@ let create filename =
         ; filename
         ; statically_mappable
         ; ocaml_exception_info
+        ; ocaml_effect_info
         }
     | _, _ -> None
   with

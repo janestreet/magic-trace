@@ -94,6 +94,7 @@ end
 
 let write_trace_from_events
   ?ocaml_exception_info
+  ?ocaml_effect_info
   ~events_writer
   ~writer
   ~print_events
@@ -145,6 +146,7 @@ let write_trace_from_events
         ~trace_scope
         ~debug_info
         ~ocaml_exception_info
+        ~ocaml_effect_info
         ~earliest_time
         ~hits
         ~annotate_inferred_start_times:Env_vars.debug
@@ -154,6 +156,7 @@ let write_trace_from_events
         ~trace_scope
         ~debug_info
         ~ocaml_exception_info
+        ~ocaml_effect_info
         ~earliest_time
         ~hits
         ~annotate_inferred_start_times:Env_vars.debug
@@ -301,12 +304,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
           | true -> None
           | false -> Option.bind elf ~f:Elf.ocaml_exception_info
         in
+        let ocaml_effect_info =
+          match Env_vars.no_ocaml_effect_debug_info with
+          | true -> None
+          | false -> Option.bind elf ~f:Elf.ocaml_effect_info
+        in
         let%bind events, close_result =
           get_events_and_close_result ~decode_events ~range_symbols
         in
         let%bind () =
           write_trace_from_events
             ?ocaml_exception_info
+            ?ocaml_effect_info
             ~events_writer
             ~writer
             ~debug_info
