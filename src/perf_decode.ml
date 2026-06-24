@@ -26,7 +26,8 @@ let perf_branches_event_re =
 ;;
 
 let perf_cbr_event_re =
-  Re.Perl.re {|^ *([a-z )(]*)? +cbr: +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|} |> Re.compile
+  Re.Perl.re {|^ *([a-zA-Z )(]*)? +cbr: +([0-9]+ +freq: +([0-9]+) MHz)?(.*)$|}
+  |> Re.compile
 ;;
 
 let trace_error_re =
@@ -646,6 +647,18 @@ module%test _ = struct
         ((Ok
           ((thread ((pid (21302)) (tid (21302)))) (time 22h51m58.700445693s)
            (data (Power (freq 4500)))))) |}]
+  ;;
+
+  let%expect_test "cbr event with uppercase state" =
+    check
+      "377433/377433 1693789.232275122:          1                                         \
+       cbr:   D                      cbr: 36 freq: 3629 MHz (450%)                   0     \
+       6143f240a145 main+0x1c (/root/foo)";
+    [%expect
+      {|
+        ((Ok
+          ((thread ((pid (377433)) (tid (377433)))) (time 19d14h29m49.232275122s)
+           (data (Power (freq 3629)))))) |}]
   ;;
 
   (* Expected [None] because we ignore these events currently. *)
