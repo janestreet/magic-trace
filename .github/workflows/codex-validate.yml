@@ -1,0 +1,48 @@
+name: codex-validate
+
+on:
+  push:
+    branches:
+      - 'abhishek/validate-*'
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:latest
+    steps:
+      - name: Install apk packages
+        run: |
+          apk add autoconf bash bubblewrap build-base clang coreutils git libstdc++ \
+            libstdc++-dev libunwind-static linux-headers lld llvm20 llvm20-dev llvm20-static \
+            nodejs opam rsync upx zlib-static zstd-static
+          echo "PATH=/usr/lib/llvm20/bin:$PATH" >> "$GITHUB_ENV"
+
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - run: git config --global --add safe.directory "$(pwd)"
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.opam
+          key: codex-opam-5.2.0-ox-231c88c2e564fdca40e15e750aacad5fb0887435-1
+
+      - name: Use OCaml 5.2.0+ox
+        run: |
+          export OPAMYES=1
+          export OPAMJOBS=$(($(nproc) + 2))
+          export OPAMROOTISOK=1
+          echo "OPAMYES=1" >> "$GITHUB_ENV"
+          echo "OPAMJOBS=$OPAMJOBS" >> "$GITHUB_ENV"
+          echo "OPAMROOTISOK=$OPAMROOTISOK" >> "$GITHUB_ENV"
+
+          opam init --bare -yav https://github.com/ocaml/opam-repository.git
+          opam switch set 5.2.0+ox 2>/dev/null || \
+            opam switch create 5.2.0+ox --repos "ox=git+https://github.com/oxcaml/opam-repository.git#231c88c2e564fdca40e15e750aacad5fb0887435,default"
+
+      - run: opam install . --deps-only --locked --with-test
+      - run: opam exec -- dune build @fmt
+      - run: opam exec -- make PROFILE=static
+      - run: opam exec -- dune runtest --profile=static
