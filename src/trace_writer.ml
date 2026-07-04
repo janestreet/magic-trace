@@ -664,10 +664,7 @@ end = struct
     ; "_setjmp"
     ]
     |> List.iter ~f:(fun symbol ->
-      printf
-        "%s %b\n"
-        symbol
-        (is_longjmp_symbol (Symbol.From_perf symbol)));
+      printf "%s %b\n" symbol (is_longjmp_symbol (Symbol.From_perf symbol)));
     [%expect
       {|
       longjmp true
@@ -1206,11 +1203,7 @@ and write_event' (T t) ?events_writer event =
        (match kind, trace_state_change with
         | Some Call, (None | Some End) ->
           if not
-               (Nonlocal_jump_hacks.call_track_longjmp
-                  t
-                  thread_info
-                  ~time
-                  ~location:dst)
+               (Nonlocal_jump_hacks.call_track_longjmp t thread_info ~time ~location:dst)
           then call t thread_info ~time ~location:dst
         | ( Some
               ( Async
