@@ -83,9 +83,7 @@ let capability_grants_effective_capability capability_group capability =
   | None -> false
   | Some (capabilities, permitted_sets) ->
     String.exists permitted_sets ~f:(Char.equal 'e')
-    && (capabilities
-        |> String.split ~on:','
-        |> List.exists ~f:(String.equal capability))
+    && capabilities |> String.split ~on:',' |> List.exists ~f:(String.equal capability)
 ;;
 
 let getcap_output_grants_kernel_tracing getcap_output =
@@ -121,7 +119,8 @@ let perf_has_kernel_tracing_capability ~perf_path =
   | None -> return false
   | Some perf_path ->
     (match%bind
-       Monitor.try_with (fun () -> Process.create_exn ~prog:"getcap" ~args:[ perf_path ] ())
+       Monitor.try_with (fun () ->
+         Process.create_exn ~prog:"getcap" ~args:[ perf_path ] ())
      with
      | Error _ -> return false
      | Ok getcap_proc ->
