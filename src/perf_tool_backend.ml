@@ -363,7 +363,8 @@ module Recording = struct
         if not Env_vars.perf_is_privileged
         then
           Deferred.Or_error.error_string
-            "magic-trace must be run as root in order to trace the kernel"
+            "magic-trace needs permission to trace the kernel. Run as root, or give the \
+             perf executable effective cap_perfmon or cap_sys_admin file capabilities."
         else return (Ok ())
     in
     (match when_to_snapshot, subcommand with
