@@ -625,7 +625,7 @@ module Nonlocal_jump_hacks : sig
     -> 'a Thread_info.t
     -> time:Mapped_time.t
     -> location:Event.Location.t
-    -> handled:bool
+    -> bool
 end = struct
   let unversioned_symbol_name symbol =
     match String.lsplit2 symbol ~on:'@' with
