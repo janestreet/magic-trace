@@ -562,7 +562,7 @@ let create_thread t event =
   }
 ;;
 
-let call t thread_info ~time ~location =
+let call t (thread_info : _ Thread_info.t) ~time ~location =
   thread_info.ignore_return_underflows <- false;
   let ev = Pending_event.create_call location ~from_untraced:false in
   add_event t thread_info time ev;
@@ -682,7 +682,7 @@ end = struct
       |}]
   ;;
 
-  let call_track_longjmp t thread_info ~time ~location =
+  let call_track_longjmp t (thread_info : _ Thread_info.t) ~time ~location =
     if is_longjmp_symbol location.symbol
     then (
       clear_all_callstacks t thread_info ~time;
