@@ -78,14 +78,64 @@ let supports_last_branch_record () =
   List.fold flags ~init:true ~f:(fun acc flags -> acc && contains_pdcm flags)
 ;;
 
-let supports_tracing_kernel () =
-  (* Only allow tracing the kernel if we are root. `perf` will start even without this,
-     but the generated traces will be broken, so disallow it here.
+let capability_grants_effective_capability capability_group capability =
+  match String.lsplit2 capability_group ~on:'=' with
+  | None -> false
+  | Some (capabilities, permitted_sets) ->
+    String.exists permitted_sets ~f:(Char.equal 'e')
+    && (capabilities
+        |> String.split ~on:','
+        |> List.exists ~f:(String.equal capability))
+;;
 
-     This check is technically stricter than it has to be. We could query the capability
-     bits of the perf binary here instead, as per
-     <https://perf.wiki.kernel.org/index.php/Perf_tools_support_for_Intel%C2%AE_Processor_Trace#Adding_capabilities_to_perf> *)
-  Int.(Core_unix.geteuid () = 0)
+let getcap_output_grants_kernel_tracing getcap_output =
+  getcap_output
+  |> String.split_lines
+  |> List.exists ~f:(fun line ->
+    match String.split line ~on:' ' |> List.filter ~f:(Fn.non String.is_empty) with
+    | [] | [ _ ] -> false
+    | _path :: capability_groups ->
+      List.exists capability_groups ~f:(fun capability_group ->
+        capability_grants_effective_capability capability_group "cap_perfmon"
+        || capability_grants_effective_capability capability_group "cap_sys_admin"))
+;;
+
+let resolve_executable_from_path executable =
+  if String.contains executable '/'
+  then Some executable
+  else (
+    match Sys.getenv "PATH" with
+    | None -> None
+    | Some path ->
+      path
+      |> String.split ~on:':'
+      |> List.find_map ~f:(fun dir ->
+        let candidate = dir ^/ executable in
+        match Sys_unix.file_exists candidate with
+        | `Yes -> Some candidate
+        | `No | `Unknown -> None))
+;;
+
+let perf_has_kernel_tracing_capability ~perf_path =
+  match resolve_executable_from_path perf_path with
+  | None -> return false
+  | Some perf_path ->
+    (match%bind
+       Monitor.try_with (fun () -> Process.create_exn ~prog:"getcap" ~args:[ perf_path ] ())
+     with
+     | Error _ -> return false
+     | Ok getcap_proc ->
+       let%map { stdout; _ } = Process.collect_output_and_wait getcap_proc in
+       getcap_output_grants_kernel_tracing stdout)
+;;
+
+let supports_tracing_kernel ~perf_path =
+  (* `perf` can trace the kernel as root, or when the perf executable has suitable
+     effective file capabilities. If [getcap] is unavailable, keep the historical
+     root-only behavior. *)
+  if Int.(Core_unix.geteuid () = 0)
+  then return true
+  else perf_has_kernel_tracing_capability ~perf_path
 ;;
 
 let kernel_version_at_least ~major ~minor version =
@@ -108,15 +158,48 @@ let detect_exn () =
   let%bind perf_version_proc =
     Process.create_exn ~prog:Env_vars.perf_path ~args:[ "--version" ] ()
   in
-  let%map { stdout; _ } = Process.collect_output_and_wait perf_version_proc in
+  let%bind { stdout; _ } = Process.collect_output_and_wait perf_version_proc in
   let version = Version.of_perf_version_string_exn stdout in
+  let%bind supports_tracing_kernel =
+    supports_tracing_kernel ~perf_path:Env_vars.perf_path
+  in
   let set_if bool flag cap = cap + if bool then flag else empty in
-  empty
-  |> set_if (supports_configurable_psb_period ()) configurable_psb_period
-  |> set_if (supports_tracing_kernel ()) kernel_tracing
-  |> set_if (supports_kcore version) kcore
-  |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
-  |> set_if (supports_last_branch_record ()) last_branch_record
-  |> set_if (supports_dlfilter version) dlfilter
-  |> set_if (supports_ctlfd version) ctlfd
+  return
+    (empty
+     |> set_if (supports_configurable_psb_period ()) configurable_psb_period
+     |> set_if supports_tracing_kernel kernel_tracing
+     |> set_if (supports_kcore version) kcore
+     |> set_if (supports_snapshot_on_exit version) snapshot_on_exit
+     |> set_if (supports_last_branch_record ()) last_branch_record
+     |> set_if (supports_dlfilter version) dlfilter
+     |> set_if (supports_ctlfd version) ctlfd)
+;;
+
+let%expect_test "getcap output grants kernel tracing via effective cap_perfmon" =
+  let output = "/usr/bin/perf cap_sys_ptrace,cap_syslog,cap_perfmon=ep\n" in
+  print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
+  [%expect {| true |}]
+;;
+
+let%expect_test "getcap output grants kernel tracing via effective cap_sys_admin" =
+  let output = "/usr/bin/perf cap_sys_admin=ep\n" in
+  print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
+  [%expect {| true |}]
+;;
+
+let%expect_test "getcap output requires effective capabilities" =
+  let output = "/usr/bin/perf cap_perfmon=p\n" in
+  print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
+  [%expect {| false |}]
+;;
+
+let%expect_test "getcap output ignores unrelated capabilities" =
+  let output = "/usr/bin/perf cap_sys_ptrace,cap_syslog=ep\n" in
+  print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
+  [%expect {| false |}]
+;;
+
+let%expect_test "executable resolution keeps explicit paths" =
+  print_s [%sexp (resolve_executable_from_path "/usr/bin/perf" : string option)];
+  [%expect {| (/usr/bin/perf) |}]
 ;;
