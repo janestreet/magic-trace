@@ -115,6 +115,7 @@ module Thread_info = struct
     ; inactive_callstacks : Callstack.t Stack.t
     ; mutable last_decode_error_time : Mapped_time.t
     ; ocaml_exception_state : ocaml_exception_state
+    ; mutable ignore_return_underflows : bool
     ; mutable pending_events : Pending_event.t list
     ; mutable pending_time : Mapped_time.t
     ; start_events : (Mapped_time.t * Pending_event.t) Deque.t
@@ -551,6 +552,7 @@ let create_thread t event =
        | Some ocaml_exception_info ->
          With_exception_info
            { ocaml_exception_info; last_known_instruction_pointer = ref None })
+  ; ignore_return_underflows = false
   ; pending_events = []
   ; pending_time = Mapped_time.start_of_trace
   ; start_events = Deque.create ()
@@ -561,6 +563,7 @@ let create_thread t event =
 ;;
 
 let call t thread_info ~time ~location =
+  thread_info.ignore_return_underflows <- false;
   let ev = Pending_event.create_call location ~from_untraced:false in
   add_event t thread_info time ev;
   Callstack.push thread_info.callstack location
@@ -569,6 +572,7 @@ let call t thread_info ~time ~location =
 let ret_without_checking_for_go_hacks t (thread_info : _ Thread_info.t) ~time =
   match Callstack.pop thread_info.callstack with
   | Some { symbol; _ } -> add_event t thread_info time { symbol; kind = Ret }
+  | None when thread_info.ignore_return_underflows -> ()
   | None ->
     (* No known stackframe was popped --- could occur if the start of the snapshot
        started in the middle of a tracing region *)
@@ -611,6 +615,86 @@ let end_of_thread t (thread_info : _ Thread_info.t) ~time ~is_kernel_address : u
   thread_info.last_decode_error_time <- time;
   Thread_info.set_callstack thread_info ~is_kernel_address ~time
 ;;
+
+(* C non-local jumps can return into a caller without producing the matching sequence of
+   branch returns for every skipped frame. Once [longjmp] is called, the current inferred
+   stack is no longer trustworthy. *)
+module Nonlocal_jump_hacks : sig
+  val call_track_longjmp
+    :  'a inner
+    -> 'a Thread_info.t
+    -> time:Mapped_time.t
+    -> location:Event.Location.t
+    -> handled:bool
+end = struct
+  let unversioned_symbol_name symbol =
+    match String.lsplit2 symbol ~on:'@' with
+    | None -> symbol
+    | Some (symbol, _) -> symbol
+  ;;
+
+  let is_longjmp_symbol = function
+    | Symbol.From_perf symbol ->
+      (match unversioned_symbol_name symbol with
+       | "longjmp"
+       | "_longjmp"
+       | "__longjmp"
+       | "__libc_longjmp"
+       | "siglongjmp"
+       | "__siglongjmp"
+       | "__libc_siglongjmp"
+       | "__longjmp_chk"
+       | "__siglongjmp_chk" -> true
+       | _ -> false)
+    | _ -> false
+  ;;
+
+  let%expect_test "recognizes longjmp symbols" =
+    [ "longjmp"
+    ; "_longjmp"
+    ; "__longjmp"
+    ; "__libc_longjmp"
+    ; "siglongjmp"
+    ; "__siglongjmp"
+    ; "__libc_siglongjmp"
+    ; "__longjmp_chk"
+    ; "__siglongjmp_chk"
+    ; "longjmp@@GLIBC_2.2.5"
+    ; "__longjmp_chk@@GLIBC_2.11"
+    ; "_setjmp"
+    ]
+    |> List.iter ~f:(fun symbol ->
+      printf
+        "%s %b\n"
+        symbol
+        (is_longjmp_symbol (Symbol.From_perf symbol)));
+    [%expect
+      {|
+      longjmp true
+      _longjmp true
+      __longjmp true
+      __libc_longjmp true
+      siglongjmp true
+      __siglongjmp true
+      __libc_siglongjmp true
+      __longjmp_chk true
+      __siglongjmp_chk true
+      longjmp@@GLIBC_2.2.5 true
+      __longjmp_chk@@GLIBC_2.11 true
+      _setjmp false
+      |}]
+  ;;
+
+  let call_track_longjmp t thread_info ~time ~location =
+    if is_longjmp_symbol location.symbol
+    then (
+      clear_all_callstacks t thread_info ~time;
+      thread_info.callstack <- Callstack.create ~create_time:time;
+      thread_info.ignore_return_underflows <- true;
+      true)
+    else false
+  ;;
+end
 
 (* Go (the programming language) has coroutines known as goroutines. The function [gogo] jumps
    from one goroutine to the next. Since [gogo] can jump anywhere, it's a shining example of what
@@ -1120,7 +1204,14 @@ and write_event' (T t) ?events_writer event =
          ~dst
          ~time;
        (match kind, trace_state_change with
-        | Some Call, (None | Some End) -> call t thread_info ~time ~location:dst
+        | Some Call, (None | Some End) ->
+          if not
+               (Nonlocal_jump_hacks.call_track_longjmp
+                  t
+                  thread_info
+                  ~time
+                  ~location:dst)
+          then call t thread_info ~time ~location:dst
         | ( Some
               ( Async
               | Call
