@@ -102,7 +102,7 @@ You can point magic-trace at a function such that when your application calls it
 
 Congratulations, you just magically traced your first program!
 
-In contrast to traditional `perf` workflows, magic-trace excels at hypothesis generation. For example, you might notice that taking 6us to run `cos` is a really long time! If you zoom in even more, you'll see that there's actually five pink "\[untraced\]" cells in there. If you re-run magic-trace with root and pass it `-trace-include-kernel`, you'll see stacktraces for those. They're page fault handlers! The demo program actually calls `cos` twice. If you zoom in even more near the end of the 6us `cos` call, you'll see that the second call takes *far* less time and does not page fault.
+In contrast to traditional `perf` workflows, magic-trace excels at hypothesis generation. For example, you might notice that taking 6us to run `cos` is a really long time! If you zoom in even more, you'll see that there's actually five pink "\[untraced\]" cells in there. If you re-run magic-trace with kernel tracing permissions and pass it `-trace-include-kernel`, you'll see stacktraces for those. They're page fault handlers! The demo program actually calls `cos` twice. If you zoom in even more near the end of the 6us `cos` call, you'll see that the second call takes *far* less time and does not page fault.
 
 # How to use it
 
