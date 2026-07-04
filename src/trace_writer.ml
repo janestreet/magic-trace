@@ -682,7 +682,12 @@ end = struct
       |}]
   ;;
 
-  let call_track_longjmp t (thread_info : _ Thread_info.t) ~time ~location =
+  let call_track_longjmp
+    t
+    (thread_info : _ Thread_info.t)
+    ~time
+    ~(location : Event.Location.t)
+    =
     if is_longjmp_symbol location.symbol
     then (
       clear_all_callstacks t thread_info ~time;
