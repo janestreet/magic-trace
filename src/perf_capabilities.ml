@@ -177,28 +177,33 @@ let detect_exn () =
 let%expect_test "getcap output grants kernel tracing via effective cap_perfmon" =
   let output = "/usr/bin/perf cap_sys_ptrace,cap_syslog,cap_perfmon=ep\n" in
   print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
-  [%expect {| true |}]
+  [%expect {| true |}];
+  return ()
 ;;
 
 let%expect_test "getcap output grants kernel tracing via effective cap_sys_admin" =
   let output = "/usr/bin/perf cap_sys_admin=ep\n" in
   print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
-  [%expect {| true |}]
+  [%expect {| true |}];
+  return ()
 ;;
 
 let%expect_test "getcap output requires effective capabilities" =
   let output = "/usr/bin/perf cap_perfmon=p\n" in
   print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
-  [%expect {| false |}]
+  [%expect {| false |}];
+  return ()
 ;;
 
 let%expect_test "getcap output ignores unrelated capabilities" =
   let output = "/usr/bin/perf cap_sys_ptrace,cap_syslog=ep\n" in
   print_s [%sexp (getcap_output_grants_kernel_tracing output : bool)];
-  [%expect {| false |}]
+  [%expect {| false |}];
+  return ()
 ;;
 
 let%expect_test "executable resolution keeps explicit paths" =
   print_s [%sexp (resolve_executable_from_path "/usr/bin/perf" : string option)];
-  [%expect {| (/usr/bin/perf) |}]
+  [%expect {| (/usr/bin/perf) |}];
+  return ()
 ;;
