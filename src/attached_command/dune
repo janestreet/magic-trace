@@ -1,0 +1,8 @@
+(library
+ (name magic_trace_attached_command)
+ (package magic-trace)
+ (wrapped false)
+ (libraries async core core_unix.signal_unix core_unix.sys_unix)
+ (inline_tests)
+ (preprocess
+  (pps ppx_jane)))

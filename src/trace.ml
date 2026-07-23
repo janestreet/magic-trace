@@ -547,7 +547,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
     ~prog
     ~argv
     =
-    let%bind.Deferred.Or_error attachment =
+    let open Deferred.Or_error.Let_syntax in
+    let%bind attachment =
       attach
         record_opts
         ~elf
@@ -558,24 +559,38 @@ module Make_commands (Backend : Backend_intf.S) = struct
     in
     let { Attachment.done_ivar; _ } = attachment in
     let stop = Ivar.read done_ivar in
+    let detach_with command_result =
+      let%map.Deferred detach_result = detach attachment in
+      Or_error.combine_errors_unit [ command_result; detach_result ]
+    in
+    let command_stop_signal = ref Signal.term in
     Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
       Core.eprintf "[ Got signal, detaching... ]\n%!";
+      command_stop_signal := Signal.int;
       Ivar.fill_if_empty done_ivar ());
     Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int Default);
-    Core.eprintf "[ Attached. Running command... ]\n%!";
-    let command_finished = Process.run_forwarding ~prog ~args:argv () in
-    let command_result = Ivar.create () in
-    Deferred.upon command_finished (fun result ->
-      Core.eprintf "[ Command exited, detaching... ]\n%!";
-      Ivar.fill_if_empty done_ivar ();
-      Ivar.fill_if_empty command_result (Some result));
-    Deferred.upon stop (fun () -> Ivar.fill_if_empty command_result None);
-    let%bind.Deferred command_result = Ivar.read command_result in
-    let%bind () = stop in
-    let%bind () = detach attachment in
-    match command_result with
-    | None -> Deferred.Or_error.return ()
-    | Some result -> Deferred.return result
+    if Deferred.is_determined stop
+    then detach attachment
+    else (
+      Core.eprintf "[ Attached. Running command... ]\n%!";
+      match%bind.Deferred Attached_command.create ~prog ~argv with
+      | Error command_error ->
+        Ivar.fill_if_empty done_ivar ();
+        detach_with (Error command_error)
+      | Ok command ->
+        (match%bind.Deferred Attached_command.wait command ~stop with
+         | Attached_command.Command_finished command_result ->
+           Core.eprintf "[ Command exited, detaching... ]\n%!";
+           Ivar.fill_if_empty done_ivar ();
+           detach_with command_result
+         | Attached_command.Recording_stopped ->
+           Core.eprintf "[ Recording stopped, terminating command... ]\n%!";
+           let command_termination =
+             Attached_command.terminate command ~signal:!command_stop_signal
+           in
+           let%map.Deferred (_ : unit Or_error.t) = command_termination
+           and detach_result = detach attachment in
+           detach_result))
   ;;
 
   let record_dir_flag mode =
@@ -779,8 +794,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
        and command_argv =
          command_argv_param
            ~escape_doc:
-             "COMMAND Command to run while attached. magic-trace detaches after the \
-              command exits."
+             "COMMAND Non-interactive command to run while attached. magic-trace \
+              detaches after the command exits and terminates it if recording stops \
+              first."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in

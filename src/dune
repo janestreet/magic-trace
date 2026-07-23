@@ -42,6 +42,7 @@
   cohttp
   cohttp_static_handler
   core_unix.signal_unix
+  magic_trace_attached_command
   tracing
   magic_trace
   owee
