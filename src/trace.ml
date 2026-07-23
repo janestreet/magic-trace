@@ -538,6 +538,61 @@ module Make_commands (Backend : Backend_intf.S) = struct
     detach attachment
   ;;
 
+  let attach_and_record_while_running_command
+    record_opts
+    ~elf
+    ~debug_print_perf_commands
+    ~collection_mode
+    pids
+    ~prog
+    ~argv
+    =
+    let open Deferred.Or_error.Let_syntax in
+    let%bind attachment =
+      attach
+        record_opts
+        ~elf
+        ~debug_print_perf_commands
+        ~subcommand:Attach
+        ~collection_mode
+        pids
+    in
+    let { Attachment.done_ivar; _ } = attachment in
+    let stop = Ivar.read done_ivar in
+    let detach_with command_result =
+      let%map.Deferred detach_result = detach attachment in
+      Or_error.combine_errors_unit [ command_result; detach_result ]
+    in
+    let command_stop_signal = ref Signal.term in
+    Async_unix.Signal.handle ~stop [ Signal.int ] ~f:(fun (_ : Signal.t) ->
+      Core.eprintf "[ Got signal, detaching... ]\n%!";
+      command_stop_signal := Signal.int;
+      Ivar.fill_if_empty done_ivar ());
+    Deferred.upon stop (fun () -> Core.Signal.Expert.set Signal.int Default);
+    if Deferred.is_determined stop
+    then detach attachment
+    else (
+      Core.eprintf "[ Attached. Running command... ]\n%!";
+      match%bind.Deferred Attached_command.create ~prog ~argv with
+      | Error command_error ->
+        Ivar.fill_if_empty done_ivar ();
+        detach_with (Error command_error)
+      | Ok command ->
+        (match%bind.Deferred Attached_command.wait command ~stop with
+         | Attached_command.Command_finished command_result ->
+           Core.eprintf "[ Command exited, detaching... ]\n%!";
+           Ivar.fill_if_empty done_ivar ();
+           detach_with command_result
+         | Attached_command.Recording_stopped ->
+           Core.eprintf "[ Recording stopped, terminating command... ]\n%!";
+           let command_termination =
+             Attached_command.terminate command ~signal:!command_stop_signal
+           in
+           let%map.Deferred (_ : unit Or_error.t) = command_termination
+           and detach_result = detach attachment in
+           detach_result))
+  ;;
+
   let record_dir_flag mode =
     let open Command.Param in
     flag
@@ -605,6 +660,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
     { Decode_opts.output_config; decode_opts; print_events }
   ;;
 
+  let command_argv_param ~escape_doc =
+    let%map_open.Command command = anon (maybe ("COMMAND" %: string))
+    and more_command = flag "--" escape ~doc:escape_doc in
+    Option.to_list command @ Option.value more_command ~default:[]
+  ;;
+
   let run_command =
     Command.async_or_error
       ~summary:"Runs a command and traces it."
@@ -622,11 +683,8 @@ module Make_commands (Backend : Backend_intf.S) = struct
        and decode_opts = decode_flags
        and debug_print_perf_commands
        and argv =
-         let%map_open.Command command = anon (maybe ("COMMAND" %: string))
-         and more_command =
-           flag "--" escape ~doc:"ARGS Arguments for the command. Ignored by magic-trace."
-         in
-         Option.to_list command @ Option.value more_command ~default:[]
+         command_argv_param
+           ~escape_doc:"ARGS Arguments for the command. Ignored by magic-trace."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
@@ -719,7 +777,9 @@ module Make_commands (Backend : Backend_intf.S) = struct
          magic-trace attach\n\n\
          # Fuzzy-find to select a running process and symbol to trigger on, snapshotting \
          the next time the symbol is called\n\
-         magic-trace attach -trigger ?\n")
+         magic-trace attach -trigger ?\n\n\
+         # Attach to a process, run a command, then detach when the command exits\n\
+         magic-trace attach -p $PID -- ./load-generator arg1 arg2\n")
       (let%map_open.Command record_opt_fn = record_flags
        and decode_opts = decode_flags
        and debug_print_perf_commands
@@ -731,6 +791,12 @@ module Make_commands (Backend : Backend_intf.S) = struct
            ~doc:
              "PID Processes to attach to as a comma separated list. Required if you \
               don't have the \"fzf\" application available in your PATH."
+       and command_argv =
+         command_argv_param
+           ~escape_doc:
+             "COMMAND Non-interactive command to run while attached. magic-trace \
+              detaches after the command exits and terminates it if recording stops \
+              first."
        in
        fun () ->
          let open Deferred.Or_error.Let_syntax in
@@ -759,12 +825,23 @@ module Make_commands (Backend : Backend_intf.S) = struct
                evaluate_trace_filter ~trace_filter:opts.trace_filter ~elf
              in
              let%bind () =
-               attach_and_record
-                 opts
-                 ~elf
-                 ~debug_print_perf_commands
-                 ~collection_mode
-                 pids
+               match command_argv with
+               | [] ->
+                 attach_and_record
+                   opts
+                   ~elf
+                   ~debug_print_perf_commands
+                   ~collection_mode
+                   pids
+               | prog :: argv ->
+                 attach_and_record_while_running_command
+                   opts
+                   ~elf
+                   ~debug_print_perf_commands
+                   ~collection_mode
+                   pids
+                   ~prog
+                   ~argv
              in
              let%bind.Deferred perf_maps = Perf_map.Table.load_by_pids pids in
              decode_to_trace
