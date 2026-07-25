@@ -64,6 +64,16 @@ You can point magic-trace at a function such that when your application calls it
 
    Then, test it by running `magic-trace -help`, which should bring up some help text.
 
+## Experimental Apple Silicon backend
+
+An experimental native OCaml backend for macOS is available under
+[`macos/`](macos/README.md). The working M1 Pro path uses Xcode's Time Profiler
+and produces approximately 1 ms sampled stacks rather than the original
+backend's complete ~40 ns control-flow trace. A separate OCaml hardware model
+validates exact 40 ns reconstruction and decoder throughput without presenting
+synthetic data as a real capture. See the macOS documentation for architecture,
+build, test, benchmark, limitation, and hardware-backend roadmap details.
+
 [^3]: Strictly speaking, anything newer than Broadwell, but this is not a platform we regularly test on, and timing resolution is worse (~1us).
 [^4]: https://github.com/actions/upload-artifact/issues/38
 
