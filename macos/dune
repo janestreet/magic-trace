@@ -1,0 +1,35 @@
+(library
+ (name magic_trace_macos_lib)
+ (wrapped false)
+ (modules magic_trace_macos_lib mock_processor_trace)
+ (libraries unix))
+
+(executable
+ (name magic_trace_macos)
+ (modules magic_trace_macos)
+ (libraries unix magic_trace_macos_lib))
+
+(executable
+ (name benchmark_overhead)
+ (modules benchmark_overhead)
+ (libraries unix magic_trace_macos_lib))
+
+(executable
+ (name mock_processor_trace_cli)
+ (modules mock_processor_trace_cli)
+ (libraries unix magic_trace_macos_lib))
+
+(executable
+ (name benchmark_mock_processor_trace)
+ (modules benchmark_mock_processor_trace)
+ (libraries unix magic_trace_macos_lib))
+
+(test
+ (name test_magic_trace_macos)
+ (modules test_magic_trace_macos)
+ (libraries unix magic_trace_macos_lib))
+
+(test
+ (name test_mock_processor_trace)
+ (modules test_mock_processor_trace)
+ (libraries unix magic_trace_macos_lib))

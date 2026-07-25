@@ -12,3 +12,6 @@ perf.data.old
 *.fxt.gz.old
 *.fxt.zst
 *.fxt.zst.old
+*.trace
+trace.json
+trace.json.gz
