@@ -670,26 +670,11 @@ module Make_commands (Backend : Backend_intf.S) = struct
   let select_pid () =
     if force supports_fzf
     then (
-      let deselect_pid_args pid =
-        let pid = Pid.to_string pid in
-        [ "--ppid"; pid; "-p"; pid; "--deselect" ]
-      in
       (* There are no Linux APIs, or OCaml libraries that I've found, for enumerating
          running processes. The [ps] command uses the /proc/ filesystem and is much easier
          than walking the /proc/ system and filtering ourselves. *)
       let process_lines =
-        [ [ "x"; "-w"; "--no-headers" ]
-        ; [ "-o"; "pid,args" ]
-          (* If running as root, allow tracing all processes, including those owned
-             by non-root users.
-
-             Hide kernel threads (PID 2 and children), since though we can trace them in
-             theory, in practice they don't have their image under /proc/$pid/exe, which
-             we currently rely on. *)
-        ; (if Core_unix.geteuid () = 0 then deselect_pid_args (Pid.of_int 2) else [])
-        ]
-        |> List.concat
-        |> Shell.run_lines "ps"
+        Shell.run_lines "ps" [ "x"; "-w"; "--no-headers"; "-o"; "pid,args" ]
       in
       let%bind.Deferred.Or_error sel_line =
         Fzf.pick_one (Fzf.Pick_from.Inputs process_lines)
@@ -745,13 +730,24 @@ module Make_commands (Backend : Backend_intf.S) = struct
          else (
            (* Always use the head PID for locating triggers since only a single
               trigger can be passed currently. *)
-           let executable =
-             List.hd_exn pids
-             |> fun pid -> Core_unix.readlink [%string "/proc/%{pid#Pid}/exe"]
+           let head_pid = List.hd_exn pids in
+           let%bind executable =
+             Process_info.executable_of_pid head_pid |> Deferred.Or_error.of_or_error
            in
            record_opt_fn ~executable ~f:(fun opts ->
-             let { Record_opts.executable; when_to_snapshot; collection_mode; _ } =
+             let { Record_opts.executable; when_to_snapshot; collection_mode; trace_scope; _ } =
                opts
+             in
+             let%bind () =
+               if Process_info.is_kernel_thread head_pid
+               then (
+                 match trace_scope with
+                 | Userspace ->
+                   Deferred.Or_error.error_string
+                     "Cannot trace kernel thread without kernel tracing enabled. Pass \
+                      [-trace-include-kernel] or [-trace-kernel-only]."
+                 | Kernel | Userspace_and_kernel -> return (Ok ()))
+               else return (Ok ())
              in
              let%bind elf = create_elf ~executable ~when_to_snapshot in
              let%bind range_symbols =
