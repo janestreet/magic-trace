@@ -317,6 +317,12 @@ module Recording = struct
         let%map.Or_error intel_pt_config =
           perf_intel_pt_config_of_timer_resolution ~capabilities timer_resolution
         in
+        let intel_pt_config =
+          match Collection_mode.aux_action collection_mode with
+          | None -> intel_pt_config
+          | Some aux_action ->
+            Collection_mode.Aux_action.add_to_perf_config aux_action intel_pt_config
+        in
         [%string "intel_pt/%{intel_pt_config}/%{selector}"]
       | Stacktrace_sampling _ ->
         let%map.Or_error cycles_config =
@@ -324,10 +330,15 @@ module Recording = struct
         in
         [%string "cycles/%{cycles_config}/%{selector}"]
     in
+    let aux_control_events =
+      Collection_mode.aux_control_events collection_mode
+      |> List.map ~f:Collection_mode.Aux_control_event.to_perf_event
+    in
     let extra_events =
       perf_config_of_extra_events ~selector (Collection_mode.extra_events collection_mode)
     in
-    let arg_string = String.concat ~sep:"," (primary_event :: extra_events) in
+    let events = (primary_event :: aux_control_events) @ extra_events in
+    let arg_string = String.concat ~sep:"," events in
     [ [%string "--event=%{arg_string}"] ]
   ;;
 
@@ -566,6 +577,10 @@ module Recording = struct
     | Ok res -> perf_exit_to_or_error res
     | Error _exn -> Ok ()
   ;;
+end
+
+module For_testing = struct
+  let perf_args_of_collection_mode = Recording.perf_args_of_collection_mode
 end
 
 module Decode_opts = struct
