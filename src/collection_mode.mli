@@ -1,5 +1,26 @@
 open! Core
 
+module Aux_action : sig
+  type t =
+    | Start_paused
+    | Resume
+    | Pause
+  [@@deriving compare, sexp]
+
+  val to_string : t -> string
+  val add_to_perf_config : t -> string -> string
+end
+
+module Aux_control_event : sig
+  type t =
+    { address : int64
+    ; action : Aux_action.t
+    }
+  [@@deriving sexp]
+
+  val to_perf_event : t -> string
+end
+
 module Event : sig
   module Name : sig
     type t =
@@ -33,8 +54,15 @@ module Event : sig
 end
 
 type t =
-  | Intel_processor_trace of { extra_events : Event.t list }
+  | Intel_processor_trace of
+      { extra_events : Event.t list
+      ; aux_action : Aux_action.t option
+      ; aux_control_events : Aux_control_event.t list
+      }
   | Stacktrace_sampling of { extra_events : Event.t list }
 
+val with_aux_control : t -> start_address:int64 -> stop_address:int64 -> t Or_error.t
 val extra_events : t -> Event.t list
+val aux_action : t -> Aux_action.t option
+val aux_control_events : t -> Aux_control_event.t list
 val param : t Command.Param.t

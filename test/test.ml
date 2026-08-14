@@ -177,7 +177,9 @@ let dump_using_file ?range_symbols events =
       ~hits:[]
       ~events:[ events ]
       ~close_result
-      ~collection_mode:(Intel_processor_trace { extra_events = [] })
+      ~collection_mode:
+        (Intel_processor_trace
+           { extra_events = []; aux_action = None; aux_control_events = [] })
       ()
   in
   ok_exn or_error;
@@ -849,4 +851,58 @@ let%expect_test "get debug information from ELF" =
   Expect_test_helpers_base.require_equal (module Int) raise_after_col 22;
   [%expect {| |}];
   return ()
+;;
+
+let%expect_test "aux actions are encoded in perf event configs" =
+  let module Aux_action = Magic_trace_lib.Collection_mode.Aux_action in
+  let print action config =
+    Aux_action.add_to_perf_config action config |> print_endline
+  in
+  print Start_paused "";
+  print Start_paused "cyc=1";
+  print Resume "cyc=1";
+  print Pause "cyc=1";
+  [%expect
+    {|
+    aux-action=start-paused
+    cyc=1,aux-action=start-paused
+    cyc=1,aux-action=resume
+    cyc=1,aux-action=pause |}]
+;;
+
+let%expect_test "aux control events are encoded as perf breakpoints" =
+  let module Aux_control_event = Magic_trace_lib.Collection_mode.Aux_control_event in
+  let module Aux_action = Magic_trace_lib.Collection_mode.Aux_action in
+  let print action address =
+    Aux_control_event.to_perf_event { address; action } |> print_endline
+  in
+  print Aux_action.Resume 0x1234L;
+  print Aux_action.Pause 0x5678L;
+  [%expect {|
+    mem:0x1234:x/aux-action=resume/
+    mem:0x5678:x/aux-action=pause/ |}]
+;;
+
+let%expect_test "perf args include AUX-gated Intel PT events" =
+  let open Magic_trace_lib in
+  let collection_mode =
+    Collection_mode.Intel_processor_trace
+      { extra_events = []
+      ; aux_action = Some Collection_mode.Aux_action.Start_paused
+      ; aux_control_events =
+          [ { address = 0x1234L; action = Collection_mode.Aux_action.Resume }
+          ; { address = 0x5678L; action = Collection_mode.Aux_action.Pause }
+          ]
+      }
+  in
+  Perf_tool_backend.For_testing.perf_args_of_collection_mode
+    ~capabilities:Perf_capabilities.empty
+    ~timer_resolution:Timer_resolution.Low
+    ~trace_scope:Trace_scope.Userspace
+    collection_mode
+  |> Or_error.ok_exn
+  |> List.iter ~f:print_endline;
+  [%expect
+    {|
+    --event=intel_pt/aux-action=start-paused/u,mem:0x1234:x/aux-action=resume/,mem:0x5678:x/aux-action=pause/ |}]
 ;;

@@ -318,6 +318,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
       ; multi_snapshot : bool
       ; when_to_snapshot : When_to_snapshot.t
       ; trace_filter : Trace_filter.Unevaluated.t option
+      ; aux_trace_range : Aux_trace_range.t option
       ; record_dir : string
       ; executable : string
       ; trace_scope : Trace_scope.t
@@ -370,6 +371,46 @@ module Make_commands (Backend : Backend_intf.S) = struct
            in
            let snap_loc = Elf.selection_stop_info elf head_pid snap_sym in
            return (Some snap_loc))
+    in
+    let%bind collection_mode =
+      match opts.aux_trace_range with
+      | None -> return collection_mode
+      | Some { Aux_trace_range.start_symbol; stop_symbol } ->
+        (match elf with
+         | None ->
+           Deferred.Or_error.error_string
+             "Cannot use -aux-range because magic-trace could not load the executable's \
+              symbol table"
+         | Some elf ->
+           let resolve ~header symbol_selection =
+             let%bind symbol_name =
+               Symbol_selection.evaluate
+                 ~supports_fzf
+                 ~elf:(Some elf)
+                 ~header
+                 symbol_selection
+             in
+             let%map selection =
+               Deferred.return
+                 (Result.of_option
+                    (Elf.find_selection elf symbol_name)
+                    ~error:
+                      (Error.of_string
+                         [%string "AUX range symbol not found: %{symbol_name}"]))
+             in
+             Elf.selection_stop_info elf head_pid selection
+           in
+           let%bind start_info =
+             resolve ~header:"AUX trace range start symbol" start_symbol
+           in
+           let%bind stop_info =
+             resolve ~header:"AUX trace range stop symbol" stop_symbol
+           in
+           Deferred.return
+             (Collection_mode.with_aux_control
+                collection_mode
+                ~start_address:start_info.addr
+                ~stop_address:stop_info.addr))
     in
     let%map.Deferred.Or_error recording, recording_data =
       Backend.Recording.attach_and_record
@@ -555,6 +596,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
     let%map_open.Command record_dir = record_dir_flag optional
     and when_to_snapshot = When_to_snapshot.param
     and trace_filter = Trace_filter.param
+    and aux_trace_range = Aux_trace_range.param
     and multi_snapshot =
       flag
         "-multi-snapshot"
@@ -589,6 +631,7 @@ module Make_commands (Backend : Backend_intf.S) = struct
             ; multi_snapshot
             ; when_to_snapshot
             ; trace_filter
+            ; aux_trace_range
             ; record_dir
             ; executable
             ; trace_scope
