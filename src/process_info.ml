@@ -26,4 +26,27 @@ let read_all_proc_info () =
     | _ -> ())
 ;;
 
+let thread_ids_of_dir_entries entries =
+  Array.filter_map entries ~f:(fun entry ->
+    try Some (Pid.of_string entry) with
+    | _ -> None)
+  |> Array.to_list
+  |> List.sort ~compare:Pid.compare
+;;
+
+let thread_ids pid =
+  Or_error.try_with (fun () ->
+    Sys_unix.readdir [%string "/proc/%{pid#Pid}/task"] |> thread_ids_of_dir_entries)
+;;
+
+let thread_exists ~pid ~tid =
+  match Core_unix.access [%string "/proc/%{pid#Pid}/task/%{tid#Pid}"] [ `Exists ] with
+  | Ok () -> true
+  | Error _ -> false
+;;
+
+module For_testing = struct
+  let thread_ids_of_dir_entries = thread_ids_of_dir_entries
+end
+
 let cmdline_of_pid pid = Hashtbl.find state pid
