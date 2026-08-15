@@ -506,6 +506,11 @@ let event_time t (event : Event.t) (thread_info : _ Thread_info.t) =
       thread_info.last_event_time
     | Some time ->
       let time = map_time t time in
+      (* perf can occasionally emit events for a thread with timestamps older than an
+         event we have already processed. Keep the writer's per-thread logical time
+         monotonic so pending-event flushing and callstack reconstruction never operate
+         over a negative time interval. *)
+      let time = Mapped_time.max time thread_info.last_event_time in
       thread_info.last_event_time <- time;
       time
   in
