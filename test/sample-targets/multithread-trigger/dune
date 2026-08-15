@@ -1,0 +1,17 @@
+(rule
+ (target multithread_trigger.exe)
+ (deps multithread_trigger.cc)
+ (action
+  (run
+   c++
+   -std=c++17
+   -O0
+   -g
+   -pthread
+   %{dep:multithread_trigger.cc}
+   -o
+   %{target})))
+
+(alias
+ (name runtest)
+ (deps multithread_trigger.exe))

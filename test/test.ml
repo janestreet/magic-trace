@@ -850,3 +850,24 @@ let%expect_test "get debug information from ELF" =
   [%expect {| |}];
   return ()
 ;;
+
+let%expect_test "parse thread IDs from proc task entries" =
+  Magic_trace_lib.Process_info.For_testing.thread_ids_of_dir_entries
+    [| "101"; "not-a-tid"; "7"; "42" |]
+  |> List.iter ~f:(fun pid -> Core.printf "%{Pid}\n" pid);
+  [%expect {|
+    7
+    42
+    101 |}]
+;;
+
+let%expect_test "trigger breakpoint manager finds newly-created threads" =
+  let active = Set.of_list (module Pid) [ Pid.of_int 10; Pid.of_int 20 ] in
+  Magic_trace_lib.Trigger_breakpoint.Manager.For_testing.new_thread_ids
+    ~active
+    [ Pid.of_int 10; Pid.of_int 20; Pid.of_int 30; Pid.of_int 40 ]
+  |> List.iter ~f:(fun pid -> Core.printf "%{Pid}\n" pid);
+  [%expect {|
+    30
+    40 |}]
+;;
