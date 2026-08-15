@@ -196,6 +196,24 @@ let dump_using_file ?range_symbols events =
   return ()
 ;;
 
+let write_using_file events =
+  let%bind events = get_events_pipe ~events () in
+  let close_result = return (Ok ()) in
+  let buf = Iobuf.create ~len:500_000 in
+  let destination = Tracing_zero.Destinations.iobuf_destination buf in
+  let writer = Tracing_zero.Writer.Expert.create ~destination () in
+  write_trace_from_events
+    ~debug_info:None
+    ~trace_scope:Userspace
+    ~events_writer:None
+    ~writer:(Some writer)
+    ~hits:[]
+    ~events:[ events ]
+    ~close_result
+    ~collection_mode:(Intel_processor_trace { extra_events = [] })
+    ()
+;;
+
 let%expect_test "random perfs" =
   let open Trace_helpers in
   let%bind.With _dirname = Expect_test_helpers_async.within_temp_dir in
@@ -849,4 +867,17 @@ let%expect_test "get debug information from ELF" =
   Expect_test_helpers_base.require_equal (module Int) raise_after_col 22;
   [%expect {| |}];
   return ()
+;;
+
+let%expect_test "trace writer handles per-thread timestamps that move backwards" =
+  let open Trace_helpers in
+  start_recording ();
+  add Call 200 "outer";
+  add Call 300 "inner";
+  add Return 150 "inner";
+  let events = events () in
+  let%map result = write_using_file events in
+  Or_error.ok_exn result;
+  print_endline "ok";
+  [%expect {| ok |}]
 ;;
