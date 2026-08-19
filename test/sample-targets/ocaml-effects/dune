@@ -1,0 +1,12 @@
+(executables
+ (names
+  exn
+  exn2
+  migrate
+  suspend_exn
+  suspend_exn2
+  suspend_exn3
+  suspend_exn4
+  suspend_exn5
+  suspend
+  suspend2))

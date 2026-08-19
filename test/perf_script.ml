@@ -45,6 +45,14 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
     ;;
 
     let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+
+    module Flow = struct
+      type t = unit
+
+      let create () = ()
+      let write_step () ~thread:_ ~time:_ = ()
+      let finish () = ()
+    end
   end
   in
   Magic_trace_lib.Trace_writer.debug := debug;

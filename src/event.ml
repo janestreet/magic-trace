@@ -88,6 +88,10 @@ module Ok = struct
           ; count : int
           ; name : Collection_mode.Event.Name.t
           }
+      | Ptwrite of
+          { location : Location.t
+          ; data : int64
+          }
     [@@deriving sexp, bin_io]
   end
 
