@@ -46,9 +46,11 @@ module type S_trace = sig
     -> time:Time_ns.Span.t
     -> unit
 
-  type flow
+  module Flow : sig
+    type t
 
-  val create_flow : unit -> flow
-  val write_flow_step : flow -> thread:thread -> time:Time_ns.Span.t -> unit
-  val finish_flow : flow -> unit
+    val create : unit -> t
+    val write_step : t -> thread:thread -> time:Time_ns.Span.t -> unit
+    val finish : t -> unit
+  end
 end

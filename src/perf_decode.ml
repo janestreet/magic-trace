@@ -381,7 +381,7 @@ let parse_perf_ptwrite_event ?perf_maps (thread : Event.Thread.t) time line : Ev
     Ok
       { thread
       ; time
-      ; data = Ptwrite { location; data = payload }
+      ; data = Ptwrite { location; data = Int64.of_string payload }
       ; in_transaction = false
       }
   | results ->

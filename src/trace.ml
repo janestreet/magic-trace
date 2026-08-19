@@ -85,11 +85,13 @@ module Null_writer : Trace_writer_intf.S_trace = struct
   let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
   let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
 
-  type flow = unit
+  module Flow = struct
+    type t = unit
 
-  let create_flow () = ()
-  let write_flow_step () ~thread:_ ~time:_ = ()
-  let finish_flow () = ()
+    let create () = ()
+    let write_step () ~thread:_ ~time:_ = ()
+    let finish () = ()
+  end
 end
 
 let write_trace_from_events

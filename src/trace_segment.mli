@@ -4,6 +4,19 @@ open! Core
     thread. *)
 type t
 
+(** A fiber represents a suspended callstack ranging from an effect handler to a
+    performed effect. Fibers are identified by a unique ID, which the OxCaml runtime
+    logs as a [ptwrite] event whenever it switches fibers.
+
+    For example, in
+    {[
+      Effect.Deep.match_with
+        (fun () ->
+          (* Run other code that calls... *)
+          Effect.perform My_effect)
+    ]}
+    [match_with] starts a new fiber, then [perform] pops the callstack (including
+    exception handlers) up to the handler and packages it for later resumption. *)
 module Fiber : sig
   type t
 end

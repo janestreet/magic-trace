@@ -90,7 +90,7 @@ module Ok = struct
           }
       | Ptwrite of
           { location : Location.t
-          ; data : string
+          ; data : int64
           }
     [@@deriving sexp, bin_io]
   end

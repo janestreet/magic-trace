@@ -14,8 +14,13 @@ module Frame : sig
       | Inlined (** An inlined function call, known to us solely via debug-info. *)
   end
 
-  (* The [location], [parent], and [kind] fields are actually **immutable** except for on [Sentinel.t] instances.
-     [parent] is also mutated by [reparent] when splicing fiber stacks. *)
+  (* The [location], [parent], and [kind] fields are semantically **immutable** except
+     for on [Sentinel.t] instances.
+
+     [parent] may be modified by [unsafe_reparent], but care must be taken to maintain
+     the invariant that all callstacks in a trace segment point to the same [Sentinel.t].
+     [unsafe_reparent] is only used to make resumed callstacks point toward the current
+     sentinel. *)
   type t = private
     { mutable location : Event.Location.t
     ; mutable parent : t or_null
@@ -26,7 +31,7 @@ module Frame : sig
 
   val create : Location.t -> parent:t -> kind:Kind.t -> t
   val set_instruction_pointer : t -> int64 -> unit
-  val reparent : t -> t -> unit
+  val unsafe_reparent : t -> t -> unit
 
   (** Find the first [Physical] frame whose [location.symbol] matches the provided
       argument.
@@ -159,7 +164,7 @@ end = struct
     t.instruction_pointer <- instruction_pointer
   ;;
 
-  let[@inline always] reparent t parent = t.parent <- This parent
+  let[@inline always] unsafe_reparent t parent = t.parent <- This parent
 
   let rec find t target ~distance ~physical_distance ~leaf_of_inlined_stack =
     match t with
@@ -384,10 +389,6 @@ type t =
          frames, starting from the [leaf] of the callstack immediately preceding it. *)
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
-  ; exception_handlers : Frame.t Vec.t
-  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
-  ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
-  ; mutable last_known_fiber_id : int or_null
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -398,6 +399,13 @@ type t =
       (i.e. while calls are still being made to [add_event]). We maintain the invariant
       that, after processing an event, every frame in [exception_handlers] should be an
       ancestor of or equal to [current_physical_frame t]. *)
+  ; exception_handlers : Frame.t Vec.t
+  (** Like [exception_handlers], but tracks the currently active effect handlers.
+      Each effect handler records the length of [exception_handlers] when it was installed. *)
+  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
+  (** The global mapping from fiber ID to suspended callstacks.  *)
+  ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
+  ; mutable last_known_fiber_id : int or_null
   ; mutable last_known_location : Location.t
   }
 
@@ -794,66 +802,66 @@ let return_to_unknown_handler (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   | #(This frame, ~distance, ~leaf_of_inlined_stack)
     when Symbol.equal frame.location.symbol dst.symbol ->
     (* There are valid (but hopefully rare) ways to reach this case.
-          Take the following code for example:
-          {v
+       Take the following code for example:
+       {v
 
-          let rec process_data x n =
-            match n with
-            | 100 -> x
-            | 50 -> (try process_data x (n + 1) with | _ -> process_data x 76)
-            | 75 -> failwith "Raise an exception"
-            | n -> n + process_data (x + n) (n + 1)
-          ;;
+       let rec process_data x n =
+         match n with
+         | 100 -> x
+         | 50 -> (try process_data x (n + 1) with | _ -> process_data x 76)
+         | 75 -> failwith "Raise an exception"
+         | n -> n + process_data (x + n) (n + 1)
+       ;;
 
-          v}
+       v}
 
-          If the program calls [process_data _ 0], and we start tracing during the execution of
-          [process_data _ 70], then when the program eventually executes [process_data _ 75]
-          and raises an exception, the symbol of the exception target [process_data] will be
-          found in the current callstack, but [t.exception_handlers] will be **empty** because
-          the pushtrap only occurs in [process_data _ 50], which executed before we started tracing.
+       If the program calls [process_data _ 0], and we start tracing during the execution of
+       [process_data _ 70], then when the program eventually executes [process_data _ 75]
+       and raises an exception, the symbol of the exception target [process_data] will be
+       found in the current callstack, but [t.exception_handlers] will be **empty** because
+       the pushtrap only occurs in [process_data _ 50], which executed before we started tracing.
 
-          Another way this case can occur is a very long-running function that sets up its pushtraps
-          early (e.g. the main loop of the async scheduler). Here's a working example:
-          {v
+       Another way this case can occur is a very long-running function that sets up its pushtraps
+       early (e.g. the main loop of the async scheduler). Here's a working example:
+       {v
 
-          open! Core
+       open! Core
 
-          let[@cold] print_that_we_are_done () = print_endline "We are done"
+       let[@cold] print_that_we_are_done () = print_endline "We are done"
 
-          let[@cold] main_application_loop () =
-            let () =
-              try
-                while true do
-                  match (Core_unix.access [@inlined never]) "/tmp/flag.txt" [ `Exists ] with
-                  | Error _ -> ()
-                  | Ok _ -> failwith "/tmp/flag.txt exists now"
-                done
-              with
-              | _ -> ()
-            in
-            print_that_we_are_done ();
-            let mutable x = 0 in
-            while true do
-              x <- x + 1
-            done
-          ;;
+       let[@cold] main_application_loop () =
+         let () =
+           try
+             while true do
+               match (Core_unix.access [@inlined never]) "/tmp/flag.txt" [ `Exists ] with
+               | Error _ -> ()
+               | Ok _ -> failwith "/tmp/flag.txt exists now"
+             done
+           with
+           | _ -> ()
+         in
+         print_that_we_are_done ();
+         let mutable x = 0 in
+         while true do
+           x <- x + 1
+         done
+       ;;
 
-          let () = main_application_loop ()
+       let () = main_application_loop ()
 
-          v}
+       v}
 
-          If we start tracing this program at any time after startup, the program will already
-          be in the first [while true] loop, without us having seen the entertrap for the surrounding
-          [try] block. When [/tmp/flag.txt] comes into existence and we raise an exception via [failwith],
-          we'll see an entertrap with a destination of [main_application_loop], but [t.exception_handlers]
-          will be **empty**.
+       If we start tracing this program at any time after startup, the program will already
+       be in the first [while true] loop, without us having seen the entertrap for the surrounding
+       [try] block. When [/tmp/flag.txt] comes into existence and we raise an exception via [failwith],
+       we'll see an entertrap with a destination of [main_application_loop], but [t.exception_handlers]
+       will be **empty**.
 
-          It's impossible for magic-trace to distinguish between these two cases, a very
-          long-running function that set up its pushtraps early vs. the child of an even
-          deeper but unseen stack of non-tail recursive calls. OCaml being what it is,
-          unfortunately I think code of both shapes actually exists. We go with the former
-          interpretation because it should produce a readable trace in either scenario.
+       It's impossible for magic-trace to distinguish between these two cases, a very
+       long-running function that set up its pushtraps early vs. the child of an even
+       deeper but unseen stack of non-tail recursive calls. OCaml being what it is,
+       unfortunately I think code of both shapes actually exists. We go with the former
+       interpretation because it should produce a readable trace in either scenario.
     *)
     return_to_existing_frame
       t
@@ -866,8 +874,8 @@ let return_to_unknown_handler (t : t) (time : Timestamp.t) ~(dst : Location.t) =
     (* We are probably raising into an exception handler much further up the stack that we never saw the entrance into. *)
     let distance =
       (* - Add 1 to the distance for the [_phantom_frame] we are injecting.
-            - Possibly add 1 more to the distance to return past the last physical frame (if it exists)
-              all the way to the sentinel.
+         - Possibly add 1 more to the distance to return past the last physical frame (if it exists)
+           all the way to the sentinel.
       *)
       distance + 1 + (Or_null.is_this maybe_frame |> Bool.to_int)
     in
@@ -886,14 +894,14 @@ let return_to_unknown_handler (t : t) (time : Timestamp.t) ~(dst : Location.t) =
       t.callstacks
       #{ time; leaf = dst_frame; control_flow = Return { distance } };
     (* Unlike [handle_return] we do *not* make the inlined frames at [dst] (or [dst.instruction_pointer - 1])
-          the parents of the existing frames. The rationale is that unlike [handle_return], we have no idea
-          where we might've been within the frame for [dst] that we just inferred. *)
+       the parents of the existing frames. The rationale is that unlike [handle_return], we have no idea
+       where we might've been within the frame for [dst] that we just inferred. *)
     append_inlined_frames
       t
       time
       ~physical_frame:dst_frame
         (* This is subtle; Yes the frame is new, but we *don't* want to reflect that in a
-              [Call], because discovered roots are handled separately. *)
+           [Call], because discovered roots are handled separately. *)
       ~and_insert_physical_frame_too:false
 ;;
 
@@ -903,12 +911,12 @@ let handle_ocaml_exception (t : t) (time : Timestamp.t) ~(dst : Location.t) =
     Vec.pop_back_unit_exn t.exception_handlers;
     if not (Symbol.equal dst_frame.location.symbol dst.symbol)
     then
-      log_unexpected_case
-        [%message
-          "Mismatched handler and dst"
-            (dst_frame.location.symbol : Symbol.t)
-            (dst.instruction_pointer : Int64.Hex.t)
-            (dst.symbol : Symbol.t)];
+      failwithf
+        "Mismatched exception handler '%s' and dst '%s' (%Lx)"
+        (Symbol.display_name dst_frame.location.symbol)
+        (Symbol.display_name dst.symbol)
+        dst.instruction_pointer
+        ();
     (match Frame.find_ancestor (current_frame t) ~ancestor:dst_frame with
      | #(~distance:(This distance), ~leaf_of_inlined_stack) ->
        (* This is the happy case where our exception handler tracking is working as expected. *)
@@ -994,7 +1002,7 @@ let handle_ocaml_resume t time =
   let distance =
     match Frame.find fiber.callstack.#leaf fiber.handler.location.symbol with
     | #(This frame, ~distance, ~physical_distance:_, ~leaf_of_inlined_stack:_) ->
-      Frame.reparent frame (current_frame t);
+      Frame.unsafe_reparent frame (current_frame t);
       distance
     | _ -> 0
   in

@@ -582,7 +582,7 @@ and write_event' (T t) ?events_writer event =
        let is_resume = String.equal symbol_name "caml_resume" in
        if is_perform || is_resume
        then (
-         let fiber_id = Int64.to_int_trunc (Int64.of_string data) in
+         let fiber_id = Int64.to_int_trunc data in
          Thread_info.set_fiber_id thread_info fiber_id;
          let name = if is_perform then "Perform Effect" else "Resume Continuation" in
          let args = Tracing.Trace.Arg.[ "fiber", String (sprintf "0x%x" fiber_id) ] in
@@ -590,11 +590,11 @@ and write_event' (T t) ?events_writer event =
          if is_perform
          then (
            let module T = (val t.trace) in
-           let flow = T.create_flow () in
-           T.write_flow_step flow ~thread ~time:(time :> Time_ns.Span.t);
+           let flow = T.Flow.create () in
+           T.Flow.write_step flow ~thread ~time:(time :> Time_ns.Span.t);
            Hashtbl.set t.pending_flows ~key:fiber_id ~data:(fun thread time ->
-             T.write_flow_step flow ~thread ~time;
-             T.finish_flow flow))
+             T.Flow.write_step flow ~thread ~time;
+             T.Flow.finish flow))
          else (
            match Hashtbl.find_and_remove t.pending_flows fiber_id with
            | Some finish -> finish thread (time :> Time_ns.Span.t)
@@ -606,7 +606,7 @@ and write_event' (T t) ?events_writer event =
                [ [ "timestamp", Int (Time_ns.Span.to_int_ns (time :> Time_ns.Span.t)) ]
                ; [ "symbol", String symbol_name ]
                ; [ "addr", Pointer location.instruction_pointer ]
-               ; [ "data", String data ]
+               ; [ "data", Int64 data ]
                ; Option.value_map
                    (Event.thread outer_event).pid
                    ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])
