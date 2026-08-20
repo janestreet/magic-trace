@@ -39,6 +39,7 @@ module Pending_event = struct
           { addr : Int64.Hex.t
           ; offset : Int.Hex.t
           ; from_untraced : bool
+          ; call_site : Event.Location.t option
           }
       | Ret
       | Ret_from_untraced of { reset_time : Mapped_time.t }
@@ -51,12 +52,12 @@ module Pending_event = struct
     }
   [@@deriving sexp]
 
-  let create_call location ~from_untraced =
+  let create_call ?(call_site = None) location ~from_untraced =
     let { Event.Location.instruction_pointer; symbol; symbol_offset; dso = _ } =
       location
     in
     { symbol
-    ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced }
+    ; kind = Call { addr = instruction_pointer; offset = symbol_offset; from_untraced; call_site }
     }
   ;;
 end
@@ -359,7 +360,7 @@ let write_pending_event'
   =
   let display_name = Symbol.display_name symbol in
   match kind with
-  | Call { addr; offset; from_untraced } ->
+  | Call { addr; offset; from_untraced; call_site } ->
     (* Adding a call is always the result of seeing something new on the top of the
        stack, so the base address is just the current base address. *)
     let base_address = Int64.(addr - of_int offset) in
@@ -399,7 +400,24 @@ let write_pending_event'
     let inferred_start_time_arg =
       if from_untraced then [ "inferred_start_time", Interned "true" ] else []
     in
-    let args = symbol_args @ inferred_start_time_arg in
+    let call_site_args =
+      match call_site with
+      | None -> []
+      | Some { instruction_pointer; symbol; symbol_offset; dso = _ } ->
+        let base_address = Int64.(instruction_pointer - of_int symbol_offset) in
+        (match Option.bind (Int64.to_int base_address) ~f:(Hashtbl.find t.debug_info) with
+         | None -> []
+         | Some (info : Elf.Location.t) ->
+           [ "call_site_line", Int info.line
+           ; "call_site_col", Int info.col
+           ; "call_site_symbol", Interned (Symbol.display_name symbol)
+           ]
+           @
+             (match info.filename with
+             | Some x -> [ "call_site_file", Interned x ]
+             | None -> []))
+    in
+    let args = symbol_args @ inferred_start_time_arg @ call_site_args in
     let name =
       if t.annotate_inferred_start_times && from_untraced
       then display_name ^ " [inferred start time]"
@@ -561,7 +579,8 @@ let create_thread t event =
 ;;
 
 let call t thread_info ~time ~location =
-  let ev = Pending_event.create_call location ~from_untraced:false in
+  let call_site = Callstack.top thread_info.callstack in
+  let ev = Pending_event.create_call ?call_site location ~from_untraced:false in
   add_event t thread_info time ev;
   Callstack.push thread_info.callstack location
 ;;

@@ -16,6 +16,12 @@ module Trace_helpers : sig
   val start_recording : unit -> unit
   val call : unit -> unit
   val add : Event.Kind.t -> int -> string -> unit
+  val add_with_locations
+    :  Event.Kind.t
+    -> int
+    -> src:Event.Location.t
+    -> dst:Event.Location.t
+    -> unit
   val ret : unit -> unit
   val jmp : unit -> unit
 end = struct
@@ -122,6 +128,17 @@ end = struct
          })
   ;;
 
+  let add_with_locations kind ns ~src ~dst =
+    Queue.enqueue
+      events
+      (Ok
+         { thread
+         ; time = Time_ns.Span.of_int_ns ns
+         ; data = Trace { trace_state_change = None; kind = Some kind; src; dst }
+         ; in_transaction = false
+         })
+  ;;
+
   let ret () =
     let symbol =
       match Stack.pop stack with
@@ -194,6 +211,40 @@ let dump_using_file ?range_symbols events =
   |> [%sexp_of: (unit, Tracing.Parser.Parse_error.t) Result.t]
   |> print_s;
   return ()
+;;
+
+let dump_duration_begin_arg_names ~debug_info events =
+  let module Trace = struct
+    type thread = unit
+
+    let allocate_pid ~name:_ = 0
+    let allocate_thread ~pid:_ ~name:_ = ()
+
+    let write_duration_begin ?category:_ () ~args ~thread:_ ~name ~time:_ =
+      print_s [%sexp (name : string), (List.map args ~f:fst : string list)]
+    ;;
+
+    let write_duration_end ?category:_ () ~args:_ ~thread:_ ~name:_ ~time:_ = ()
+    let write_duration_complete ~args:_ ~thread:_ ~name:_ ~time:_ ~time_end:_ = ()
+    let write_duration_instant ~args:_ ~thread:_ ~name:_ ~time:_ = ()
+    let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ = ()
+  end
+  in
+  let trace_writer =
+    Magic_trace_lib.Trace_writer.create_expert
+      ~trace_scope:Userspace
+      ~debug_info:(Some debug_info)
+      ~ocaml_exception_info:None
+      ~earliest_time:Time_ns.Span.zero
+      ~hits:[]
+      ~annotate_inferred_start_times:true
+      (module Trace)
+  in
+  List.iter events ~f:(fun event ->
+    Magic_trace_lib.Trace_writer.write_event
+      trace_writer
+      (Event.With_write_info.create ~should_write:true event));
+  Magic_trace_lib.Trace_writer.finalize trace_writer
 ;;
 
 let%expect_test "random perfs" =
@@ -821,6 +872,36 @@ let%expect_test "filtered trace" =
      ((timestamp 13ns) (thread 1) (category 109) (name 105) (arguments ())
       (event_type Duration_end)))
     (Error No_more_words)
+    |}];
+  return ()
+;;
+
+let%expect_test "call sources include debug information" =
+  let location instruction_pointer symbol symbol_offset =
+    { Event.Location.instruction_pointer; symbol; symbol_offset; dso = Null }
+  in
+  let caller = location 0x1008L (From_perf "caller") 8 in
+  let callee = location 0x2004L (From_perf "callee") 4 in
+  let unknown = location 0L (From_perf "unknown") 0 in
+  let debug_info =
+    Hashtbl.of_alist_exn
+      (module Int)
+      [ 0x1000, { Elf.Location.filename = Some "caller.ml"; line = 12; col = 3 }
+      ; 0x2000, { Elf.Location.filename = Some "callee.ml"; line = 34; col = 5 }
+      ]
+  in
+  let events =
+    Trace_helpers.(
+      add_with_locations Event.Kind.Call 0 ~src:unknown ~dst:caller;
+      add_with_locations Event.Kind.Call 1 ~src:caller ~dst:callee;
+      events ())
+  in
+  dump_duration_begin_arg_names ~debug_info events;
+  [%expect
+    {|
+    (caller (address line col symbol file))
+    (callee
+     (address line col symbol file call_site_line call_site_col call_site_symbol call_site_file))
     |}];
   return ()
 ;;
