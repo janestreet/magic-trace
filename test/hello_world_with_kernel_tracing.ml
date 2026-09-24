@@ -63596,7 +63596,7 @@ let%expect_test "C hello world with kernel tracing" =
     ->      0ns BEGIN event_sched_in.part.0 [inferred start time]
     ->      0ns BEGIN pt_event_add [inferred start time]
     ->      0ns BEGIN pt_config_start [inferred start time]
-    ->      0ns BEGIN native_write_msr
+    ->      0ns BEGIN native_write_msr [inferred start time]
     -> 313.199us BEGIN [untraced]
     -> 313.199us END   [untraced]
     -> 313.199us END   native_write_msr
@@ -63615,5 +63615,6 @@ let%expect_test "C hello world with kernel tracing" =
     -> 313.199us END   exit
     -> 313.199us END   __libc_start_call_main
     -> 313.199us END   __libc_start_main
-    -> 313.199us END   _start |}]
+    -> 313.199us END   _start
+    |}]
 ;;

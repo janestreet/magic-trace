@@ -15,8 +15,7 @@ let%expect_test "A page fault during demo.c" =
     1439745/1439745 2472089.651285037:                            1   branches:uH:   tr strt                             0 [unknown] (foo.so) => ffffffffae200ab0 asm_exc_page_fault+0x0 (foo.so)
     1439745/1439745 2472089.651285037:                            1   branches:uH:   call                 ffffffffae200ab3 asm_exc_page_fault+0x3 (foo.so) => ffffffffae201310 error_entry+0x0 (foo.so)
     1439745/1439745 2472089.651285124:                            1   branches:uH:   call                 ffffffffae20137a error_entry+0x6a (foo.so) => ffffffffae121a30 sync_regs+0x0 (foo.so)
-    ->    225ns BEGIN asm_exc_page_fault
-    ->    268ns BEGIN error_entry
+    ->    225ns BEGIN error_entry
     1439745/1439745 2472089.651285217:                            1   branches:uH:   return               ffffffffae121a51 sync_regs+0x21 (foo.so) => ffffffffae20137f error_entry+0x6f (foo.so)
     ->    311ns BEGIN sync_regs
     1439745/1439745 2472089.651285217:                            1   branches:uH:   return               ffffffffae201384 error_entry+0x74 (foo.so) => ffffffffae200ab8 asm_exc_page_fault+0x8 (foo.so)
@@ -643,6 +642,8 @@ let%expect_test "A page fault during demo.c" =
     INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->    224ns BEGIN _dl_catch_exception [inferred start time]
     ->    224ns BEGIN _fini [inferred start time]
+    ->    224ns BEGIN asm_exc_page_fault [inferred start time]
     ->  1.373us END   _fini
-    ->  1.373us END   _dl_catch_exception |}]
+    ->  1.373us END   _dl_catch_exception
+    |}]
 ;;

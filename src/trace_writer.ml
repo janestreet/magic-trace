@@ -1169,13 +1169,20 @@ and write_event' (T t) ?events_writer event =
               ~addr:dst.instruction_pointer
               ~time)
           else if Callstack.is_empty thread_info.callstack
-          then
-            (* View stopping tracing always as a call (typically the result of a call
-               into a special library / linker), with starting tracing again as
-               exiting it. The one exception is the initial start of the trace for
-               that process, when there is no stack and a prior end won't have pushed
-               a synthetic stack frame. *)
-            call t thread_info ~time ~location:dst
+          then (
+            (* The initial start can be inside a function whose callers are only
+               discovered by later returns. Defer its begin event so those inferred
+               caller frames can be written before it at the start of the trace.
+               If the first return has the same timestamp, put the inferred starts
+               one nanosecond earlier so the viewer sees the begins first. *)
+            if Mapped_time.( >= ) thread_info.callstack.create_time time
+               && Mapped_time.( > ) time Mapped_time.start_of_trace
+            then
+              thread_info.callstack.create_time
+              <- Mapped_time.add time (Time_ns.Span.of_int_ns (-1));
+            let ev = Pending_event.create_call dst ~from_untraced:true in
+            write_pending_event t thread_info thread_info.callstack.create_time ev;
+            Callstack.push thread_info.callstack dst)
           else
             (* We don't call [check_current_symbol] here because stops don't change
                the program location in most cases, and when a call to a symbol page
@@ -1226,7 +1233,14 @@ and write_event' (T t) ?events_writer event =
                ~time;
              check_current_symbol t thread_info ~time dst)
         | Some Tx_abort, None -> check_current_symbol t thread_info ~time dst
-        | Some (Jump | Interrupt), None ->
+        | Some ((Jump | Interrupt) as kind), None ->
+          (* An optimized function can jump back to its caller.  In that case
+             the caller's frame is already on the stack, so the jump ends only
+             the current frame rather than creating another caller frame. *)
+          (match kind, List.nth (Stack.to_list thread_info.callstack.stack) 1 with
+           | Jump, Some { symbol; _ } when [%compare.equal: Symbol.t] symbol dst.symbol ->
+             ret t thread_info ~time
+           | _ -> ());
           Ocaml_hacks.check_current_symbol_track_entertraps t thread_info ~time dst
         (* (None, _) comes up when perf spews something magic-trace doesn't recognize.
            Instead of crashing, ignore it and keep going. *)

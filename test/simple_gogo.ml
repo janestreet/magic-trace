@@ -57,7 +57,8 @@ let%expect_test "an mcall/gogo pair from a small go program" =
     INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN runtime.gcenable [inferred start time]
     ->      0ns BEGIN runtime.chanrecv1 [inferred start time]
-    ->      0ns BEGIN runtime.chanrecv
+    ->      0ns BEGIN runtime.chanrecv [inferred start time]
     -> 71.274us END   runtime.chanrecv1
-    -> 71.274us END   runtime.gcenable |}]
+    -> 71.274us END   runtime.gcenable
+    |}]
 ;;

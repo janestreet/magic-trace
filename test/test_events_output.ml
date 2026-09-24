@@ -3714,7 +3714,7 @@ let%expect_test "test-events-output" =
     30549/30549 174427.938616444:                           1    branches:uH:   tr end  syscall          7ffff7ad2da7 _Exit+0x37 (/usr/lib64/libc-2.17.so) =>                0 [unknown] ([unknown])
     -> 156.002us END   [untraced]
     INPUT TRACE STREAM ENDED, any lines printed below this were deferred
-    ->      0ns BEGIN _start
+    ->      0ns BEGIN _start [inferred start time]
     -> 156.068us BEGIN [syscall]
     -> 156.068us END   [syscall]
     -> 156.068us END   _Exit
@@ -48170,5 +48170,6 @@ let%expect_test "test-events-output" =
         (data
          (Trace (trace_state_change End) (kind Syscall) (src 0x7ffff7ad2da7)
           (dst 0x0))))))
-     (callstack ((new_symbols ()) (callstack ((125 4)))))) |}]
+     (callstack ((new_symbols ()) (callstack ((125 4))))))
+    |}]
 ;;

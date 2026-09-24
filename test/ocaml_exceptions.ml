@@ -62,6 +62,7 @@ let%expect_test "A raise_notrace OCaml exception" =
     ->     20ns BEGIN camlRaise_test__raise_after_265
     ->     21ns BEGIN camlRaise_test__raise_after_265
     ->     22ns BEGIN camlRaise_test__raise_after_265
+    ->     23ns END   camlRaise_test__raise_after_265
     INPUT TRACE STREAM ENDED, any lines printed below this were deferred
     ->      0ns BEGIN camlRaise_test__entry [inferred start time]
     ->      0ns BEGIN camlRaise_test__raise_after_265
@@ -85,8 +86,8 @@ let%expect_test "A raise_notrace OCaml exception" =
     ->     23ns END   camlRaise_test__raise_after_265
     ->     23ns END   camlRaise_test__raise_after_265
     ->     23ns END   camlRaise_test__raise_after_265
-    ->     23ns END   camlRaise_test__raise_after_265
-    ->     24ns END   camlRaise_test__entry |}]
+    ->     24ns END   camlRaise_test__entry
+    |}]
 ;;
 
 let%expect_test "a corner case where a call doesn't return directly into a poptrap" =

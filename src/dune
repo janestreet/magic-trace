@@ -27,6 +27,7 @@
  (no_dynlink)
  (flags
   (:standard -cclib -lstdc++))
+ (c_library_flags -lstdc++)
  (foreign_archives LLVM)
  (foreign_stubs
   (language c)
