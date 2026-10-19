@@ -25,7 +25,10 @@ let range_hit_times ~decode_events ~range_symbols =
     let is_start symbol = String.(Symbol.display_name symbol = start_symbol) in
     let is_stop symbol = String.(Symbol.display_name symbol = stop_symbol) in
     Pipe.filter_map events ~f:(function
-      | Error _ | Ok { data = Power _; _ } | Ok { data = Event_sample _; _ } -> None
+      | Error _
+      | Ok { data = Power _; _ }
+      | Ok { data = Event_sample _; _ }
+      | Ok { data = Ptwrite _; _ } -> None
       | Ok { data = Trace trace; time; _ } ->
         (match trace.kind with
          | Some Call ->
@@ -93,6 +96,7 @@ let decode_events_and_annotate ~decode_events ~range_symbols =
                | Ok { data = Power _; _ }
                | Ok { data = Stacktrace_sample _; _ }
                | Ok { data = Event_sample _; _ }
+               | Ok { data = Ptwrite _; _ }
                | Error _ -> hits, in_filtered_region)
           in
           ( (hits, in_filtered_region)

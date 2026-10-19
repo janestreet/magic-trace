@@ -17,6 +17,8 @@ val run
   :  ?debug:bool
   -> ?events_writer:Magic_trace_lib.Tracing_tool_output.events_writer
   -> ?ocaml_exception_info:Magic_trace_lib.Ocaml_exception_info.t
+  -> ?trace_writer:(module Magic_trace_lib.Trace_writer_implementation_intf.S)
+  -> ?print_events:bool
   -> trace_scope:Magic_trace_lib.Trace_scope.t
   -> Filename.t
   -> unit Deferred.t

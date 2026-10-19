@@ -3,7 +3,16 @@ open! Async
 open Magic_trace_lib
 module Time_ns = Time_ns_unix
 
-let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file =
+let run
+  ?(debug = false)
+  ?events_writer
+  ?ocaml_exception_info
+  ?(trace_writer = (module Trace_writer : Trace_writer_implementation_intf.S))
+  ?(print_events = true)
+  ~trace_scope
+  file
+  =
+  let module Trace_writer = (val trace_writer) in
   (* CR-someday cgaebel: Get the git root by shelling out to `git rev-parse --show-toplevel`.
      This works, but is ridiculous. *)
   let git_root = "../../.." in
@@ -45,11 +54,23 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
     ;;
 
     let write_counter ~args:_ ~thread:_ ~name:_ ~time:_ : unit = ()
+
+    module Flow = struct
+      type t = unit
+
+      let create () = ()
+
+      let write_step () ~thread:_ ~time =
+        printf "-> %8s FLOW\n" (Time_ns.Span.to_string_hum time)
+      ;;
+
+      let finish () = ()
+    end
   end
   in
-  Magic_trace_lib.Trace_writer.debug := debug;
+  Trace_writer.debug := debug;
   Exn.protect
-    ~finally:(fun () -> Magic_trace_lib.Trace_writer.debug := false)
+    ~finally:(fun () -> Trace_writer.debug := false)
     ~f:(fun () ->
       let trace_writer =
         Trace_writer.create_expert
@@ -91,7 +112,7 @@ let run ?(debug = false) ?events_writer ?ocaml_exception_info ~trace_scope file 
         in
         match event with
         | Some event ->
-          if should_print_perf_line event
+          if print_events && should_print_perf_line event
           then (
             match lines with
             | [ line ] -> printf "%s\n" line
