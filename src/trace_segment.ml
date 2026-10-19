@@ -411,6 +411,26 @@ module Fiber = struct
     }
 end
 
+module Perform = struct
+  type t =
+    | No_perform
+    | Perform of Fiber.t
+    | Reperform of Fiber.t or_null
+    (** [Null] means the original perform was not observed. *)
+
+  let start_reperform = function
+    | No_perform -> Reperform Null
+    | Perform fiber -> Reperform (This fiber)
+    | Reperform _ as t -> t
+  ;;
+
+  let stop_reperform = function
+    | (No_perform | Perform _) as t -> t
+    | Reperform Null -> No_perform
+    | Reperform (This fiber) -> Perform fiber
+  ;;
+end
+
 type t =
   { mutable root : Frame.Sentinel.t
   ; mutable last_event_time : Timestamp.t
@@ -429,6 +449,7 @@ type t =
          frames, starting from the [leaf] of the callstack immediately preceding it. *)
   ; symbolizer : Symbolizer.t
   ; ocaml_exception_info : Ocaml_exception_info.t or_null
+  ; exception_handlers : Frame.t Vec.t
   (** The currently active OCaml exception handlers. This is used to determine which frame
       to return to when [ocaml_exception_info] indicates that the current event is an
       OCaml exception being raised in the traced program.
@@ -439,18 +460,13 @@ type t =
       (i.e. while calls are still being made to [add_event]). We maintain the invariant
       that, after processing an event, every frame in [exception_handlers] should be an
       ancestor of or equal to [current_physical_frame t]. *)
-  ; exception_handlers : Frame.t Vec.t
+  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
   (** Like [exception_handlers], but tracks the currently active effect handlers.
       Each effect handler records the length of [exception_handlers] when it was installed. *)
-  ; effect_handlers : (Frame.t * exn_depth:int) Vec.t
-  (** The mapping from fiber ID to suspended callstacks. *)
   ; fiber_stacks : Fiber.t Hashtbl.M(Int).t
+  (** The mapping from fiber ID to suspended callstacks. *)
   ; mutable last_known_fiber_id : int or_null
-  ; mutable last_performed : Fiber.t or_null
-  (** The fiber whose effect is currently being handled. *)
-  ; mutable reperforming : bool
-  (** Whether we're handling a reperformed effect. If so, [last_performed] will become
-      a child of the fiber that handles the effect. *)
+  ; mutable last_perform : Perform.t
   ; mutable last_known_location : Location.t
   }
 
@@ -471,8 +487,7 @@ let create ocaml_exception_info fiber_stacks =
   ; effect_handlers = Vec.create ()
   ; fiber_stacks
   ; last_known_fiber_id = Null
-  ; last_performed = Null
-  ; reperforming = false
+  ; last_perform = No_perform
   ; last_known_location : Location.t =
       { symbol = Unknown
       ; symbol_offset = 0
@@ -1053,14 +1068,14 @@ let handle_ocaml_perform (t : t) (time : Timestamp.t) ~(dst : Location.t) =
   let fiber = current_fiber t in
   fiber.child <- Null;
   let leaf =
-    if t.reperforming
-    then (
-      t.reperforming <- false;
-      Or_null.iter t.last_performed ~f:(fun first -> append_child ~first fiber);
-      Or_null.value (current_frame t).parent ~default:(current_frame t))
-    else (
-      t.last_performed <- This fiber;
-      current_frame t)
+    match t.last_perform with
+    | Reperform first ->
+      t.last_perform <- Perform.stop_reperform t.last_perform;
+      Or_null.iter first ~f:(fun first -> append_child ~first fiber);
+      Or_null.value (current_frame t).parent ~default:(current_frame t)
+    | No_perform | Perform _ ->
+      t.last_perform <- Perform fiber;
+      current_frame t
   in
   match Vec.last t.effect_handlers with
   | This (dst_frame, ~exn_depth) ->
@@ -1153,7 +1168,7 @@ let handle_ocaml_resume t time =
   (* If we're not getting ptwrite events, the fiber info may have been overwritten by
      another call to perform, but we attempt to use it anyway. *)
   let fiber = current_fiber t in
-  t.last_performed <- Null;
+  t.last_perform <- No_perform;
   (* Return from caml_continue (or caml_discontinue, etc.) *)
   Or_null.iter (current_frame t).parent ~f:(fun parent ->
     Nonempty_vec.push_back
@@ -1269,12 +1284,12 @@ let add_event (t : t) (event : Event.Ok.Data.t) (time : Timestamp.t) =
                          (current_physical_frame.location : Location.t)]));
         (match Symbol.display_name src.symbol with
          | "caml_reperform" | "caml_perform" -> ()
-         | _ -> t.reperforming <- false);
+         | _ -> t.last_perform <- Perform.stop_reperform t.last_perform);
         (match Symbol.display_name src.symbol, src.symbol_offset with
          (* CR-soon mslater: export these with the exception handler info *)
          | "caml_runstack", 0xb9 -> handle_ocaml_enter_runstack t ~current_physical_frame
          | "caml_runstack", 0x16f -> handle_ocaml_exit_runstack t
-         | "caml_reperform", _ -> t.reperforming <- true
+         | "caml_reperform", _ -> t.last_perform <- Perform.start_reperform t.last_perform
          | "caml_perform", 0xde -> handle_ocaml_perform t time ~dst
          | "caml_continue", (0x107 | 0x132)
          | "caml_discontinue", 0x10b
