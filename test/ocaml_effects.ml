@@ -1,0 +1,1675 @@
+open! Core
+open! Async
+
+(* The following tests check that we can successfully decode traces of the programs under
+   [sample-targets/ocaml-effects/]. *)
+
+let run ?(entertraps = [||]) ?(pushtraps = [||]) ?(poptraps = [||]) file =
+  let ocaml_exception_info =
+    Magic_trace_lib.Ocaml_exception_info.create ~entertraps ~pushtraps ~poptraps
+  in
+  Perf_script.run
+    ~ocaml_exception_info
+    ~trace_writer:(module Magic_trace_lib.New_trace_writer)
+    ~print_events:false
+    ~trace_scope:Userspace
+    ("ocaml_effects/" ^ file)
+;;
+
+let%expect_test "suspend" =
+  let%map () = run "suspend.perf" in
+  [%expect
+    {|
+    ->  8.276us BEGIN Perform Effect
+    ->  8.276us END   Perform Effect
+    -> 16.641us BEGIN Perform Effect
+    -> 16.641us END   Perform Effect
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend.entry
+    ->    105ns BEGIN Suspend.main_0_6_code
+    ->    211ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    317ns BEGIN caml_c_call
+    ->    408ns BEGIN caml_alloc_stack
+    ->    409ns BEGIN new_fiber_id
+    ->    410ns END   new_fiber_id
+    ->    410ns BEGIN alloc_size_class_stack_noexc
+    ->    411ns BEGIN caml_mem_round_up_mapping_size
+    ->    412ns END   caml_mem_round_up_mapping_size
+    ->    412ns BEGIN caml_mem_map
+    ->    535ns BEGIN caml_plat_mem_map
+    ->    659ns BEGIN mmap64@plt
+    ->    662ns END   mmap64@plt
+    ->    662ns BEGIN __mmap
+    ->    700ns BEGIN [untraced]
+    ->  1.761us END   [untraced]
+    ->  1.763us END   __mmap
+    ->  1.811us END   caml_plat_mem_map
+    ->  1.815us END   caml_mem_map
+    ->  1.815us BEGIN madvise@plt
+    ->  1.816us END   madvise@plt
+    ->  1.816us BEGIN __madvise
+    ->  1.849us BEGIN [untraced]
+    ->  2.415us END   [untraced]
+    ->  2.416us END   __madvise
+    ->  2.416us BEGIN mprotect@plt
+    ->  2.425us END   mprotect@plt
+    ->  2.425us BEGIN __mprotect
+    ->  2.457us BEGIN [untraced]
+    ->  4.051us END   [untraced]
+    ->  4.056us END   __mprotect
+    ->  4.238us BEGIN [untraced]
+    ->  6.141us END   [untraced]
+    ->  6.335us BEGIN [untraced]
+    ->  8.127us END   [untraced]
+    ->  8.153us END   alloc_size_class_stack_noexc
+    ->  8.154us END   caml_alloc_stack
+    ->  8.154us END   caml_c_call
+    ->  8.154us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.154us BEGIN caml_runstack
+    ->  8.255us BEGIN Suspend.fn[suspend.ml:11,27--61]_5_9_code
+    ->  8.264us BEGIN caml_perform
+    ->  8.277us END   caml_perform
+    ->  8.277us END   Suspend.fn[suspend.ml:11,27--61]_5_9_code
+    ->  8.277us END   caml_runstack
+    ->  8.277us BEGIN caml_apply3
+    ->  8.406us END   caml_apply3
+    ->  8.406us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.417us BEGIN Suspend.effc_1_7_code
+    ->  8.425us END   Suspend.effc_1_7_code
+    ->  8.463us END   Stdlib.Effect.effc_17_120_code
+    ->  8.463us BEGIN Suspend.fn[suspend.ml:6,22--74]_2_8_code
+    ->  8.471us END   Suspend.fn[suspend.ml:6,22--74]_2_8_code
+    ->  8.477us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  8.481us BEGIN caml_c_call
+    ->  8.485us BEGIN caml_alloc_stack
+    ->  8.488us BEGIN new_fiber_id
+    ->  8.491us END   new_fiber_id
+    ->  8.491us BEGIN alloc_size_class_stack_noexc
+    ->  8.494us BEGIN caml_mem_round_up_mapping_size
+    ->  8.498us END   caml_mem_round_up_mapping_size
+    ->  8.498us BEGIN caml_mem_map
+    ->  8.498us BEGIN caml_plat_mem_map
+    ->  8.499us BEGIN mmap64@plt
+    ->    8.5us END   mmap64@plt
+    ->    8.5us BEGIN __mmap
+    ->  8.524us BEGIN [untraced]
+    ->  9.391us END   [untraced]
+    ->  9.393us END   __mmap
+    ->  9.399us END   caml_plat_mem_map
+    ->  9.402us END   caml_mem_map
+    ->  9.402us BEGIN madvise@plt
+    ->  9.404us END   madvise@plt
+    ->  9.404us BEGIN __madvise
+    ->  9.427us BEGIN [untraced]
+    -> 10.225us END   [untraced]
+    -> 10.227us END   __madvise
+    -> 10.227us BEGIN mprotect@plt
+    -> 10.234us END   mprotect@plt
+    -> 10.234us BEGIN __mprotect
+    -> 10.259us BEGIN [untraced]
+    -> 13.237us END   [untraced]
+    -> 13.245us END   __mprotect
+    -> 13.423us BEGIN [untraced]
+    -> 14.918us END   [untraced]
+    -> 15.122us BEGIN [untraced]
+    -> 16.614us END   [untraced]
+    -> 16.638us END   alloc_size_class_stack_noexc
+    -> 16.638us END   caml_alloc_stack
+    -> 16.639us END   caml_c_call
+    -> 16.639us END   Stdlib.Effect.match_with_16_119_code
+    -> 16.639us BEGIN caml_runstack
+    ->  16.64us BEGIN Suspend.fn[suspend.ml:11,27--61]_5_9_code
+    -> 16.641us BEGIN caml_perform
+    -> 16.642us END   caml_perform
+    -> 16.642us END   Suspend.fn[suspend.ml:11,27--61]_5_9_code
+    -> 16.642us END   caml_runstack
+    -> 16.642us BEGIN caml_apply3
+    -> 16.646us END   caml_apply3
+    -> 16.646us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.647us BEGIN Suspend.effc_1_7_code
+    -> 16.649us END   Suspend.effc_1_7_code
+    -> 16.649us END   Stdlib.Effect.effc_17_120_code
+    -> 16.649us BEGIN Suspend.fn[suspend.ml:6,22--74]_2_8_code
+    -> 16.649us END   Suspend.fn[suspend.ml:6,22--74]_2_8_code
+    -> 16.649us END   Suspend.main_0_6_code
+    -> 16.649us END   Suspend.entry
+    |}]
+;;
+
+let%expect_test "suspend2" =
+  let%map () = run "suspend2.perf" in
+  [%expect
+    {|
+    ->  8.168us BEGIN Perform Effect
+    ->  8.168us END   Perform Effect
+    ->  8.355us BEGIN Resume Continuation
+    ->  8.355us END   Resume Continuation
+    ->  8.168us FLOW
+    ->  8.355us FLOW
+    ->  8.375us BEGIN Perform Effect
+    ->  8.375us END   Perform Effect
+    ->  8.401us BEGIN Resume Continuation
+    ->  8.401us END   Resume Continuation
+    ->  8.375us FLOW
+    ->  8.401us FLOW
+    ->  8.411us BEGIN Perform Effect
+    ->  8.411us END   Perform Effect
+    ->   8.42us BEGIN Resume Continuation
+    ->   8.42us END   Resume Continuation
+    ->  8.411us FLOW
+    ->   8.42us FLOW
+    ->  8.582us BEGIN Perform Effect
+    ->  8.582us END   Perform Effect
+    ->  8.603us BEGIN Resume Continuation
+    ->  8.603us END   Resume Continuation
+    ->  8.582us FLOW
+    ->  8.603us FLOW
+    ->  8.608us BEGIN Perform Effect
+    ->  8.608us END   Perform Effect
+    ->  8.616us BEGIN Resume Continuation
+    ->  8.616us END   Resume Continuation
+    ->  8.608us FLOW
+    ->  8.616us FLOW
+    ->   8.62us BEGIN Perform Effect
+    ->   8.62us END   Perform Effect
+    ->  8.628us BEGIN Resume Continuation
+    ->  8.628us END   Resume Continuation
+    ->   8.62us FLOW
+    ->  8.628us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend2.entry
+    ->     63ns BEGIN Suspend2.main_0_6_code
+    ->    127ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    191ns BEGIN caml_c_call
+    ->    237ns BEGIN caml_alloc_stack
+    ->    258ns BEGIN new_fiber_id
+    ->    280ns END   new_fiber_id
+    ->    280ns BEGIN alloc_size_class_stack_noexc
+    ->    288ns BEGIN caml_mem_round_up_mapping_size
+    ->    357ns END   caml_mem_round_up_mapping_size
+    ->    357ns BEGIN caml_mem_map
+    ->    375ns BEGIN caml_plat_mem_map
+    ->    393ns BEGIN mmap64@plt
+    ->    421ns END   mmap64@plt
+    ->    421ns BEGIN __mmap
+    ->    446ns BEGIN [untraced]
+    ->  1.587us END   [untraced]
+    ->   1.59us END   __mmap
+    ->  1.651us END   caml_plat_mem_map
+    ->  1.655us END   caml_mem_map
+    ->  1.655us BEGIN madvise@plt
+    ->  1.696us END   madvise@plt
+    ->  1.696us BEGIN __madvise
+    ->  1.726us BEGIN [untraced]
+    ->  2.451us END   [untraced]
+    ->  2.452us END   __madvise
+    ->  2.452us BEGIN mprotect@plt
+    ->  2.459us END   mprotect@plt
+    ->  2.459us BEGIN __mprotect
+    ->  2.489us BEGIN [untraced]
+    ->   4.18us END   [untraced]
+    ->  4.185us END   __mprotect
+    ->  4.373us BEGIN [untraced]
+    ->  6.345us END   [untraced]
+    ->  6.545us BEGIN [untraced]
+    ->  8.081us END   [untraced]
+    ->  8.104us END   alloc_size_class_stack_noexc
+    ->  8.105us END   caml_alloc_stack
+    ->  8.105us END   caml_c_call
+    ->  8.105us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.105us BEGIN caml_runstack
+    ->  8.108us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.117us BEGIN caml_perform
+    ->  8.168us END   caml_perform
+    ->  8.168us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.168us END   caml_runstack
+    ->  8.168us BEGIN caml_apply3
+    ->  8.287us END   caml_apply3
+    ->  8.287us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.299us BEGIN Suspend2.effc_1_7_code
+    ->  8.307us END   Suspend2.effc_1_7_code
+    ->  8.321us END   Stdlib.Effect.effc_17_120_code
+    ->  8.321us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.325us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.325us BEGIN caml_continue
+    ->   8.33us BEGIN caml_continuation_use_noexc
+    ->  8.366us END   caml_continuation_use_noexc
+    ->  8.366us END   caml_continue
+    ->  8.366us BEGIN caml_runstack
+    ->  8.366us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.366us BEGIN caml_perform
+    ->  8.371us END   caml_perform
+    ->  8.371us BEGIN caml_perform
+    ->  8.377us END   caml_perform
+    ->  8.377us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.377us END   caml_runstack
+    ->  8.377us BEGIN caml_apply3
+    ->  8.385us END   caml_apply3
+    ->  8.385us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.388us BEGIN Suspend2.effc_1_7_code
+    ->  8.389us END   Suspend2.effc_1_7_code
+    ->  8.389us END   Stdlib.Effect.effc_17_120_code
+    ->  8.389us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.389us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.389us BEGIN caml_continue
+    ->   8.39us BEGIN caml_continuation_use_noexc
+    ->  8.405us END   caml_continuation_use_noexc
+    ->  8.405us END   caml_continue
+    ->  8.405us BEGIN caml_runstack
+    ->  8.405us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.405us BEGIN caml_perform
+    ->  8.408us END   caml_perform
+    ->  8.408us BEGIN caml_perform
+    ->  8.412us END   caml_perform
+    ->  8.412us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.412us END   caml_runstack
+    ->  8.412us BEGIN caml_apply3
+    ->  8.415us END   caml_apply3
+    ->  8.415us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.416us BEGIN Suspend2.effc_1_7_code
+    ->  8.417us END   Suspend2.effc_1_7_code
+    ->  8.417us END   Stdlib.Effect.effc_17_120_code
+    ->  8.417us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.417us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.417us BEGIN caml_continue
+    ->  8.418us BEGIN caml_continuation_use_noexc
+    ->  8.422us END   caml_continuation_use_noexc
+    ->  8.422us END   caml_continue
+    ->  8.422us BEGIN caml_runstack
+    ->  8.422us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.422us BEGIN caml_perform
+    ->  8.447us END   caml_perform
+    ->  8.447us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.447us BEGIN caml_free_stack
+    ->  8.472us BEGIN caml_get_stack_caches
+    ->  8.497us END   caml_get_stack_caches
+    ->  8.497us BEGIN caml_free_local_arenas
+    ->  8.529us END   caml_free_local_arenas
+    ->  8.529us END   caml_free_stack
+    ->  8.536us END   caml_runstack
+    ->  8.536us BEGIN Suspend2.fn[suspend2.ml:10,37--43]_4_4_code
+    ->  8.537us END   Suspend2.fn[suspend2.ml:10,37--43]_4_4_code
+    ->  8.542us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  8.546us BEGIN caml_c_call
+    ->   8.55us BEGIN caml_alloc_stack
+    ->  8.551us BEGIN new_fiber_id
+    ->  8.552us END   new_fiber_id
+    ->  8.552us BEGIN alloc_size_class_stack_noexc
+    ->  8.572us END   alloc_size_class_stack_noexc
+    ->  8.572us END   caml_alloc_stack
+    ->   8.58us END   caml_c_call
+    ->   8.58us END   Stdlib.Effect.match_with_16_119_code
+    ->   8.58us BEGIN caml_runstack
+    ->  8.581us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.582us BEGIN caml_perform
+    ->  8.583us END   caml_perform
+    ->  8.583us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.583us END   caml_runstack
+    ->  8.583us BEGIN caml_apply3
+    ->  8.585us END   caml_apply3
+    ->  8.585us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.586us BEGIN Suspend2.effc_1_7_code
+    ->  8.589us END   Suspend2.effc_1_7_code
+    ->  8.589us END   Stdlib.Effect.effc_17_120_code
+    ->  8.589us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.593us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.593us BEGIN caml_continue
+    ->  8.597us BEGIN caml_continuation_use_noexc
+    ->  8.601us END   caml_continuation_use_noexc
+    ->  8.607us END   caml_continue
+    ->  8.607us BEGIN caml_runstack
+    ->  8.607us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.607us BEGIN caml_perform
+    ->  8.607us END   caml_perform
+    ->  8.607us BEGIN caml_perform
+    ->  8.608us END   caml_perform
+    ->  8.608us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.608us END   caml_runstack
+    ->  8.608us BEGIN caml_apply3
+    ->  8.611us END   caml_apply3
+    ->  8.611us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.613us BEGIN Suspend2.effc_1_7_code
+    ->  8.613us END   Suspend2.effc_1_7_code
+    ->  8.613us END   Stdlib.Effect.effc_17_120_code
+    ->  8.613us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.613us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.613us BEGIN caml_continue
+    ->  8.614us BEGIN caml_continuation_use_noexc
+    ->  8.618us END   caml_continuation_use_noexc
+    ->  8.618us END   caml_continue
+    ->  8.618us BEGIN caml_runstack
+    ->  8.618us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.618us BEGIN caml_perform
+    ->  8.619us END   caml_perform
+    ->  8.619us BEGIN caml_perform
+    ->   8.62us END   caml_perform
+    ->   8.62us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->   8.62us END   caml_runstack
+    ->   8.62us BEGIN caml_apply3
+    ->  8.623us END   caml_apply3
+    ->  8.623us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.624us BEGIN Suspend2.effc_1_7_code
+    ->  8.625us END   Suspend2.effc_1_7_code
+    ->  8.625us END   Stdlib.Effect.effc_17_120_code
+    ->  8.625us BEGIN Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.625us END   Suspend2.fn[suspend2.ml:7,11--86]_2_8_code
+    ->  8.625us BEGIN caml_continue
+    ->  8.626us BEGIN caml_continuation_use_noexc
+    ->  8.738us END   caml_continuation_use_noexc
+    ->  8.738us END   caml_continue
+    ->  8.738us BEGIN caml_runstack
+    ->  8.738us BEGIN Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->  8.738us BEGIN caml_perform
+    ->  8.739us END   caml_perform
+    ->  8.739us END   Suspend2.fn[suspend2.ml:13,6--112]_5_9_code
+    ->   8.74us BEGIN caml_free_stack
+    ->  8.792us BEGIN caml_get_stack_caches
+    ->  8.845us END   caml_get_stack_caches
+    ->  8.845us BEGIN caml_free_local_arenas
+    ->  8.898us END   caml_free_local_arenas
+    ->  8.898us END   caml_free_stack
+    ->  8.903us END   caml_runstack
+    ->  8.903us BEGIN Suspend2.fn[suspend2.ml:10,37--43]_4_4_code
+    ->  8.904us END   Suspend2.fn[suspend2.ml:10,37--43]_4_4_code
+    ->  8.904us END   Suspend2.main_0_6_code
+    ->  8.904us END   Suspend2.entry
+    |}]
+;;
+
+let%expect_test "exn" =
+  let%map () =
+    run
+      ~entertraps:[| 0x460774L |]
+      ~pushtraps:[| 0x46073cL |]
+      ~poptraps:[| 0x460765L |]
+      "exn.perf"
+  in
+  [%expect
+    {|
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Exn.entry
+    ->    123ns BEGIN Exn.main_0_5_code
+    ->    246ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    370ns BEGIN caml_c_call
+    ->    448ns BEGIN caml_alloc_stack
+    ->    458ns BEGIN new_fiber_id
+    ->    469ns END   new_fiber_id
+    ->    469ns BEGIN alloc_size_class_stack_noexc
+    ->    509ns BEGIN caml_mem_round_up_mapping_size
+    ->    547ns END   caml_mem_round_up_mapping_size
+    ->    547ns BEGIN caml_mem_map
+    ->    563ns BEGIN caml_plat_mem_map
+    ->    580ns BEGIN mmap64@plt
+    ->    585ns END   mmap64@plt
+    ->    585ns BEGIN __mmap
+    ->    609ns BEGIN [untraced]
+    ->   1.56us END   [untraced]
+    ->  1.567us END   __mmap
+    ->  1.601us END   caml_plat_mem_map
+    ->  1.605us END   caml_mem_map
+    ->  1.605us BEGIN madvise@plt
+    ->  1.612us END   madvise@plt
+    ->  1.612us BEGIN __madvise
+    ->  1.645us BEGIN [untraced]
+    ->  2.174us END   [untraced]
+    ->  2.175us END   __madvise
+    ->  2.175us BEGIN mprotect@plt
+    ->  2.182us END   mprotect@plt
+    ->  2.182us BEGIN __mprotect
+    ->  2.215us BEGIN [untraced]
+    ->  4.043us END   [untraced]
+    ->  4.047us END   __mprotect
+    ->  4.233us BEGIN [untraced]
+    ->  5.869us END   [untraced]
+    ->  6.067us BEGIN [untraced]
+    ->  7.319us END   [untraced]
+    ->  7.342us END   alloc_size_class_stack_noexc
+    ->  7.342us END   caml_alloc_stack
+    ->  7.342us END   caml_c_call
+    ->  7.342us END   Stdlib.Effect.match_with_16_119_code
+    ->  7.342us BEGIN caml_runstack
+    ->  7.349us BEGIN Exn.fn[exn.ml:9,27--57]_4_8_code
+    ->  7.352us BEGIN caml_reraise_exn
+    ->  7.355us END   caml_reraise_exn
+    ->  7.355us END   Exn.fn[exn.ml:9,27--57]_4_8_code
+    ->  7.368us BEGIN caml_free_stack
+    ->  7.403us BEGIN caml_get_stack_caches
+    ->  7.439us END   caml_get_stack_caches
+    ->  7.439us BEGIN caml_free_local_arenas
+    ->  7.451us END   caml_free_local_arenas
+    ->  7.451us END   caml_free_stack
+    ->  7.472us END   caml_runstack
+    ->  7.472us BEGIN Exn.exnc_2_7_code
+    ->  7.476us BEGIN caml_reraise_exn
+    ->  7.481us END   caml_reraise_exn
+    ->  7.481us END   Exn.exnc_2_7_code
+    ->  7.481us END   Exn.main_0_5_code
+    ->  7.481us END   Exn.entry
+    |}]
+;;
+
+let%expect_test "exn2" =
+  let%map () =
+    run
+      ~entertraps:[| 0x46079cL |]
+      ~pushtraps:[| 0x46075cL |]
+      ~poptraps:[| 0x46078fL |]
+      "exn2.perf"
+  in
+  [%expect
+    {|
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Exn2.entry
+    ->    149ns BEGIN Exn2.main_1_7_code
+    ->    298ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    448ns BEGIN caml_c_call
+    ->    480ns BEGIN caml_alloc_stack
+    ->    496ns BEGIN new_fiber_id
+    ->    512ns END   new_fiber_id
+    ->    512ns BEGIN alloc_size_class_stack_noexc
+    ->    554ns BEGIN caml_mem_round_up_mapping_size
+    ->    554ns END   caml_mem_round_up_mapping_size
+    ->    554ns BEGIN caml_mem_map
+    ->    554ns BEGIN caml_plat_mem_map
+    ->    555ns BEGIN mmap64@plt
+    ->    556ns END   mmap64@plt
+    ->    556ns BEGIN __mmap
+    ->    581ns BEGIN [untraced]
+    ->  2.022us END   [untraced]
+    ->  2.032us END   __mmap
+    ->  2.071us END   caml_plat_mem_map
+    ->  2.076us END   caml_mem_map
+    ->  2.076us BEGIN madvise@plt
+    ->  2.077us END   madvise@plt
+    ->  2.077us BEGIN __madvise
+    ->  2.109us BEGIN [untraced]
+    ->  2.678us END   [untraced]
+    ->  2.679us END   __madvise
+    ->  2.679us BEGIN mprotect@plt
+    ->  2.686us END   mprotect@plt
+    ->  2.686us BEGIN __mprotect
+    ->  2.744us BEGIN [untraced]
+    ->  4.455us END   [untraced]
+    ->  4.457us END   __mprotect
+    ->  4.656us BEGIN [untraced]
+    ->  6.261us END   [untraced]
+    ->  6.471us BEGIN [untraced]
+    ->  7.863us END   [untraced]
+    ->  7.986us END   alloc_size_class_stack_noexc
+    ->  7.986us END   caml_alloc_stack
+    ->  7.989us END   caml_c_call
+    ->  7.989us END   Stdlib.Effect.match_with_16_119_code
+    ->  7.989us BEGIN caml_runstack
+    ->  7.991us BEGIN Exn2.fn[exn2.ml:7,27--41]_5_9_code
+    ->  7.999us END   Exn2.fn[exn2.ml:7,27--41]_5_9_code
+    ->  7.999us BEGIN caml_free_stack
+    ->  8.039us BEGIN caml_get_stack_caches
+    ->   8.08us END   caml_get_stack_caches
+    ->   8.08us BEGIN caml_free_local_arenas
+    ->  8.094us END   caml_free_local_arenas
+    ->  8.094us END   caml_free_stack
+    ->  8.117us END   caml_runstack
+    ->  8.117us BEGIN Exn2.fn[exn2.ml:6,39--45]_4_4_code
+    ->   8.12us END   Exn2.fn[exn2.ml:6,39--45]_4_4_code
+    ->   8.12us BEGIN Exn2.fail_0_6_code
+    ->  8.217us BEGIN caml_reraise_exn
+    ->  8.315us END   caml_reraise_exn
+    ->  8.315us END   Exn2.fail_0_6_code
+    ->  8.315us END   Exn2.main_1_7_code
+    ->  8.315us END   Exn2.entry
+    |}]
+;;
+
+let%expect_test "suspend_exn" =
+  let%map () =
+    run
+      ~entertraps:[| 0x460774L; 0x4608fcL |]
+      ~pushtraps:[| 0x46073cL; 0x4608acL |]
+      ~poptraps:[| 0x460765L; 0x4608edL |]
+      "suspend_exn.perf"
+  in
+  [%expect
+    {|
+    ->  8.829us BEGIN Perform Effect
+    ->  8.829us END   Perform Effect
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend_exn.entry
+    ->    151ns BEGIN Suspend_exn.main_0_6_code
+    ->    302ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    453ns BEGIN caml_c_call
+    ->    680ns BEGIN caml_alloc_stack
+    ->    697ns BEGIN new_fiber_id
+    ->    714ns END   new_fiber_id
+    ->    714ns BEGIN alloc_size_class_stack_noexc
+    ->    752ns BEGIN caml_mem_round_up_mapping_size
+    ->    752ns END   caml_mem_round_up_mapping_size
+    ->    752ns BEGIN caml_mem_map
+    ->    753ns BEGIN caml_plat_mem_map
+    ->    754ns BEGIN mmap64@plt
+    ->    783ns END   mmap64@plt
+    ->    783ns BEGIN __mmap
+    ->    823ns BEGIN [untraced]
+    ->  1.945us END   [untraced]
+    ->  1.953us END   __mmap
+    ->  2.023us END   caml_plat_mem_map
+    ->  2.027us END   caml_mem_map
+    ->  2.027us BEGIN madvise@plt
+    ->  2.055us END   madvise@plt
+    ->  2.055us BEGIN __madvise
+    ->  2.088us BEGIN [untraced]
+    ->   2.82us END   [untraced]
+    ->  2.824us END   __madvise
+    ->  2.824us BEGIN mprotect@plt
+    ->   2.83us END   mprotect@plt
+    ->   2.83us BEGIN __mprotect
+    ->  2.881us BEGIN [untraced]
+    ->  4.856us END   [untraced]
+    ->  4.861us END   __mprotect
+    ->  5.049us BEGIN [untraced]
+    ->  7.074us END   [untraced]
+    ->  7.266us BEGIN [untraced]
+    ->  8.761us END   [untraced]
+    ->  8.787us END   alloc_size_class_stack_noexc
+    ->  8.787us END   caml_alloc_stack
+    ->  8.787us END   caml_c_call
+    ->  8.787us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.787us BEGIN caml_runstack
+    ->  8.792us BEGIN Suspend_exn.fn[suspend_exn.ml:20,6--75]_5_10_code
+    ->  8.802us BEGIN caml_perform
+    ->   8.83us END   caml_perform
+    ->   8.83us END   Suspend_exn.fn[suspend_exn.ml:20,6--75]_5_10_code
+    ->   8.83us END   caml_runstack
+    ->   8.83us BEGIN caml_apply3
+    ->  8.984us END   caml_apply3
+    ->  8.984us BEGIN Stdlib.Effect.effc_17_120_code
+    ->   9.16us BEGIN Suspend_exn.effc_1_7_code
+    ->   9.17us END   Suspend_exn.effc_1_7_code
+    ->  9.184us END   Stdlib.Effect.effc_17_120_code
+    ->  9.184us BEGIN Suspend_exn.fn[suspend_exn.ml:6,22--90]_2_8_code
+    ->  9.192us BEGIN caml_reraise_exn
+    ->  9.201us END   caml_reraise_exn
+    ->  9.201us END   Suspend_exn.fn[suspend_exn.ml:6,22--90]_2_8_code
+    ->  9.201us END   Suspend_exn.main_0_6_code
+    ->  9.201us END   Suspend_exn.entry
+    |}]
+;;
+
+let%expect_test "suspend_exn2" =
+  let%map () =
+    run
+      ~entertraps:[| 0x460774L |]
+      ~pushtraps:[| 0x46073cL |]
+      ~poptraps:[| 0x460765L |]
+      "suspend_exn2.perf"
+  in
+  [%expect
+    {|
+    ->  8.714us BEGIN Perform Effect
+    ->  8.714us END   Perform Effect
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend_exn2.entry
+    ->    108ns BEGIN Suspend_exn2.main_0_5_code
+    ->    217ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    326ns BEGIN caml_c_call
+    ->    363ns BEGIN caml_alloc_stack
+    ->    366ns BEGIN new_fiber_id
+    ->    370ns END   new_fiber_id
+    ->    370ns BEGIN alloc_size_class_stack_noexc
+    ->    409ns BEGIN caml_mem_round_up_mapping_size
+    ->    657ns END   caml_mem_round_up_mapping_size
+    ->    657ns BEGIN caml_mem_map
+    ->    659ns BEGIN caml_plat_mem_map
+    ->    661ns BEGIN mmap64@plt
+    ->    665ns END   mmap64@plt
+    ->    665ns BEGIN __mmap
+    ->    703ns BEGIN [untraced]
+    ->  2.033us END   [untraced]
+    ->  2.037us END   __mmap
+    ->  2.099us END   caml_plat_mem_map
+    ->  2.102us END   caml_mem_map
+    ->  2.102us BEGIN madvise@plt
+    ->  2.115us END   madvise@plt
+    ->  2.115us BEGIN __madvise
+    ->  2.148us BEGIN [untraced]
+    ->  2.833us END   [untraced]
+    ->  2.835us END   __madvise
+    ->  2.835us BEGIN mprotect@plt
+    ->  2.845us END   mprotect@plt
+    ->  2.845us BEGIN __mprotect
+    ->  2.905us BEGIN [untraced]
+    ->  4.554us END   [untraced]
+    ->  4.559us END   __mprotect
+    ->  4.742us BEGIN [untraced]
+    ->  6.403us END   [untraced]
+    ->  6.604us BEGIN [untraced]
+    ->  8.667us END   [untraced]
+    ->   8.69us END   alloc_size_class_stack_noexc
+    ->   8.69us END   caml_alloc_stack
+    ->  8.693us END   caml_c_call
+    ->  8.693us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.693us BEGIN caml_runstack
+    ->  8.702us BEGIN Suspend_exn2.fn[suspend_exn2.ml:18,29--63]_4_8_code
+    ->  8.703us BEGIN caml_perform
+    ->  8.714us END   caml_perform
+    ->  8.714us END   Suspend_exn2.fn[suspend_exn2.ml:18,29--63]_4_8_code
+    ->  8.714us END   caml_runstack
+    ->  8.714us BEGIN caml_apply3
+    ->  8.869us END   caml_apply3
+    ->  8.869us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.885us BEGIN Suspend_exn2.effc_1_6_code
+    ->  8.893us BEGIN caml_reraise_exn
+    ->  8.904us END   caml_reraise_exn
+    ->  8.904us END   Suspend_exn2.effc_1_6_code
+    ->  8.904us END   Stdlib.Effect.effc_17_120_code
+    ->  8.904us END   Suspend_exn2.main_0_5_code
+    ->  8.904us END   Suspend_exn2.entry
+    |}]
+;;
+
+let%expect_test "suspend_exn3" =
+  let%map () =
+    run
+      ~entertraps:[| 0x460774L |]
+      ~pushtraps:[| 0x46073cL |]
+      ~poptraps:[| 0x460765L |]
+      "suspend_exn3.perf"
+  in
+  [%expect
+    {|
+    ->  8.066us BEGIN Perform Effect
+    ->  8.066us END   Perform Effect
+    ->  8.385us BEGIN Resume Continuation
+    ->  8.385us END   Resume Continuation
+    ->  8.066us FLOW
+    ->  8.385us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend_exn3.entry
+    ->    121ns BEGIN Suspend_exn3.main_0_6_code
+    ->    242ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    364ns BEGIN caml_c_call
+    ->    400ns BEGIN caml_alloc_stack
+    ->    425ns BEGIN new_fiber_id
+    ->    450ns END   new_fiber_id
+    ->    450ns BEGIN alloc_size_class_stack_noexc
+    ->    564ns BEGIN caml_mem_round_up_mapping_size
+    ->    625ns END   caml_mem_round_up_mapping_size
+    ->    625ns BEGIN caml_mem_map
+    ->    645ns BEGIN caml_plat_mem_map
+    ->    665ns BEGIN mmap64@plt
+    ->    672ns END   mmap64@plt
+    ->    672ns BEGIN __mmap
+    ->    710ns BEGIN [untraced]
+    ->  1.739us END   [untraced]
+    ->  1.745us END   __mmap
+    ->  1.793us END   caml_plat_mem_map
+    ->  1.797us END   caml_mem_map
+    ->  1.797us BEGIN madvise@plt
+    ->  1.798us END   madvise@plt
+    ->  1.798us BEGIN __madvise
+    ->   1.83us BEGIN [untraced]
+    ->  2.465us END   [untraced]
+    ->  2.466us END   __madvise
+    ->  2.466us BEGIN mprotect@plt
+    ->  2.473us END   mprotect@plt
+    ->  2.473us BEGIN __mprotect
+    ->  2.508us BEGIN [untraced]
+    ->  4.123us END   [untraced]
+    ->  4.125us END   __mprotect
+    ->  4.321us BEGIN [untraced]
+    ->  6.247us END   [untraced]
+    ->   6.45us BEGIN [untraced]
+    ->  8.001us END   [untraced]
+    ->  8.023us END   alloc_size_class_stack_noexc
+    ->  8.023us END   caml_alloc_stack
+    ->  8.026us END   caml_c_call
+    ->  8.026us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.026us BEGIN caml_runstack
+    ->  8.031us BEGIN Suspend_exn3.fn[suspend_exn3.ml:21,6--76]_5_10_code
+    ->   8.04us BEGIN caml_perform
+    ->  8.066us END   caml_perform
+    ->  8.066us END   Suspend_exn3.fn[suspend_exn3.ml:21,6--76]_5_10_code
+    ->  8.066us END   caml_runstack
+    ->  8.066us BEGIN caml_apply3
+    ->  8.238us END   caml_apply3
+    ->  8.238us BEGIN Stdlib.Effect.effc_17_120_code
+    ->   8.28us BEGIN Suspend_exn3.effc_1_7_code
+    ->  8.289us END   Suspend_exn3.effc_1_7_code
+    ->  8.306us END   Stdlib.Effect.effc_17_120_code
+    ->  8.306us BEGIN Suspend_exn3.fn[suspend_exn3.ml:7,11--86]_2_8_code
+    ->   8.31us END   Suspend_exn3.fn[suspend_exn3.ml:7,11--86]_2_8_code
+    ->   8.31us BEGIN caml_continue
+    ->  8.315us BEGIN caml_continuation_use_noexc
+    ->   8.37us END   caml_continuation_use_noexc
+    ->  8.397us END   caml_continue
+    ->  8.397us BEGIN caml_runstack
+    ->  8.397us BEGIN Suspend_exn3.fn[suspend_exn3.ml:21,6--76]_5_10_code
+    ->  8.397us BEGIN caml_perform
+    ->  8.422us END   caml_perform
+    ->  8.422us BEGIN caml_reraise_exn
+    ->  8.448us END   caml_reraise_exn
+    ->  8.448us END   Suspend_exn3.fn[suspend_exn3.ml:21,6--76]_5_10_code
+    ->  8.462us BEGIN caml_free_stack
+    ->  8.497us BEGIN caml_get_stack_caches
+    ->  8.532us END   caml_get_stack_caches
+    ->  8.532us BEGIN caml_free_local_arenas
+    ->   8.56us END   caml_free_local_arenas
+    ->   8.56us END   caml_free_stack
+    ->  8.566us END   caml_runstack
+    ->  8.566us BEGIN Suspend_exn3.fn[suspend_exn3.ml:13,8--72]_3_9_code
+    -> 11.974us BEGIN caml_reraise_exn
+    -> 11.982us END   caml_reraise_exn
+    -> 11.982us END   Suspend_exn3.fn[suspend_exn3.ml:13,8--72]_3_9_code
+    -> 11.982us END   Suspend_exn3.main_0_6_code
+    -> 11.982us END   Suspend_exn3.entry
+    |}]
+;;
+
+let%expect_test "suspend_exn4" =
+  let%map () =
+    run
+      ~entertraps:[| 0x461810L |]
+      ~pushtraps:[| 0x4617beL |]
+      ~poptraps:[| 0x461802L |]
+      "suspend_exn4.perf"
+  in
+  [%expect
+    {|
+    ->  8.347us BEGIN Perform Effect
+    ->  8.347us END   Perform Effect
+    ->   8.62us BEGIN Resume Continuation
+    ->   8.62us END   Resume Continuation
+    ->  8.347us FLOW
+    ->   8.62us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend_exn4.entry
+    ->     86ns BEGIN Suspend_exn4.main_0_6_code
+    ->    172ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    361ns BEGIN caml_c_call
+    ->    367ns BEGIN caml_alloc_stack
+    ->    385ns BEGIN new_fiber_id
+    ->    404ns END   new_fiber_id
+    ->    404ns BEGIN alloc_size_class_stack_noexc
+    ->    429ns BEGIN caml_mem_round_up_mapping_size
+    ->    443ns END   caml_mem_round_up_mapping_size
+    ->    443ns BEGIN caml_mem_map
+    ->    458ns BEGIN caml_plat_mem_map
+    ->    473ns BEGIN mmap64@plt
+    ->    477ns END   mmap64@plt
+    ->    477ns BEGIN __mmap
+    ->    502ns BEGIN [untraced]
+    ->   1.81us END   [untraced]
+    ->  1.815us END   __mmap
+    ->   1.82us END   caml_plat_mem_map
+    ->  1.841us END   caml_mem_map
+    ->  1.841us BEGIN madvise@plt
+    ->  1.851us END   madvise@plt
+    ->  1.851us BEGIN __madvise
+    ->  1.884us BEGIN [untraced]
+    ->  2.546us END   [untraced]
+    ->  2.548us END   __madvise
+    ->  2.548us BEGIN mprotect@plt
+    ->  2.555us END   mprotect@plt
+    ->  2.555us BEGIN __mprotect
+    ->  2.589us BEGIN [untraced]
+    ->  4.717us END   [untraced]
+    ->  4.722us END   __mprotect
+    ->  4.914us BEGIN [untraced]
+    ->  6.516us END   [untraced]
+    ->  6.718us BEGIN [untraced]
+    ->  8.271us END   [untraced]
+    ->  8.295us END   alloc_size_class_stack_noexc
+    ->  8.295us END   caml_alloc_stack
+    ->  8.296us END   caml_c_call
+    ->  8.296us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.296us BEGIN caml_runstack
+    ->  8.326us BEGIN Suspend_exn4.fn[suspend_exn4.ml:20,4--70]_5_10_code
+    ->  8.336us BEGIN caml_perform
+    ->  8.348us END   caml_perform
+    ->  8.348us END   Suspend_exn4.fn[suspend_exn4.ml:20,4--70]_5_10_code
+    ->  8.348us END   caml_runstack
+    ->  8.348us BEGIN caml_apply3
+    ->  8.518us END   caml_apply3
+    ->  8.518us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  8.531us BEGIN Suspend_exn4.effc_1_7_code
+    ->  8.541us END   Suspend_exn4.effc_1_7_code
+    ->  8.556us END   Stdlib.Effect.effc_17_120_code
+    ->  8.556us BEGIN Suspend_exn4.fn[suspend_exn4.ml:7,22--86]_2_8_code
+    ->  8.562us BEGIN caml_modify
+    ->  8.573us END   caml_modify
+    ->  8.573us END   Suspend_exn4.fn[suspend_exn4.ml:7,22--86]_2_8_code
+    ->  8.586us BEGIN caml_continue
+    ->  8.611us BEGIN caml_continuation_use_noexc
+    ->  8.636us END   caml_continuation_use_noexc
+    ->  8.636us END   caml_continue
+    ->  8.636us BEGIN caml_runstack
+    ->  8.636us BEGIN Suspend_exn4.fn[suspend_exn4.ml:20,4--70]_5_10_code
+    ->  8.636us BEGIN caml_perform
+    ->  8.641us END   caml_perform
+    ->  8.641us BEGIN caml_reraise_exn
+    ->  8.646us END   caml_reraise_exn
+    ->  8.646us END   Suspend_exn4.fn[suspend_exn4.ml:20,4--70]_5_10_code
+    ->  8.659us BEGIN caml_free_stack
+    ->  8.706us BEGIN caml_get_stack_caches
+    ->  8.753us END   caml_get_stack_caches
+    ->  8.753us BEGIN caml_free_local_arenas
+    ->  8.781us END   caml_free_local_arenas
+    ->  8.781us END   caml_free_stack
+    ->  8.787us END   caml_runstack
+    ->  8.787us BEGIN Suspend_exn4.fn[suspend_exn4.ml:13,8--72]_3_9_code
+    ->  12.16us BEGIN caml_reraise_exn
+    -> 12.165us END   caml_reraise_exn
+    -> 12.165us END   Suspend_exn4.fn[suspend_exn4.ml:13,8--72]_3_9_code
+    -> 12.165us END   Suspend_exn4.main_0_6_code
+    -> 12.165us END   Suspend_exn4.entry
+    |}]
+;;
+
+let%expect_test "suspend_exn5" =
+  let%map () =
+    run
+      ~entertraps:[| 0x461830L |]
+      ~pushtraps:[| 0x4617dfL |]
+      ~poptraps:[| 0x461822L |]
+      "suspend_exn5.perf"
+  in
+  [%expect
+    {|
+    ->  18.52us BEGIN Perform Effect
+    ->  18.52us END   Perform Effect
+    -> 18.751us BEGIN Perform Effect
+    -> 18.751us END   Perform Effect
+    -> 18.992us BEGIN Resume Continuation
+    -> 18.992us END   Resume Continuation
+    -> 18.751us FLOW
+    -> 18.992us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Suspend_exn5.entry
+    ->     83ns BEGIN Suspend_exn5.main_0_7_code
+    ->    166ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    504ns BEGIN caml_c_call
+    ->    520ns BEGIN caml_alloc_stack
+    ->    560ns BEGIN new_fiber_id
+    ->    600ns END   new_fiber_id
+    ->    600ns BEGIN alloc_size_class_stack_noexc
+    ->    661ns BEGIN caml_mem_round_up_mapping_size
+    ->    720ns END   caml_mem_round_up_mapping_size
+    ->    720ns BEGIN caml_mem_map
+    ->    734ns BEGIN caml_plat_mem_map
+    ->    749ns BEGIN mmap64@plt
+    ->    751ns END   mmap64@plt
+    ->    751ns BEGIN __mmap
+    ->    777ns BEGIN [untraced]
+    ->  1.969us END   [untraced]
+    ->  1.971us END   __mmap
+    ->  2.004us END   caml_plat_mem_map
+    ->  2.007us END   caml_mem_map
+    ->  2.007us BEGIN madvise@plt
+    ->  2.038us END   madvise@plt
+    ->  2.038us BEGIN __madvise
+    ->  2.077us BEGIN [untraced]
+    ->  2.698us END   [untraced]
+    ->    2.7us END   __madvise
+    ->    2.7us BEGIN mprotect@plt
+    ->  2.706us END   mprotect@plt
+    ->  2.706us BEGIN __mprotect
+    ->  2.758us BEGIN [untraced]
+    ->  5.113us END   [untraced]
+    ->  5.115us END   __mprotect
+    ->  5.311us BEGIN [untraced]
+    ->  7.109us END   [untraced]
+    ->  7.313us BEGIN [untraced]
+    ->  8.808us END   [untraced]
+    ->  8.832us END   alloc_size_class_stack_noexc
+    ->  8.832us END   caml_alloc_stack
+    ->  8.833us END   caml_c_call
+    ->  8.833us END   Stdlib.Effect.match_with_16_119_code
+    ->  8.833us BEGIN caml_runstack
+    ->  8.837us BEGIN Suspend_exn5.fn[suspend_exn5.ml:20,4--146]_5_11_code
+    ->  8.837us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  8.838us BEGIN caml_c_call
+    ->  8.842us BEGIN caml_alloc_stack
+    ->  8.844us BEGIN new_fiber_id
+    ->  8.847us END   new_fiber_id
+    ->  8.847us BEGIN alloc_size_class_stack_noexc
+    ->   8.85us BEGIN caml_mem_round_up_mapping_size
+    ->  8.853us END   caml_mem_round_up_mapping_size
+    ->  8.853us BEGIN caml_mem_map
+    ->  8.853us BEGIN caml_plat_mem_map
+    ->  8.853us BEGIN mmap64@plt
+    ->  8.854us END   mmap64@plt
+    ->  8.854us BEGIN __mmap
+    ->   8.88us BEGIN [untraced]
+    -> 10.308us END   [untraced]
+    ->  10.31us END   __mmap
+    -> 10.318us END   caml_plat_mem_map
+    -> 10.319us END   caml_mem_map
+    -> 10.319us BEGIN madvise@plt
+    -> 10.322us END   madvise@plt
+    -> 10.322us BEGIN __madvise
+    -> 10.347us BEGIN [untraced]
+    -> 11.223us END   [untraced]
+    -> 11.224us END   __madvise
+    -> 11.224us BEGIN mprotect@plt
+    -> 11.232us END   mprotect@plt
+    -> 11.232us BEGIN __mprotect
+    -> 11.257us BEGIN [untraced]
+    ->   15.3us END   [untraced]
+    -> 15.306us END   __mprotect
+    -> 15.493us BEGIN [untraced]
+    -> 17.037us END   [untraced]
+    -> 17.248us BEGIN [untraced]
+    -> 18.472us END   [untraced]
+    -> 18.496us END   alloc_size_class_stack_noexc
+    -> 18.496us END   caml_alloc_stack
+    -> 18.497us END   caml_c_call
+    -> 18.497us END   Stdlib.Effect.match_with_16_119_code
+    -> 18.497us BEGIN caml_runstack
+    ->   18.5us BEGIN Suspend_exn5.fn[suspend_exn5.ml:21,29--63]_6_12_code
+    -> 18.508us BEGIN caml_perform
+    -> 18.521us END   caml_perform
+    -> 18.521us END   Suspend_exn5.fn[suspend_exn5.ml:21,29--63]_6_12_code
+    -> 18.521us END   caml_runstack
+    -> 18.521us BEGIN caml_apply3
+    -> 18.687us END   caml_apply3
+    -> 18.687us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 18.701us BEGIN Suspend_exn5.effc_1_8_code
+    -> 18.709us END   Suspend_exn5.effc_1_8_code
+    -> 18.724us END   Stdlib.Effect.effc_17_120_code
+    -> 18.724us BEGIN Suspend_exn5.fn[suspend_exn5.ml:7,22--86]_2_9_code
+    ->  18.73us BEGIN caml_modify
+    -> 18.741us END   caml_modify
+    -> 18.741us END   Suspend_exn5.fn[suspend_exn5.ml:7,22--86]_2_9_code
+    -> 18.746us BEGIN caml_perform
+    -> 18.756us END   caml_perform
+    -> 18.756us END   Suspend_exn5.fn[suspend_exn5.ml:20,4--146]_5_11_code
+    -> 18.756us END   caml_runstack
+    -> 18.756us BEGIN caml_apply3
+    -> 18.765us END   caml_apply3
+    -> 18.765us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 18.769us BEGIN Suspend_exn5.effc_1_8_code
+    -> 18.948us END   Suspend_exn5.effc_1_8_code
+    -> 18.948us END   Stdlib.Effect.effc_17_120_code
+    -> 18.948us BEGIN Suspend_exn5.fn[suspend_exn5.ml:7,22--86]_2_9_code
+    -> 18.949us BEGIN caml_modify
+    -> 18.951us END   caml_modify
+    -> 18.951us END   Suspend_exn5.fn[suspend_exn5.ml:7,22--86]_2_9_code
+    ->  18.96us BEGIN caml_continue
+    -> 18.984us BEGIN caml_continuation_use_noexc
+    -> 19.008us END   caml_continuation_use_noexc
+    -> 19.008us END   caml_continue
+    -> 19.008us BEGIN caml_runstack
+    -> 19.008us BEGIN Suspend_exn5.fn[suspend_exn5.ml:20,4--146]_5_11_code
+    -> 19.008us BEGIN caml_perform
+    -> 19.013us END   caml_perform
+    -> 19.013us BEGIN caml_reraise_exn
+    -> 19.018us END   caml_reraise_exn
+    -> 19.018us END   Suspend_exn5.fn[suspend_exn5.ml:20,4--146]_5_11_code
+    -> 19.033us BEGIN caml_free_stack
+    -> 19.066us BEGIN caml_get_stack_caches
+    -> 19.099us END   caml_get_stack_caches
+    -> 19.099us BEGIN caml_free_local_arenas
+    -> 19.127us END   caml_free_local_arenas
+    -> 19.127us END   caml_free_stack
+    -> 19.133us END   caml_runstack
+    -> 19.133us BEGIN Suspend_exn5.fn[suspend_exn5.ml:13,8--72]_3_10_code
+    -> 22.722us BEGIN caml_reraise_exn
+    -> 22.723us END   caml_reraise_exn
+    -> 22.723us END   Suspend_exn5.fn[suspend_exn5.ml:13,8--72]_3_10_code
+    -> 22.723us END   Suspend_exn5.main_0_7_code
+    -> 22.723us END   Suspend_exn5.entry
+    |}]
+;;
+
+let%expect_test "migrate" =
+  let%map () = run "migrate.perf" in
+  [%expect
+    {|
+    ->  9.367us BEGIN Perform Effect
+    ->  9.367us END   Perform Effect
+    ->  9.702us BEGIN Perform Effect
+    ->  9.702us END   Perform Effect
+    ->  9.835us BEGIN Resume Continuation
+    ->  9.835us END   Resume Continuation
+    ->  9.367us FLOW
+    ->  9.835us FLOW
+    -> 10.016us BEGIN Perform Effect
+    -> 10.016us END   Perform Effect
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Migrate.fn[migrate.ml:57,23--534]_10_28_code
+    ->      1ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->      2ns BEGIN caml_c_call
+    ->      3ns BEGIN caml_alloc_stack
+    ->      3ns BEGIN new_fiber_id
+    ->      4ns END   new_fiber_id
+    ->      4ns BEGIN alloc_size_class_stack_noexc
+    ->      7ns BEGIN caml_mem_round_up_mapping_size
+    ->     10ns END   caml_mem_round_up_mapping_size
+    ->     10ns BEGIN caml_mem_map
+    ->     13ns BEGIN caml_plat_mem_map
+    ->     17ns BEGIN mmap64@plt
+    ->     21ns END   mmap64@plt
+    ->     21ns BEGIN __mmap
+    ->     65ns BEGIN [untraced]
+    ->  1.582us END   [untraced]
+    ->  1.588us END   __mmap
+    ->  1.598us END   caml_plat_mem_map
+    ->  1.601us END   caml_mem_map
+    ->  1.601us BEGIN madvise@plt
+    ->  1.606us END   madvise@plt
+    ->  1.606us BEGIN __madvise
+    ->  1.631us BEGIN [untraced]
+    ->  2.254us END   [untraced]
+    ->  2.256us END   __madvise
+    ->  2.256us BEGIN mprotect@plt
+    ->  2.263us END   mprotect@plt
+    ->  2.263us BEGIN __mprotect
+    ->  2.289us BEGIN [untraced]
+    ->  4.156us END   [untraced]
+    ->  4.164us END   __mprotect
+    ->  4.373us BEGIN [untraced]
+    ->  6.083us END   [untraced]
+    ->  6.285us BEGIN [untraced]
+    ->  9.225us END   [untraced]
+    ->  9.284us END   alloc_size_class_stack_noexc
+    ->  9.284us END   caml_alloc_stack
+    ->  9.303us END   caml_c_call
+    ->  9.303us END   Stdlib.Effect.match_with_16_119_code
+    ->  9.303us BEGIN caml_runstack
+    ->  9.333us BEGIN Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->  9.345us BEGIN caml_lxm_next_unboxed
+    ->  9.365us END   caml_lxm_next_unboxed
+    ->  9.365us BEGIN Migrate.perform1_2_18_code
+    ->  9.366us BEGIN Migrate.perform0_1_17_code
+    ->  9.367us BEGIN caml_perform
+    ->  9.368us END   caml_perform
+    ->  9.368us END   Migrate.perform0_1_17_code
+    ->  9.368us END   Migrate.perform1_2_18_code
+    ->  9.368us END   Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->  9.368us END   caml_runstack
+    ->  9.368us BEGIN caml_apply3
+    ->  9.407us END   caml_apply3
+    ->  9.407us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  9.413us BEGIN Migrate.effc_11_29_code
+    ->  9.415us END   Migrate.effc_11_29_code
+    ->  9.415us END   Stdlib.Effect.effc_17_120_code
+    ->  9.415us BEGIN Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    ->   9.42us END   Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    ->   9.42us BEGIN Migrate.push_0_16_code
+    ->  9.426us BEGIN caml_atomic_cas_field
+    ->  9.432us BEGIN caml_atomic_compare_exchange_field
+    ->  9.438us END   caml_atomic_compare_exchange_field
+    ->  9.438us END   caml_atomic_cas_field
+    ->  9.439us END   Migrate.push_0_16_code
+    ->  9.445us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  9.447us BEGIN caml_c_call
+    ->  9.449us BEGIN caml_alloc_stack
+    ->   9.45us BEGIN new_fiber_id
+    ->  9.451us END   new_fiber_id
+    ->  9.451us BEGIN alloc_size_class_stack_noexc
+    ->  9.631us END   alloc_size_class_stack_noexc
+    ->  9.631us END   caml_alloc_stack
+    ->   9.65us END   caml_c_call
+    ->   9.65us END   Stdlib.Effect.match_with_16_119_code
+    ->   9.65us BEGIN caml_runstack
+    ->  9.653us BEGIN Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->  9.661us BEGIN caml_lxm_next_unboxed
+    ->  9.669us END   caml_lxm_next_unboxed
+    ->  9.669us END   Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->  9.669us BEGIN Migrate.perform3_4_20_code
+    ->  9.677us BEGIN Migrate.perform2_3_19_code
+    ->  9.685us BEGIN Migrate.perform1_2_18_code
+    ->  9.693us BEGIN Migrate.perform0_1_17_code
+    ->  9.701us BEGIN caml_perform
+    ->  9.703us END   caml_perform
+    ->  9.703us END   Migrate.perform0_1_17_code
+    ->  9.703us END   Migrate.perform1_2_18_code
+    ->  9.703us END   Migrate.perform2_3_19_code
+    ->  9.703us END   Migrate.perform3_4_20_code
+    ->  9.703us END   caml_runstack
+    ->  9.703us BEGIN caml_apply3
+    ->  9.705us END   caml_apply3
+    ->  9.705us BEGIN Stdlib.Effect.effc_17_120_code
+    ->  9.705us BEGIN Migrate.effc_11_29_code
+    ->  9.706us END   Migrate.effc_11_29_code
+    ->  9.706us END   Stdlib.Effect.effc_17_120_code
+    ->  9.706us BEGIN Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    ->  9.727us END   Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    ->  9.727us BEGIN Migrate.push_0_16_code
+    ->  9.748us BEGIN caml_atomic_cas_field
+    ->  9.769us BEGIN caml_atomic_compare_exchange_field
+    ->  9.791us END   caml_atomic_compare_exchange_field
+    ->  9.791us END   caml_atomic_cas_field
+    ->  9.796us END   Migrate.push_0_16_code
+    ->  9.801us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  9.803us BEGIN caml_c_call
+    ->  9.806us BEGIN caml_alloc_stack
+    ->  9.868us BEGIN new_fiber_id
+    ->   9.93us END   new_fiber_id
+    ->   9.93us BEGIN alloc_size_class_stack_noexc
+    ->  9.992us END   alloc_size_class_stack_noexc
+    ->  9.992us END   caml_alloc_stack
+    ->  9.992us END   caml_c_call
+    ->  9.992us END   Stdlib.Effect.match_with_16_119_code
+    ->  9.992us BEGIN caml_runstack
+    ->  9.996us BEGIN Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->  9.997us BEGIN caml_lxm_next_unboxed
+    ->     10us END   caml_lxm_next_unboxed
+    ->     10us END   Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    ->     10us BEGIN Migrate.perform3_4_20_code
+    -> 10.003us BEGIN Migrate.perform2_3_19_code
+    -> 10.007us BEGIN Migrate.perform1_2_18_code
+    ->  10.01us BEGIN Migrate.perform0_1_17_code
+    -> 10.013us BEGIN caml_perform
+    -> 10.017us END   caml_perform
+    -> 10.017us END   Migrate.perform0_1_17_code
+    -> 10.017us END   Migrate.perform1_2_18_code
+    -> 10.017us END   Migrate.perform2_3_19_code
+    -> 10.017us END   Migrate.perform3_4_20_code
+    -> 10.017us END   caml_runstack
+    -> 10.017us BEGIN caml_apply3
+    -> 10.021us END   caml_apply3
+    -> 10.021us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 10.022us BEGIN Migrate.effc_11_29_code
+    -> 10.023us END   Migrate.effc_11_29_code
+    -> 10.023us END   Stdlib.Effect.effc_17_120_code
+    -> 10.023us BEGIN Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    -> 10.044us END   Migrate.fn[migrate.ml:62,10--111]_12_30_code
+    -> 10.044us BEGIN Migrate.push_0_16_code
+    -> 10.066us BEGIN caml_atomic_cas_field
+    -> 10.088us BEGIN caml_atomic_compare_exchange_field
+    ->  10.11us END   caml_atomic_compare_exchange_field
+    ->  10.11us END   caml_atomic_cas_field
+    -> 10.118us END   Migrate.push_0_16_code
+    -> 10.123us BEGIN Stdlib.Effect.match_with_16_119_code
+    -> 10.162us BEGIN caml_c_call
+    -> 10.201us BEGIN caml_alloc_stack
+    -> 10.202us BEGIN new_fiber_id
+    -> 10.203us END   new_fiber_id
+    -> 10.203us BEGIN alloc_size_class_stack_noexc
+    -> 10.254us BEGIN caml_mem_round_up_mapping_size
+    ->  10.26us END   caml_mem_round_up_mapping_size
+    ->  10.26us BEGIN caml_mem_map
+    -> 10.266us BEGIN caml_plat_mem_map
+    -> 10.273us BEGIN mmap64@plt
+    ->  10.29us END   mmap64@plt
+    ->  10.29us BEGIN __mmap
+    -> 10.322us BEGIN [untraced]
+    -> 10.322us END   [untraced]
+    -> 10.322us END   __mmap
+    -> 10.322us END   caml_plat_mem_map
+    -> 10.322us END   caml_mem_map
+    -> 10.322us END   alloc_size_class_stack_noexc
+    -> 10.322us END   caml_alloc_stack
+    -> 10.322us END   caml_c_call
+    -> 10.322us END   Stdlib.Effect.match_with_16_119_code
+    -> 10.322us END   Migrate.fn[migrate.ml:57,23--534]_10_28_code
+    ->  8.994us BEGIN Migrate.loop_7_23_code
+    ->   9.48us BEGIN caml_atomic_exchange_field
+    ->  9.571us END   caml_atomic_exchange_field
+    ->  9.643us BEGIN Stdlib.Effect.continue_11_partial_126_code
+    ->  9.644us END   Stdlib.Effect.continue_11_partial_126_code
+    ->  9.644us BEGIN Stdlib.Effect.continue_11_114_code
+    ->  9.646us END   Stdlib.Effect.continue_11_114_code
+    ->  9.646us BEGIN caml_continue
+    ->  9.648us BEGIN caml_continuation_use_noexc
+    -> 10.059us END   caml_continuation_use_noexc
+    -> 10.059us END   caml_continue
+    -> 10.059us BEGIN caml_runstack
+    -> 10.059us BEGIN Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    -> 10.059us BEGIN Migrate.perform1_2_18_code
+    -> 10.059us BEGIN Migrate.perform0_1_17_code
+    -> 10.059us BEGIN caml_perform
+    -> 10.067us END   caml_perform
+    -> 10.067us END   Migrate.perform0_1_17_code
+    -> 10.068us END   Migrate.perform1_2_18_code
+    -> 10.068us END   Migrate.fn[migrate.ml:69,8--82]_15_31_code
+    -> 10.072us BEGIN caml_free_stack
+    -> 10.109us BEGIN caml_get_stack_caches
+    -> 10.147us END   caml_get_stack_caches
+    -> 10.147us BEGIN caml_free_local_arenas
+    -> 10.381us END   caml_free_local_arenas
+    -> 10.381us END   caml_free_stack
+    -> 10.388us END   caml_runstack
+    -> 10.388us BEGIN Migrate.fn[migrate.ml:66,39--45]_14_14_code
+    -> 10.389us END   Migrate.fn[migrate.ml:66,39--45]_14_14_code
+    -> 10.389us END   Migrate.loop_7_23_code
+    |}]
+;;
+
+let%expect_test "reperform" =
+  let%map () = run "reperform.perf" in
+  [%expect
+    {|
+    -> 15.844us BEGIN Perform Effect
+    -> 15.844us END   Perform Effect
+    -> 15.983us BEGIN Perform Effect
+    -> 15.983us END   Perform Effect
+    -> 16.058us BEGIN Resume Continuation
+    -> 16.058us END   Resume Continuation
+    -> 15.844us FLOW
+    -> 16.058us FLOW
+    -> 16.084us BEGIN Perform Effect
+    -> 16.084us END   Perform Effect
+    -> 16.102us BEGIN Perform Effect
+    -> 16.102us END   Perform Effect
+    -> 16.128us BEGIN Resume Continuation
+    -> 16.128us END   Resume Continuation
+    -> 16.084us FLOW
+    -> 16.128us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Reperform.entry
+    ->     63ns BEGIN Reperform.main_0_10_code
+    ->    126ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    189ns BEGIN caml_c_call
+    ->    217ns BEGIN caml_alloc_stack
+    ->    236ns BEGIN new_fiber_id
+    ->    255ns END   new_fiber_id
+    ->    255ns BEGIN alloc_size_class_stack_noexc
+    ->    286ns BEGIN caml_mem_round_up_mapping_size
+    ->    289ns END   caml_mem_round_up_mapping_size
+    ->    289ns BEGIN caml_mem_map
+    ->    292ns BEGIN caml_plat_mem_map
+    ->    296ns BEGIN mmap64@plt
+    ->    297ns END   mmap64@plt
+    ->    297ns BEGIN __mmap
+    ->    321ns BEGIN [untraced]
+    ->  1.279us END   [untraced]
+    ->  1.287us END   __mmap
+    ->  1.353us END   caml_plat_mem_map
+    ->  1.358us END   caml_mem_map
+    ->  1.358us BEGIN madvise@plt
+    ->   1.37us END   madvise@plt
+    ->   1.37us BEGIN __madvise
+    ->  1.382us BEGIN [untraced]
+    ->   1.83us END   [untraced]
+    ->  1.832us END   __madvise
+    ->  1.832us BEGIN mprotect@plt
+    ->  1.838us END   mprotect@plt
+    ->  1.838us BEGIN __mprotect
+    ->  1.887us BEGIN [untraced]
+    ->  3.602us END   [untraced]
+    ->  3.606us END   __mprotect
+    ->  3.785us BEGIN [untraced]
+    ->  5.597us END   [untraced]
+    ->  5.789us BEGIN [untraced]
+    ->  7.346us END   [untraced]
+    ->  7.372us END   alloc_size_class_stack_noexc
+    ->  7.372us END   caml_alloc_stack
+    ->  7.372us END   caml_c_call
+    ->  7.372us END   Stdlib.Effect.match_with_16_119_code
+    ->  7.372us BEGIN caml_runstack
+    ->  7.387us BEGIN Reperform.fn[reperform.ml:16,6--166]_8_14_code
+    ->  7.395us END   Reperform.fn[reperform.ml:16,6--166]_8_14_code
+    ->  7.395us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  7.403us BEGIN caml_c_call
+    ->  7.408us BEGIN caml_alloc_stack
+    ->  7.408us BEGIN new_fiber_id
+    ->  7.409us END   new_fiber_id
+    ->  7.409us BEGIN alloc_size_class_stack_noexc
+    ->  7.414us BEGIN caml_mem_round_up_mapping_size
+    ->   7.42us END   caml_mem_round_up_mapping_size
+    ->   7.42us BEGIN caml_mem_map
+    ->  7.421us BEGIN caml_plat_mem_map
+    ->  7.422us BEGIN mmap64@plt
+    ->  7.423us END   mmap64@plt
+    ->  7.423us BEGIN __mmap
+    ->  7.447us BEGIN [untraced]
+    ->  8.286us END   [untraced]
+    ->  8.292us END   __mmap
+    ->    8.3us END   caml_plat_mem_map
+    ->  8.303us END   caml_mem_map
+    ->  8.303us BEGIN madvise@plt
+    ->  8.304us END   madvise@plt
+    ->  8.304us BEGIN __madvise
+    ->  8.328us BEGIN [untraced]
+    ->  9.136us END   [untraced]
+    ->  9.138us END   __madvise
+    ->  9.138us BEGIN mprotect@plt
+    ->   9.15us END   mprotect@plt
+    ->   9.15us BEGIN __mprotect
+    ->  9.173us BEGIN [untraced]
+    -> 12.639us END   [untraced]
+    -> 12.645us END   __mprotect
+    ->  12.83us BEGIN [untraced]
+    -> 14.478us END   [untraced]
+    -> 14.671us BEGIN [untraced]
+    -> 15.793us END   [untraced]
+    -> 15.815us END   alloc_size_class_stack_noexc
+    -> 15.815us END   caml_alloc_stack
+    -> 15.815us END   caml_c_call
+    -> 15.815us END   Stdlib.Effect.match_with_16_119_code
+    -> 15.815us BEGIN caml_runstack
+    -> 15.817us BEGIN Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    -> 15.832us BEGIN caml_perform
+    -> 15.847us END   caml_perform
+    -> 15.847us END   Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    -> 15.847us END   caml_runstack
+    -> 15.847us BEGIN caml_apply3
+    -> 15.953us END   caml_apply3
+    -> 15.953us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 15.967us BEGIN Reperform.fn[reperform.ml:13,64--79]_5_13_code
+    -> 15.975us END   Reperform.fn[reperform.ml:13,64--79]_5_13_code
+    -> 15.975us END   Stdlib.Effect.effc_17_120_code
+    -> 15.975us BEGIN caml_reperform
+    -> 15.984us END   caml_reperform
+    -> 15.984us BEGIN caml_perform
+    -> 15.993us END   caml_perform
+    -> 15.993us END   caml_runstack
+    -> 15.993us BEGIN caml_apply3
+    -> 15.995us END   caml_apply3
+    -> 15.995us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.002us BEGIN Reperform.effc_1_11_code
+    -> 16.009us END   Reperform.effc_1_11_code
+    -> 16.025us END   Stdlib.Effect.effc_17_120_code
+    -> 16.025us BEGIN Reperform.fn[reperform.ml:8,13--88]_2_12_code
+    ->  16.03us END   Reperform.fn[reperform.ml:8,13--88]_2_12_code
+    ->  16.03us BEGIN caml_continue
+    -> 16.035us BEGIN caml_continuation_use_noexc
+    -> 16.075us END   caml_continuation_use_noexc
+    -> 16.075us END   caml_continue
+    -> 16.075us BEGIN caml_runstack
+    -> 16.075us BEGIN caml_runstack
+    -> 16.075us BEGIN Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    -> 16.075us BEGIN caml_perform
+    ->  16.08us END   caml_perform
+    ->  16.08us BEGIN caml_perform
+    -> 16.085us END   caml_perform
+    -> 16.085us END   Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    -> 16.085us END   caml_runstack
+    -> 16.085us BEGIN caml_apply3
+    -> 16.088us END   caml_apply3
+    -> 16.088us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.091us BEGIN Reperform.fn[reperform.ml:13,64--79]_5_13_code
+    -> 16.097us END   Reperform.fn[reperform.ml:13,64--79]_5_13_code
+    -> 16.097us END   Stdlib.Effect.effc_17_120_code
+    -> 16.097us BEGIN caml_reperform
+    ->   16.1us END   caml_reperform
+    ->   16.1us BEGIN caml_perform
+    -> 16.103us END   caml_perform
+    -> 16.103us END   caml_runstack
+    -> 16.103us BEGIN caml_apply3
+    -> 16.109us END   caml_apply3
+    -> 16.109us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.114us BEGIN Reperform.effc_1_11_code
+    -> 16.119us END   Reperform.effc_1_11_code
+    -> 16.122us END   Stdlib.Effect.effc_17_120_code
+    -> 16.122us BEGIN Reperform.fn[reperform.ml:8,13--88]_2_12_code
+    -> 16.122us END   Reperform.fn[reperform.ml:8,13--88]_2_12_code
+    -> 16.122us BEGIN caml_continue
+    -> 16.123us BEGIN caml_continuation_use_noexc
+    ->  16.13us END   caml_continuation_use_noexc
+    ->  16.13us END   caml_continue
+    ->  16.13us BEGIN caml_runstack
+    ->  16.13us BEGIN caml_runstack
+    ->  16.13us BEGIN Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    ->  16.13us BEGIN caml_perform
+    -> 16.138us END   caml_perform
+    -> 16.138us END   Reperform.fn[reperform.ml:18,10--88]_9_15_code
+    -> 16.138us BEGIN caml_free_stack
+    ->  16.17us BEGIN caml_get_stack_caches
+    -> 16.202us END   caml_get_stack_caches
+    -> 16.202us BEGIN caml_free_local_arenas
+    -> 16.234us END   caml_free_local_arenas
+    -> 16.234us END   caml_free_stack
+    -> 16.241us END   caml_runstack
+    -> 16.241us BEGIN Reperform.fn[reperform.ml:13,35--41]_7_7_code
+    -> 16.253us END   Reperform.fn[reperform.ml:13,35--41]_7_7_code
+    -> 16.253us BEGIN caml_free_stack
+    -> 16.257us BEGIN caml_get_stack_caches
+    -> 16.262us END   caml_get_stack_caches
+    -> 16.262us BEGIN caml_free_local_arenas
+    -> 16.267us END   caml_free_local_arenas
+    -> 16.267us END   caml_free_stack
+    -> 16.267us BEGIN caml_mem_unmap
+    ->   16.3us END   caml_mem_unmap
+    ->   16.3us BEGIN caml_plat_mem_unmap
+    -> 16.303us END   caml_plat_mem_unmap
+    -> 16.303us BEGIN munmap@plt
+    -> 16.307us END   munmap@plt
+    -> 16.307us BEGIN __munmap
+    -> 16.337us BEGIN [untraced]
+    -> 24.587us END   [untraced]
+    -> 24.784us END   __munmap
+    -> 24.832us END   caml_runstack
+    -> 24.832us BEGIN Reperform.fn[reperform.ml:11,25--31]_4_4_code
+    ->  24.87us END   Reperform.fn[reperform.ml:11,25--31]_4_4_code
+    ->  24.87us END   Reperform.main_0_10_code
+    ->  24.87us END   Reperform.entry
+    |}]
+;;
+
+let%expect_test "reperform_exn" =
+  let%map () =
+    run
+      ~entertraps:[| 0x461814L |]
+      ~pushtraps:[| 0x4617dcL |]
+      ~poptraps:[| 0x461805L |]
+      "reperform_exn.perf"
+  in
+  [%expect
+    {|
+    -> 16.244us BEGIN Perform Effect
+    -> 16.244us END   Perform Effect
+    -> 16.379us BEGIN Perform Effect
+    -> 16.379us END   Perform Effect
+    -> 16.568us BEGIN Resume Continuation
+    -> 16.568us END   Resume Continuation
+    -> 16.244us FLOW
+    -> 16.568us FLOW
+    INPUT TRACE STREAM ENDED, any lines printed below this were deferred
+    ->      0ns BEGIN Reperform_exn.entry
+    ->     90ns BEGIN Stdlib.Effect.match_with_16_119_code
+    ->    180ns BEGIN caml_c_call
+    ->    208ns BEGIN caml_alloc_stack
+    ->    218ns BEGIN new_fiber_id
+    ->    228ns END   new_fiber_id
+    ->    228ns BEGIN alloc_size_class_stack_noexc
+    ->    258ns BEGIN caml_mem_round_up_mapping_size
+    ->    289ns END   caml_mem_round_up_mapping_size
+    ->    289ns BEGIN caml_mem_map
+    ->    303ns BEGIN caml_plat_mem_map
+    ->    317ns BEGIN mmap64@plt
+    ->    342ns END   mmap64@plt
+    ->    342ns BEGIN __mmap
+    ->    378ns BEGIN [untraced]
+    ->  1.608us END   [untraced]
+    ->  1.613us END   __mmap
+    ->  1.673us END   caml_plat_mem_map
+    ->  1.678us END   caml_mem_map
+    ->  1.678us BEGIN madvise@plt
+    ->  1.681us END   madvise@plt
+    ->  1.681us BEGIN __madvise
+    ->  1.715us BEGIN [untraced]
+    ->  2.279us END   [untraced]
+    ->   2.28us END   __madvise
+    ->   2.28us BEGIN mprotect@plt
+    ->  2.287us END   mprotect@plt
+    ->  2.287us BEGIN __mprotect
+    ->  2.352us BEGIN [untraced]
+    ->  4.118us END   [untraced]
+    ->   4.12us END   __mprotect
+    ->  4.317us BEGIN [untraced]
+    ->  6.035us END   [untraced]
+    ->  6.236us BEGIN [untraced]
+    ->  7.915us END   [untraced]
+    ->   7.94us END   alloc_size_class_stack_noexc
+    ->   7.94us END   caml_alloc_stack
+    ->  7.941us END   caml_c_call
+    ->  7.941us END   Stdlib.Effect.match_with_16_119_code
+    ->  7.941us BEGIN caml_runstack
+    ->  7.944us BEGIN Reperform_exn.fn[reperform_exn.ml:15,4--207]_8_14_code
+    ->  7.996us BEGIN Stdlib.Effect.match_with_16_119_code
+    ->  8.048us BEGIN caml_c_call
+    ->  8.054us BEGIN caml_alloc_stack
+    ->  8.057us BEGIN new_fiber_id
+    ->   8.06us END   new_fiber_id
+    ->   8.06us BEGIN alloc_size_class_stack_noexc
+    ->  8.063us BEGIN caml_mem_round_up_mapping_size
+    ->  8.063us END   caml_mem_round_up_mapping_size
+    ->  8.063us BEGIN caml_mem_map
+    ->  8.063us BEGIN caml_plat_mem_map
+    ->  8.064us BEGIN mmap64@plt
+    ->  8.065us END   mmap64@plt
+    ->  8.065us BEGIN __mmap
+    ->  8.095us BEGIN [untraced]
+    ->  9.072us END   [untraced]
+    ->  9.076us END   __mmap
+    ->  9.084us END   caml_plat_mem_map
+    ->  9.085us END   caml_mem_map
+    ->  9.085us BEGIN madvise@plt
+    ->  9.086us END   madvise@plt
+    ->  9.086us BEGIN __madvise
+    ->  9.111us BEGIN [untraced]
+    ->  9.978us END   [untraced]
+    ->  9.979us END   __madvise
+    ->  9.979us BEGIN mprotect@plt
+    ->  9.989us END   mprotect@plt
+    ->  9.989us BEGIN __mprotect
+    -> 10.014us BEGIN [untraced]
+    -> 13.318us END   [untraced]
+    -> 13.325us END   __mprotect
+    ->  13.51us BEGIN [untraced]
+    -> 14.789us END   [untraced]
+    -> 14.995us BEGIN [untraced]
+    -> 16.206us END   [untraced]
+    -> 16.233us END   alloc_size_class_stack_noexc
+    -> 16.233us END   caml_alloc_stack
+    -> 16.233us END   caml_c_call
+    -> 16.233us END   Stdlib.Effect.match_with_16_119_code
+    -> 16.233us BEGIN caml_runstack
+    -> 16.235us BEGIN Reperform_exn.fn[reperform_exn.ml:18,10--86]_9_15_code
+    -> 16.239us BEGIN caml_perform
+    -> 16.245us END   caml_perform
+    -> 16.245us END   Reperform_exn.fn[reperform_exn.ml:18,10--86]_9_15_code
+    -> 16.245us END   caml_runstack
+    -> 16.245us BEGIN caml_apply3
+    -> 16.346us END   caml_apply3
+    -> 16.346us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.361us BEGIN Reperform_exn.fn[reperform_exn.ml:13,64--79]_5_13_code
+    -> 16.367us END   Reperform_exn.fn[reperform_exn.ml:13,64--79]_5_13_code
+    -> 16.367us END   Stdlib.Effect.effc_17_120_code
+    -> 16.367us BEGIN caml_reperform
+    -> 16.375us END   caml_reperform
+    -> 16.375us BEGIN caml_perform
+    -> 16.384us END   caml_perform
+    -> 16.384us END   Reperform_exn.fn[reperform_exn.ml:15,4--207]_8_14_code
+    -> 16.384us END   caml_runstack
+    -> 16.384us BEGIN caml_apply3
+    -> 16.394us END   caml_apply3
+    -> 16.394us BEGIN Stdlib.Effect.effc_17_120_code
+    -> 16.423us BEGIN Reperform_exn.effc_1_11_code
+    -> 16.525us END   Reperform_exn.effc_1_11_code
+    -> 16.541us END   Stdlib.Effect.effc_17_120_code
+    -> 16.541us BEGIN Reperform_exn.fn[reperform_exn.ml:8,13--88]_2_12_code
+    -> 16.546us END   Reperform_exn.fn[reperform_exn.ml:8,13--88]_2_12_code
+    -> 16.546us BEGIN caml_continue
+    -> 16.551us BEGIN caml_continuation_use_noexc
+    -> 16.583us END   caml_continuation_use_noexc
+    -> 16.583us END   caml_continue
+    -> 16.583us BEGIN caml_runstack
+    -> 16.583us BEGIN Reperform_exn.fn[reperform_exn.ml:15,4--207]_8_14_code
+    -> 16.583us BEGIN caml_runstack
+    -> 16.583us BEGIN Reperform_exn.fn[reperform_exn.ml:18,10--86]_9_15_code
+    -> 16.583us BEGIN caml_perform
+    -> 16.631us END   caml_perform
+    -> 16.631us BEGIN caml_reraise_exn
+    -> 16.679us END   caml_reraise_exn
+    -> 16.679us BEGIN caml_raise_exn
+    -> 16.728us BEGIN caml_stash_backtrace_wrapper
+    -> 16.776us END   caml_stash_backtrace_wrapper
+    -> 16.776us BEGIN caml_stash_backtrace
+    -> 16.825us BEGIN caml_modify_generational_global_root
+    -> 16.843us BEGIN pthread_mutex_lock@plt
+    -> 16.862us END   pthread_mutex_lock@plt
+    -> 16.862us BEGIN __pthread_mutex_lock
+    -> 16.875us END   __pthread_mutex_lock
+    -> 16.882us BEGIN caml_skiplist_insert
+    -> 16.938us BEGIN caml_stat_alloc_noexc
+    -> 16.947us END   caml_stat_alloc_noexc
+    -> 16.947us BEGIN malloc@plt
+    -> 16.956us END   malloc@plt
+    -> 16.956us BEGIN malloc
+    ->  16.98us BEGIN _int_malloc
+    -> 16.989us END   _int_malloc
+    -> 16.989us END   malloc
+    ->  16.99us END   caml_skiplist_insert
+    ->  16.99us BEGIN pthread_mutex_unlock@plt
+    -> 16.999us END   pthread_mutex_unlock@plt
+    -> 16.999us BEGIN __pthread_mutex_unlock
+    -> 17.003us END   __pthread_mutex_unlock
+    -> 17.003us BEGIN __pthread_mutex_unlock_usercnt
+    -> 17.008us END   __pthread_mutex_unlock_usercnt
+    -> 17.018us END   caml_modify_generational_global_root
+    -> 17.018us BEGIN caml_stat_alloc_noexc
+    -> 17.023us END   caml_stat_alloc_noexc
+    -> 17.023us BEGIN malloc@plt
+    -> 17.028us END   malloc@plt
+    -> 17.028us BEGIN malloc
+    -> 17.039us BEGIN _int_malloc
+    ->  17.25us BEGIN [untraced]
+    -> 18.192us END   [untraced]
+    -> 18.207us END   _int_malloc
+    -> 18.208us END   malloc
+    -> 18.216us BEGIN caml_get_frame_descrs
+    -> 18.234us END   caml_get_frame_descrs
+    -> 18.234us BEGIN caml_next_frame_descriptor
+    -> 18.252us BEGIN caml_find_frame_descr
+    -> 18.271us END   caml_find_frame_descr
+    -> 18.387us END   caml_next_frame_descriptor
+    -> 18.387us BEGIN caml_next_frame_descriptor
+    -> 18.406us BEGIN caml_find_frame_descr
+    -> 18.425us END   caml_find_frame_descr
+    -> 18.459us END   caml_next_frame_descriptor
+    -> 18.459us END   caml_stash_backtrace
+    -> 18.461us END   caml_raise_exn
+    -> 18.461us END   Reperform_exn.fn[reperform_exn.ml:18,10--86]_9_15_code
+    -> 18.464us BEGIN caml_free_stack
+    -> 18.469us BEGIN caml_get_stack_caches
+    -> 18.474us END   caml_get_stack_caches
+    -> 18.474us BEGIN caml_free_local_arenas
+    ->  18.48us END   caml_free_local_arenas
+    ->  18.48us END   caml_free_stack
+    -> 18.485us END   caml_runstack
+    -> 18.485us BEGIN Reperform_exn.fn[reperform_exn.ml:13,50--55]_6_6_code
+    -> 18.491us BEGIN caml_reraise_exn
+    -> 18.497us END   caml_reraise_exn
+    -> 18.497us BEGIN caml_raise_exn
+    -> 18.501us BEGIN caml_stash_backtrace_wrapper
+    -> 18.506us END   caml_stash_backtrace_wrapper
+    -> 18.506us BEGIN caml_stash_backtrace
+    -> 18.511us BEGIN caml_get_frame_descrs
+    -> 18.529us END   caml_get_frame_descrs
+    -> 18.529us BEGIN caml_next_frame_descriptor
+    -> 18.548us BEGIN caml_find_frame_descr
+    -> 18.567us END   caml_find_frame_descr
+    -> 18.567us END   caml_next_frame_descriptor
+    -> 18.578us BEGIN caml_next_frame_descriptor
+    -> 18.623us BEGIN caml_find_frame_descr
+    -> 18.669us END   caml_find_frame_descr
+    -> 18.669us END   caml_next_frame_descriptor
+    -> 18.679us END   caml_stash_backtrace
+    -> 18.694us END   caml_raise_exn
+    -> 18.694us END   Reperform_exn.fn[reperform_exn.ml:13,50--55]_6_6_code
+    -> 18.704us END   Reperform_exn.fn[reperform_exn.ml:15,4--207]_8_14_code
+    -> 18.712us BEGIN caml_free_stack
+    -> 18.716us BEGIN caml_get_stack_caches
+    ->  18.72us END   caml_get_stack_caches
+    ->  18.72us BEGIN caml_free_local_arenas
+    -> 18.724us END   caml_free_local_arenas
+    -> 18.724us END   caml_free_stack
+    -> 18.724us BEGIN caml_mem_unmap
+    -> 18.766us END   caml_mem_unmap
+    -> 18.766us BEGIN caml_plat_mem_unmap
+    -> 18.767us END   caml_plat_mem_unmap
+    -> 18.767us BEGIN munmap@plt
+    -> 18.769us END   munmap@plt
+    -> 18.769us BEGIN __munmap
+    -> 18.803us BEGIN [untraced]
+    -> 27.496us END   [untraced]
+    -> 27.605us END   __munmap
+    -> 27.649us END   caml_runstack
+    -> 27.649us BEGIN Reperform_exn.fn[reperform_exn.ml:11,25--31]_4_4_code
+    -> 27.694us END   Reperform_exn.fn[reperform_exn.ml:11,25--31]_4_4_code
+    -> 27.694us END   Reperform_exn.entry
+    |}]
+;;

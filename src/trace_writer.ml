@@ -1096,7 +1096,7 @@ and write_event' (T t) ?events_writer event =
              [ [ "timestamp", Int (Time_ns.Span.to_int_ns (time :> Time_ns.Span.t)) ]
              ; [ "symbol", String (Symbol.display_name location.symbol) ]
              ; [ "addr", Pointer location.instruction_pointer ]
-             ; [ "data", String data ]
+             ; [ "data", Int64 data ]
              ; Option.value_map
                  (Event.thread outer_event).pid
                  ~f:(fun pid -> [ "pid", Int (Pid.to_int pid) ])

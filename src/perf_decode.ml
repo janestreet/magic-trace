@@ -31,7 +31,7 @@ let perf_cbr_event_re =
 
 let perf_ptwrite_event_re =
   Re.Perl.re
-    {|^ *(call|return|tr strt|syscall|sysret|hw int|iret|int|tx abrt|tr end|tr strt tr end|tr end  (?:async|call|return|syscall|sysret|iret)|jmp|jcc)? +IP: +([0-9a-f]+) +payload: +(0x[0-9a-f]+) (.*) ([0-9]+) +([0-9a-f]+) (.*)$|}
+    {|^ *(.*?) +IP: +([0-9]+) +payload: +((?:0x)?[0-9a-f]+) (.*) ([0-9a-f]+) +([0-9a-f]+) (.*)$|}
   |> Re.compile
 ;;
 
@@ -367,11 +367,11 @@ let parse_perf_extra_sampled_event
 let parse_perf_ptwrite_event ?perf_maps (thread : Event.Thread.t) time line : Event.t =
   match Re.Group.all (Re.exec perf_ptwrite_event_re line) with
   | [| _
-     ; _branch_kind
+     ; flags
      ; _fup_ip
      ; payload
      ; _payload_ascii
-     ; _unknown
+     ; _addr
      ; instruction_pointer
      ; symbol_and_offset
     |] ->
@@ -381,8 +381,8 @@ let parse_perf_ptwrite_event ?perf_maps (thread : Event.Thread.t) time line : Ev
     Ok
       { thread
       ; time
-      ; data = Ptwrite { location; data = payload }
-      ; in_transaction = false
+      ; data = Ptwrite { location; data = Int64.of_string payload }
+      ; in_transaction = String.is_substring flags ~substring:"(x"
       }
   | results ->
     raise_s
@@ -837,7 +837,52 @@ module%test _ = struct
       {|
       ((Ok
         ((thread ((pid (3285832)) (tid (3286108)))) (time 30d11h51m6.172476558s)
-         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000)))))) |}]
+         (data (Ptwrite (location 0x64d20fb10432) (data 0xa00000000000000))))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event zero payload" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   jcc                    IP: 0 payload: 0                 0     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0x0))))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event after trace start" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   tr strt jmp            IP: 0 payload: 0x5                0     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0x5))))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event in transaction" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   jcc                (x) IP: 0 payload: 0x5                0     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0x5))) (in_transaction))))
+      |}]
+  ;;
+
+  let%expect_test "perf ptwrite event with hex addr" =
+    check
+      {|997136/997136  340026.788189283:          1                                        ptwrite:   jcc                    IP: 1 payload: 0x5         7f6fce0b71f4     64d20fb10432 [unknown] (foo.bin)|};
+    [%expect
+      {|
+      ((Ok
+        ((thread ((pid (997136)) (tid (997136)))) (time 3d22h27m6.788189283s)
+         (data (Ptwrite (location 0x64d20fb10432) (data 0x5))))))
+      |}]
   ;;
 end
 

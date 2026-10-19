@@ -58,7 +58,7 @@ module Ok : sig
           } (** Represents counter based events collected through sampling. *)
       | Ptwrite of
           { location : Location.t
-          ; data : string
+          ; data : Int64.Hex.t
           } (** Represents ptwrite events collected through Intel PT using PTWRITE. *)
     [@@deriving sexp]
   end
