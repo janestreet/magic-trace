@@ -8,6 +8,7 @@
 #include "caml/mlvalues.h"
 #include "llvm/DebugInfo/Symbolize/SymbolizableModule.h"
 #include "llvm/DebugInfo/Symbolize/Symbolize.h"
+#include "llvm/Demangle/Demangle.h"
 
 namespace {
 value ocaml_string_of_cpp_string(std::string_view string) {
@@ -95,5 +96,14 @@ magic_trace_llvm_symbolize_address(llvm::symbolize::LLVMSymbolizer *symbolizer,
     caml_modify(&Field(inlined_frames, num_frames - 1 - i), symbol_name);
   }
   CAMLreturn(inlined_frames);
+}
+
+// Demangles C++ (Itanium), Rust, etc. symbols. Returns the input unchanged if it
+// isn't recognized as a mangled name.
+CAMLprim value __attribute__((used, retain))
+magic_trace_llvm_demangle(value v_name) {
+  CAMLparam1(v_name);
+  std::string name{String_val(v_name), caml_string_length(v_name)};
+  CAMLreturn(ocaml_string_of_cpp_string(llvm::demangle(name)));
 }
 }

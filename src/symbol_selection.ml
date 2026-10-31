@@ -14,6 +14,19 @@ let of_command_string s =
   | s -> User_selected s
 ;;
 
+external llvm_demangle
+  :  string
+  -> string
+  = "caml_no_bytecode_impl" "magic_trace_llvm_demangle"
+
+let demangle mangled_symbol =
+  match Demangle_ocaml_symbols.demangle mangled_symbol with
+  | Some _ as demangled_symbol -> demangled_symbol
+  | None ->
+    let demangled_symbol = llvm_demangle mangled_symbol in
+    if String.equal demangled_symbol mangled_symbol then None else Some demangled_symbol
+;;
+
 let select_owee_symbol ~elf ~header select =
   let open Deferred.Or_error.Let_syntax in
   let all_symbols = Elf.all_symbols ~select elf in
@@ -23,7 +36,7 @@ let select_owee_symbol ~elf ~header select =
     then Inputs all_symbol_names
     else
       List.map all_symbol_names ~f:(fun mangled_symbol ->
-        match Demangle_ocaml_symbols.demangle mangled_symbol with
+        match demangle mangled_symbol with
         | None -> mangled_symbol, mangled_symbol
         | Some demangled_symbol -> demangled_symbol, mangled_symbol)
       |> Assoc
