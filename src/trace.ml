@@ -581,8 +581,18 @@ module Make_commands (Backend : Backend_intf.S) = struct
       in
       Monitor.protect
         ~finally:(fun () ->
-          if cleanup then Shell.rm ~r:() ~f:() record_dir;
-          Deferred.unit)
+          if not cleanup
+          then Deferred.unit
+          else (
+            (* [Shell.rm] hardcodes [/bin/rm], which doesn't exist on e.g. NixOS, so look
+               [rm] up in [PATH] instead. Failing to clean up shouldn't be fatal. *)
+            match%map Process.run ~prog:"rm" ~args:[ "-rf"; record_dir ] () with
+            | Ok (_ : string) -> ()
+            | Error error ->
+              Core.eprintf
+                "Warning: failed to remove temporary directory %s: %s\n%!"
+                record_dir
+                (Error.to_string_hum error)))
         (fun () ->
           f
             { Record_opts.backend_opts
