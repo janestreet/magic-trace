@@ -1,0 +1,5 @@
+(library
+ (name bcheck_worker)
+ (public_name bcheck.worker)
+ (libraries bcheck_codec bcheck_net bcheck_matcher
+            lwt lwt.unix digestif))

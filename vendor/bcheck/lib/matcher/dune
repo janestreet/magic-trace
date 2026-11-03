@@ -1,0 +1,4 @@
+(library
+ (name bcheck_matcher)
+ (public_name bcheck.matcher)
+ (libraries bcheck_codec re unix))

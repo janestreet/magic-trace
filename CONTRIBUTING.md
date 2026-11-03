@@ -4,6 +4,17 @@ maintained by [Jane Street][js].
 Contributions to this project are welcome and should be submitted via
 GitHub pull requests.
 
+Building and testing
+--------------------
+
+```
+make test
+```
+
+This installs system dependencies (gmp, pkgconf), OCaml packages, and
+runs the test suite. Use `make test` instead of bare `dune test` to
+ensure all dependencies are present.
+
 Signing contributions
 ---------------------
 

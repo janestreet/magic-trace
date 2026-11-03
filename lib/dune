@@ -1,0 +1,30 @@
+(library
+ (name windowing)
+ (wrapped false)
+ (libraries unix)
+ (modes byte)
+ (modules (:standard \ coeff_check)))
+
+(executable
+ (name coeff_check)
+ (modules coeff_check)
+ (libraries windowing)
+ (modes byte))
+
+(rule
+ (target scale.tbl)
+ (deps
+  (:platform_scale
+   scale.%{ocaml-config:system}.%{ocaml-config:architecture}.tbl))
+ (action (copy %{platform_scale} %{target})))
+
+(rule
+ (alias default)
+ (deps (sandbox none) scale.tbl)
+ (action (run %{dep:coeff_check.bc})))
+
+(rule
+ (alias runtest)
+ (deps (sandbox none) scale.tbl)
+ (action (run %{dep:coeff_check.bc})))
+
