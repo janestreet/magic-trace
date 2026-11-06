@@ -1,5 +1,7 @@
 (rule
  (targets perf_dlfilter.ml)
+ (enabled_if
+  (= %{system} linux))
  (deps
   (:dep perf_dlfilter.c))
  (action
@@ -11,6 +13,8 @@
 
 (rule
  (target libLLVM.a)
+ (enabled_if
+  (= %{system} linux))
  (deps llvm_symbolizer_stubs.cpp)
  (action
   (progn
@@ -23,6 +27,8 @@
 
 (library
  (name magic_trace_lib)
+ (enabled_if
+  (= %{system} linux))
  (public_name magic-trace.magic_trace_lib)
  (no_dynlink)
  (flags

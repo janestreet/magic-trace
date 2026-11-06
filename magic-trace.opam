@@ -28,6 +28,26 @@ depends: [
   "re"           {>= "1.8.0"}
   "zstandard"
   "vec"
+  "lwt"
+  "lwt_unix"
+  "mirage-crypto"
+  "mirage-crypto-rng"
+  "mirage-crypto-rng-unix"
+  "mirage-crypto-ec"
+  "kdf"
+  "cstruct"
+  "msgpck"
+  "base64"
+  "tls-lwt"
+  "ca-certs"
+  "digestif"
+]
+depexts: [
+  ["gmp"] {os-distribution = "homebrew"}
+  ["pkgconf"] {os-distribution = "homebrew"}
+  ["gmp-dev"] {os-family = "alpine"}
+  ["libgmp-dev"] {os-family = "debian"}
+  ["gmp-devel"] {os-family = "rhel"}
 ]
 synopsis: "Collects and displays high-resolution traces of what a process is doing"
 description: "https://github.com/janestreet/magic-trace"

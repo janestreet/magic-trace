@@ -1,6 +1,9 @@
 (library
  (name magic_trace_app_test)
+ (enabled_if
+  (= %{system} linux))
  (no_dynlink)
+
  (inline_tests
   (deps sample-targets/ocaml-raise/sample.exe))
  (libraries

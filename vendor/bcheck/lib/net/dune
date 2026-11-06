@@ -1,0 +1,6 @@
+(library
+ (name bcheck_net)
+ (public_name bcheck.net)
+ (libraries bcheck_codec lwt lwt.unix base64
+            mirage-crypto-rng mirage-crypto-rng.unix
+            tls-lwt ca-certs))

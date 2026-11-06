@@ -1,0 +1,5 @@
+(library
+ (name bcheck_codec)
+ (public_name bcheck.codec)
+ (libraries mirage-crypto mirage-crypto-rng mirage-crypto-ec
+            kdf.hkdf cstruct msgpck))

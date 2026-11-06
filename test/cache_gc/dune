@@ -1,0 +1,4 @@
+(test
+ (name test_cache_gc)
+ (libraries bcheck.worker bcheck.codec bcheck.net
+            lwt lwt.unix mirage-crypto-rng.unix))

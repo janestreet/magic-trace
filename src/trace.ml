@@ -821,8 +821,128 @@ module Make_commands (Backend : Backend_intf.S) = struct
            decode_opts)
   ;;
 
+  let analyze_command =
+    Command.async_or_error
+      ~summary:
+        "Analyzes a previously-recorded trace to produce flame graphs and/or benchmark \
+         statistics."
+      ~readme:(fun () ->
+        "=== examples ===\n\n\
+         # Produce a text benchmark report from a recording directory\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program\n\n\
+         # Produce a collapsed-stack flame graph (pipe to flamegraph.pl or load in \
+         speedscope)\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program \
+         -format flamegraph -o flamegraph.collapsed\n\n\
+         # Produce a self-contained HTML flame graph\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program \
+         -format flamegraph-html -o flamegraph.html\n\n\
+         # Produce a JSON benchmark report for automation\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program \
+         -format stats-json -o stats.json\n\n\
+         # Produce a CSV benchmark report\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program \
+         -format stats-csv -o stats.csv\n\n\
+         # Produce speedscope JSON for interactive exploration\n\
+         magic-trace analyze -working-directory /tmp/my-recording -executable ./my-program \
+         -format speedscope -o profile.speedscope.json\n")
+      (let%map_open.Command record_dir = record_dir_flag required
+       and executable =
+         flag
+           "-executable"
+           (required Filename_unix.arg_type)
+           ~doc:"FILE Executable to extract debug symbols from."
+       and perf_map_files =
+         flag
+           "-perf-map-file"
+           (optional (Arg_type.comma_separated Filename_unix.arg_type))
+           ~doc:"FILE for JITs, path to a perf map file, in /tmp/perf-PID.map"
+       and collection_mode = Collection_mode.param
+       and debug_print_perf_commands
+       and output_path =
+         flag
+           "-o"
+           (optional_with_default "-" string)
+           ~doc:"FILE Output file (default: stdout)"
+       and format =
+         flag
+           "-format"
+           (optional_with_default "stats" string)
+           ~doc:
+             "FORMAT Output format. One of: stats (default, text table), stats-json, \
+              stats-csv, flamegraph (collapsed stacks), flamegraph-html (self-contained \
+              interactive HTML), speedscope (speedscope.app JSON)."
+       and title =
+         flag
+           "-title"
+           (optional string)
+           ~doc:"TITLE Title for HTML/speedscope output (default: executable name)"
+       and decode_opts = Backend.Decode_opts.param in
+       fun () ->
+         let open Deferred.Or_error.Let_syntax in
+         let _elf = Elf.create executable in
+         let%bind perf_maps =
+           match perf_map_files with
+           | None -> Deferred.return None |> Deferred.ok
+           | Some files ->
+             Perf_map.Table.load_by_files files
+             |> Deferred.map ~f:(fun t -> Ok (Some t))
+         in
+         let recording_data =
+           try
+             Some
+               (In_channel.read_all (record_dir ^/ "recording_data.sexp")
+                |> Sexp.of_string
+                |> [%of_sexp: Backend.Recording.Data.t])
+           with
+           | Sys_error _ -> None
+         in
+         Core.eprintf "[ Decoding trace for analysis... ]\n%!";
+         let%bind { Decode_result.events; close_result } =
+           Backend.decode_events
+             ?perf_maps
+             decode_opts
+             ~debug_print_perf_commands
+             ~recording_data
+             ~record_dir
+             ~collection_mode
+         in
+         Core.eprintf "[ Aggregating events... ]\n%!";
+         let%bind result =
+           Stack_aggregator.aggregate events |> Deferred.map ~f:Or_error.return
+         in
+         let%bind () = close_result in
+         let title = Option.value title ~default:(Filename.basename executable) in
+         let write_to_channel oc =
+           match format with
+           | "flamegraph" | "collapsed" -> Flamegraph_output.write_collapsed oc result
+           | "flamegraph-html" | "html" ->
+             Flamegraph_output.write_html oc result ~title
+           | "speedscope" ->
+             Flamegraph_output.write_speedscope_json oc result ~title
+           | "stats-json" | "json" ->
+             Benchmark_output.write oc result ~format:Json
+           | "stats-csv" | "csv" ->
+             Benchmark_output.write oc result ~format:Csv
+           | "stats" | "text" | _ ->
+             Benchmark_output.write oc result ~format:Text
+         in
+         if String.( = ) output_path "-"
+         then (
+           write_to_channel Out_channel.stdout;
+           return ())
+         else (
+           Out_channel.with_file output_path ~f:write_to_channel;
+           Core.eprintf "[ Analysis written to %s ]\n%!" output_path;
+           return ()))
+  ;;
+
   let commands =
-    [ "run", run_command; "attach", attach_command; "decode", decode_command ]
+    [ "run", run_command
+    ; "attach", attach_command
+    ; "decode", decode_command
+    ; "analyze", analyze_command
+    ]
   ;;
 end
 

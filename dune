@@ -6,3 +6,12 @@
    (:standard -cclib -static -cclib -no-pie))))
 
 (vendored_dirs vendor)
+
+(rule
+ (alias default)
+ (deps
+  (sandbox none)
+  lib/scale.tbl)
+ (action
+  (run %{dep:lib/coeff_check.bc})))
+

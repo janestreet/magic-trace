@@ -1,0 +1,4 @@
+opam-version: "2.0"
+name: "bcheck"
+synopsis: "Build cache checker"
+depends: []

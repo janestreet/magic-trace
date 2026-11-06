@@ -1,7 +1,10 @@
 (executables
  (names magic_trace_bin)
  (public_names magic-trace)
+ (enabled_if
+  (= %{system} linux))
  (libraries core magic_trace_lib core_unix.command_unix)
+
  (link_flags
   (:standard -cclib -lstdc++))
  (foreign_stubs

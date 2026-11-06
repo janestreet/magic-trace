@@ -1,0 +1,23 @@
+(test
+ (name test_tables)
+ (libraries windowing)
+ (modes byte))
+
+(rule
+ (alias default)
+ (deps
+  (sandbox none)
+  ../../lib/scale.tbl)
+ (action
+  (chdir ../../lib
+   (run ./coeff_check.bc))))
+
+(rule
+ (alias runtest)
+ (deps
+  (sandbox none)
+  ../../lib/scale.tbl)
+ (action
+  (chdir ../../lib
+   (run ./coeff_check.bc))))
+
