@@ -1167,33 +1167,28 @@ let smear_times (callstacks : Callstack.t Nonempty_vec.t) =
          + (consumes_time (Nonempty_vec.get callstacks (run_end + 1)) |> Bool.to_int);
       run_end <- run_end + 1
     done;
-    num_time_consuming_events <- Int.max 1 num_time_consuming_events;
     let run_length = run_end - i + 1 in
-    if run_end + 1 < len
+    if run_end + 1 < len && run_length > 1 && num_time_consuming_events > 0
     then (
-      (* Smear times across this run *)
       let t2 = (Nonempty_vec.get callstacks (run_end + 1)).#time in
       let duration_ns =
         Time_ns.Span.( - ) (t2 :> Time_ns.Span.t) (t1 :> Time_ns.Span.t)
         |> Time_ns.Span.to_int_ns
       in
-      let mutable time_consuming_events_seen = 0 in
-      for k = 0 to run_length - 1 do
-        let cs = Nonempty_vec.get callstacks (i + k) in
-        let offset_ns =
-          duration_ns * time_consuming_events_seen / num_time_consuming_events
-        in
-        let smeared_time =
-          Timestamp.create Time_ns.Span.((t1 :> Time_ns.Span.t) + of_int_ns offset_ns)
-        in
-        (* Rewriting the entire [Callstack.t] instead of modifying just the [time] field
-           in-place is sad, but I'm not sure the microoptimization is worth the hassle
-           it'd take to achieve it. *)
-        Nonempty_vec.set callstacks (i + k) #{ cs with time = smeared_time };
-        time_consuming_events_seen
-        <- time_consuming_events_seen + (consumes_time cs |> Bool.to_int)
-      done
-      (* else: final run - keep original times *));
+      if duration_ns > 0
+      then (
+        let run_start = i in
+        Smear_offsets.iter
+          ~duration_ns
+          ~num_calls:num_time_consuming_events
+          ~length:run_length
+          ~consumes_time:(fun k -> consumes_time (Nonempty_vec.get callstacks (run_start + k)))
+          ~f:(fun k offset_ns ->
+            let cs = Nonempty_vec.get callstacks (run_start + k) in
+            let smeared_time =
+              Timestamp.create Time_ns.Span.((t1 :> Time_ns.Span.t) + of_int_ns offset_ns)
+            in
+            Nonempty_vec.set callstacks (run_start + k) #{ cs with time = smeared_time })));
     i <- run_end + 1
   done
 ;;
@@ -1330,7 +1325,7 @@ module%test _ = struct
       [%expect {|  0  0  0 30 |}];
       smear_times callstacks;
       print_times callstacks;
-      [%expect {|  0 10 20 30 |}]
+      [%expect {|  0  7 15 30 |}]
     ;;
 
     let%expect_test "[smear_times] with multiple runs of same timestamps" =
@@ -1339,7 +1334,7 @@ module%test _ = struct
       [%expect {|  0  0 20 20 20 50 |}];
       smear_times callstacks;
       print_times callstacks;
-      [%expect {|  0 10 20 30 40 50 |}]
+      [%expect {|  0  6 20 27 35 50 |}]
     ;;
 
     let%expect_test "[smear_times] final run keeps original time" =
@@ -1348,7 +1343,7 @@ module%test _ = struct
       [%expect {|  0  0 30 30 30 |}];
       smear_times callstacks;
       print_times callstacks;
-      [%expect {|  0 15 30 30 30 |}]
+      [%expect {|  0 10 30 30 30 |}]
     ;;
 
     let%expect_test "[smear_times] single event" =
@@ -1383,7 +1378,7 @@ module%test _ = struct
       [%expect {|  0  0  0  0 100 |}];
       smear_times callstacks;
       print_times callstacks;
-      [%expect {|  0  0 50 50 100 |}]
+      [%expect {|  0  0 33 33 100 |}]
     ;;
 
     let%expect_test "[smear_times] first event is a Call" =
@@ -1399,10 +1394,10 @@ module%test _ = struct
       [%expect {|  0  0  0 90 |}];
       smear_times callstacks;
       print_times callstacks;
-      [%expect {|  0 45 45 90 |}]
+      [%expect {|  0 30 30 90 |}]
     ;;
 
-    let%expect_test "[smear_times] only Returns uses fallback" =
+    let%expect_test "[smear_times] only Returns stay at the original timestamp" =
       let callstacks =
         create_callstacks_with_control_flow
           [ 0, Return { distance = 1 }
@@ -1416,6 +1411,52 @@ module%test _ = struct
       smear_times callstacks;
       print_times callstacks;
       [%expect {|  0  0  0 90 |}]
+    ;;
+
+    let%expect_test "[smear_times] trailing returns stay before the next tick" =
+      let callstacks =
+        create_callstacks_with_control_flow
+          [ 0, Call { depth = 1 }
+          ; 0, Call { depth = 1 }
+          ; 0, Call { depth = 1 }
+          ; 0, Return { distance = 1 }
+          ; 0, Return { distance = 1 }
+          ; 12, Call { depth = 1 }
+          ]
+      in
+      smear_times callstacks;
+      print_times callstacks;
+      [%expect {|  0  3  6  9  9 12 |}]
+    ;;
+
+    let%expect_test "[smear_times] short gaps may retain ties within a tick" =
+      let callstacks =
+        create_callstacks_with_control_flow
+          [ 0, Return { distance = 1 }
+          ; 0, Call { depth = 1 }
+          ; 0, Call { depth = 1 }
+          ; 0, Call { depth = 1 }
+          ; 0, Return { distance = 1 }
+          ; 2, Call { depth = 1 }
+          ]
+      in
+      smear_times callstacks;
+      print_times callstacks;
+      [%expect {|  0  0  0  1  1  2 |}]
+    ;;
+
+    let%test_unit "smearing does not overflow when the gap is large" =
+      let step = Int.max_value / 4 in
+      let offsets = Array.create ~len:4 0 in
+      Smear_offsets.iter
+        ~duration_ns:Int.max_value
+        ~num_calls:3
+        ~length:4
+        ~consumes_time:(fun index -> index < 3)
+        ~f:(Array.set offsets);
+      [%test_result: int list]
+        (Array.to_list offsets)
+        ~expect:[ 0; step; (2 * step) + 1; (3 * step) + 2 ]
     ;;
   end
 
