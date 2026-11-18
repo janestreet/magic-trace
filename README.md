@@ -69,9 +69,26 @@ You can point magic-trace at a function such that when your application calls it
 
 # Getting started
 
-1. [Here](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c)'s a sample C program to try out. It's a slightly modified version of the example in `man 3 dlopen`. Download that, build it with `gcc demo.c -ldl -o demo`, then leave it running `./demo`. We're going to use that program to learn how `dlopen` works.
+1. Download [`demo.c`](https://raw.githubusercontent.com/janestreet/magic-trace/master/demo/demo.c),
+   a small program based on the example in `man 3 dlopen`. Build it on Linux, then
+   start it in the background and save its PID.
 
-2. Run `magic-trace attach -pid $(pidof demo)`. When you see the message that it's successfully attached, wait a couple seconds and <kbd>Ctrl</kbd>+<kbd>C</kbd> `magic-trace`. It will output a file called `trace.fxt.gz` in your working directory.
+   ```sh
+   gcc demo.c -ldl -o demo
+   ./demo &
+   demo_pid=$!
+   ```
+
+2. In the same shell, attach to that PID. This selects the demo you just started
+   even if another copy is running.
+
+   ```sh
+   magic-trace attach -pid "$demo_pid"
+   ```
+
+   Once magic-trace reports that it attached, wait a couple seconds, then press
+   <kbd>Ctrl</kbd>+<kbd>C</kbd>. It writes `trace.fxt.gz` to the current
+   directory. Stop the demo with `kill "$demo_pid"`.
 
 <p align="center">
   <img src="docs/assets/stage-1.gif">
