@@ -216,7 +216,39 @@ let symbol (t : t) ~addr =
   | None -> None
   | Some (_, location) ->
     assert (Int64.(location.start_addr <= addr));
-    Option.some_if Int64.(location.start_addr + of_int location.size < addr) location
+    (* [offset] wraps to a negative number only if [addr] is more than [Int64.max_value]
+       past [start_addr], in which case it is outside the function. *)
+    let offset = Int64.(addr - location.start_addr) in
+    Option.some_if Int64.(offset >= zero && offset < of_int location.size) location
+;;
+
+let%expect_test "symbol only matches addresses inside a function" =
+  let location start_addr function_ =
+    { Perf_map_location.start_addr; size = 0x10; function_ }
+  in
+  let t =
+    Int64.Map.of_alist_exn
+      [ 0x1000L, location 0x1000L "foo"; 0x2000L, location 0x2000L "bar" ]
+  in
+  List.iter
+    [ 0xfffL; 0x1000L; 0x1004L; 0x100fL; 0x1010L; 0x1500L; 0x2000L; 0x200fL; 0x2010L; 0x3000L ]
+    ~f:(fun addr ->
+      let function_ = Option.map (symbol t ~addr) ~f:(fun l -> l.function_) in
+      print_s [%message "" (addr : Int64.Hex.t) (function_ : string option)]);
+  [%expect
+    {|
+    ((addr 0xfff) (function_ ()))
+    ((addr 0x1000) (function_ (foo)))
+    ((addr 0x1004) (function_ (foo)))
+    ((addr 0x100f) (function_ (foo)))
+    ((addr 0x1010) (function_ ()))
+    ((addr 0x1500) (function_ ()))
+    ((addr 0x2000) (function_ (bar)))
+    ((addr 0x200f) (function_ (bar)))
+    ((addr 0x2010) (function_ ()))
+    ((addr 0x3000) (function_ ()))
+    |}]
+  |> Deferred.return
 ;;
 
 module Table = struct
